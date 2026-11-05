@@ -39,3 +39,5 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+# Jangan commit file ini ke GitHub
+PROJECT-NOTES.md
