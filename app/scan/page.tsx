@@ -6,7 +6,7 @@ import { supabase, getProfile, getOperatorSession, type Profile } from '@/lib/su
 import { Html5Qrcode } from 'html5-qrcode'
 
 type HasilScan = {
-  status: 'valid' | 'sudah_boarding' | 'tidak_valid' | 'terlalu_awal'
+  status: 'valid' | 'sudah_boarding' | 'tidak_valid' | 'terlalu_awal' | 'terlambat' | 'salah_rute'
   pesanan?: any
   nomor_kursi?: string
   pesan: string
@@ -22,12 +22,33 @@ function ScanContent() {
   const [error, setError] = useState('')
   const scannerRef = useRef<Html5Qrcode | null>(null)
   const [scannerAktif, setScannerAktif] = useState(false)
+  const isProcessingRef = useRef(false)
+
+  function safePause() {
+    const s = scannerRef.current
+    if (!s) return
+    try {
+      s.pause()
+    } catch (err) {
+      console.warn('Abaikan error pause:', err)
+    }
+  }
+
+  function safeResume() {
+    const s = scannerRef.current
+    if (!s) return
+    try {
+      s.resume()
+    } catch (err) {
+      console.warn('Abaikan error resume:', err)
+    }
+  }
 
   useEffect(() => {
     async function init() {
       const adminProfile = await getProfile()
       let userProfile = adminProfile
-      
+
       if (!userProfile) {
         const sesiPetugas = getOperatorSession()
         if (sesiPetugas) {
@@ -93,98 +114,146 @@ function ScanContent() {
   }
 
   async function prosesScan(kodeTiket: string) {
-    if (scannerRef.current) {
-      try { await scannerRef.current.pause(true) } catch {}
-    }
+    // ================= GUARD ANTI DOBEL PROSES (#4) =================
+    if (isProcessingRef.current) return
+    isProcessingRef.current = true
 
-    const { data: p, error: errP } = await supabase
-      .from('pesanan')
-      .select('id, nama_penumpang, nik, kode_tiket, status_boarding, jadwal_id, kursi_id')
-      .eq('kode_tiket', kodeTiket)
-      .maybeSingle()
+    // ================= PAUSE AMAN (#2) =================
+    safePause()
 
-    if (errP || !p) {
-      setHasil({ status: 'tidak_valid', pesan: 'Tiket tidak ditemukan di sistem' })
-      return
-    }
+    try {
+      const { data: p, error: errP } = await supabase
+        .from('pesanan')
+        .select('id, nama_penumpang, nik, kode_tiket, status_boarding, jadwal_id, kursi_id')
+        .eq('kode_tiket', kodeTiket)
+        .maybeSingle()
 
-    const { data: j } = await supabase
-      .from('jadwal')
-      .select('tanggal, jam_berangkat, rute_asal, rute_tujuan')
-      .eq('id', p.jadwal_id)
-      .single()
+      if (errP || !p) {
+        setHasil({ status: 'tidak_valid', pesan: 'Tiket tidak ditemukan di sistem' })
+        return
+      }
 
-    if (!j) {
-      setHasil({ status: 'tidak_valid', pesan: 'Jadwal untuk tiket ini tidak ditemukan' })
-      return
-    }
+      // ================= maybeSingle() AGAR TIDAK THROW (#1) =================
+      const { data: j, error: errJ } = await supabase
+        .from('jadwal')
+        .select('tanggal, jam_berangkat, rute_asal, rute_tujuan')
+        .eq('id', p.jadwal_id)
+        .maybeSingle()
 
-    const now = new Date()
-    const offset = now.getTimezoneOffset() * 60000
-    const hariIniLokal = new Date(now.getTime() - offset).toISOString().split('T')[0]
+      if (errJ || !j) {
+        setHasil({ status: 'tidak_valid', pesan: 'Jadwal untuk tiket ini tidak ditemukan' })
+        return
+      }
 
-    if (String(j.tanggal).trim() !== hariIniLokal) {
-      setHasil({ 
-        status: 'tidak_valid', 
-        pesan: `Bukan hari ini. (Jadwal: ${j.tanggal}, Hari ini: ${hariIniLokal})` 
+      // ================= VALIDASI RUTE / LOKASI =================
+      if (profile?.role !== 'admin_utama' && j.rute_asal !== profile?.lokasi) {
+        setHasil({
+          status: 'salah_rute',
+          pesan: `Salah Rute! Tiket ini milik ${j.rute_asal}, bukan ${profile?.lokasi}.`
+        })
+        return
+      }
+
+      const now = new Date()
+      const offset = now.getTimezoneOffset() * 60000
+      const hariIniLokal = new Date(now.getTime() - offset).toISOString().split('T')[0]
+
+      // ================= PERBAIKAN #5: ANTI-BANTING FORMAT TANGGAL =================
+      // split('T')[0] memastikan kalau DB ngasih timestamp, kita tetap ambil tanggalnya saja
+      const tanggalJadwal = String(j.tanggal).trim().split('T')[0]
+
+      if (tanggalJadwal !== hariIniLokal) {
+        setHasil({
+          status: 'tidak_valid',
+          pesan: `Bukan hari ini. (Jadwal: ${tanggalJadwal}, Hari ini: ${hariIniLokal})`
+        })
+        return
+      }
+
+      const [jamJ, menitJ] = j.jam_berangkat.split(':').map(Number)
+      const jamBerangkat = new Date()
+      jamBerangkat.setHours(jamJ, menitJ, 0, 0)
+
+      const selisihMenit = (jamBerangkat.getTime() - now.getTime()) / 60000
+
+      if (selisihMenit > 30) {
+        setHasil({
+          status: 'terlalu_awal',
+          pesan: `Belum waktunya scan. Scan dibuka 30 menit sebelum berangkat. (Sisa ${Math.ceil(selisihMenit)} menit lagi)`
+        })
+        return
+      }
+
+      // ================= VALIDASI TOLERANSI 5 MENIT =================
+      if (selisihMenit < -5) {
+        setHasil({
+          status: 'terlambat',
+          pesan: `Tiket hangus! Sudah melewati batas toleransi 5 menit dari jam keberangkatan (${j.jam_berangkat}).`
+        })
+        return
+      }
+
+      // ================= maybeSingle() AGAR TIDAK THROW (#1) =================
+      const { data: k, error: errK } = await supabase
+        .from('kursi')
+        .select('nomor_kursi')
+        .eq('id', p.kursi_id)
+        .maybeSingle()
+
+      if (errK) {
+        setHasil({ status: 'tidak_valid', pesan: 'Gagal mengambil data kursi, coba lagi' })
+        return
+      }
+
+      if (p.status_boarding === 'sudah') {
+        setHasil({
+          status: 'sudah_boarding',
+          pesanan: { ...p, jadwal: j },
+          nomor_kursi: k?.nomor_kursi || '-',
+          pesan: 'Sudah pernah di-scan'
+        })
+        return
+      }
+
+      const { error: errUpdate } = await supabase
+        .from('pesanan')
+        .update({
+          status_boarding: 'sudah',
+          waktu_boarding: new Date().toISOString(),
+          petugas_boarding: profile?.nama || 'unknown',
+        })
+        .eq('id', p.id)
+
+      if (errUpdate) {
+        setHasil({ status: 'tidak_valid', pesan: 'Gagal menyimpan boarding, coba scan ulang' })
+        return
+      }
+
+      setHasil({
+        status: 'valid',
+        pesanan: { ...p, jadwal: j },
+        nomor_kursi: k?.nomor_kursi || '-',
+        pesan: 'Boarding berhasil',
       })
-      return
-    }
-
-    const [jamJ, menitJ] = j.jam_berangkat.split(':').map(Number)
-    const jamBerangkat = new Date()
-    jamBerangkat.setHours(jamJ, menitJ, 0, 0)
-
-    const selisihMenit = (jamBerangkat.getTime() - now.getTime()) / 60000
-
-    if (selisihMenit > 30) {
-      setHasil({ 
-        status: 'terlalu_awal', 
-        pesan: `Belum waktunya scan. Scan dibuka 30 menit sebelum berangkat. (Sisa ${Math.ceil(selisihMenit)} menit lagi)` 
+    } catch (err) {
+      // ================= FALLBACK AGAR TIDAK NYANGKUT (#1) =================
+      console.error('prosesScan error:', err)
+      setHasil({
+        status: 'tidak_valid',
+        pesan: 'Terjadi kesalahan sistem. Silakan scan ulang.',
       })
-      return
+    } finally {
+      isProcessingRef.current = false
     }
-
-    const { data: k } = await supabase.from('kursi').select('nomor_kursi').eq('id', p.kursi_id).single()
-
-    if (p.status_boarding === 'sudah') {
-      setHasil({ 
-        status: 'sudah_boarding', 
-        pesanan: { ...p, jadwal: j }, 
-        nomor_kursi: k?.nomor_kursi || '-', 
-        pesan: 'Sudah pernah di-scan' 
-      })
-      return
-    }
-
-    await supabase.from('pesanan').update({
-      status_boarding: 'sudah',
-      waktu_boarding: new Date().toISOString(),
-      petugas_boarding: profile?.nama || 'unknown',
-    }).eq('id', p.id)
-
-    setHasil({
-      status: 'valid',
-      pesanan: { ...p, jadwal: j },
-      nomor_kursi: k?.nomor_kursi || '-',
-      pesan: 'Boarding berhasil',
-    })
   }
 
   // Auto Resume setelah boarding berhasil (jeda 3 detik)
   useEffect(() => {
     if (hasil && hasil.status === 'valid' && scannerRef.current) {
       const timer = setTimeout(() => {
-        if (scannerRef.current) {
-          try {
-            scannerRef.current.resume()
-          } catch (err) {
-            console.error('Gagal resume kamera:', err)
-          }
-        }
-        // Reset hasil agar tampilan kembali ke kamera
+        safeResume()
         setHasil(null)
-      }, 3000) // 3 detik
+      }, 3000)
 
       return () => clearTimeout(timer)
     }
@@ -196,11 +265,11 @@ function ScanContent() {
   return (
     <div className="min-h-screen bg-gray-100 p-6 flex flex-col items-center">
       <div className="max-w-md w-full">
-        
+
         <div className="flex justify-between items-center mb-6">
           <div>
             <h1 className="text-2xl font-bold text-gray-900">Scan Boarding</h1>
-            <p className="text-sm text-gray-700">Petugas: {profile.nama}</p>
+            <p className="text-sm text-gray-700">Petugas: {profile.nama} ({profile.lokasi})</p>
           </div>
           <button onClick={async () => { await stopScan(); router.push('/dashboard/keberangkatan'); }} className="text-sm text-blue-600 hover:underline">
             &larr; Kembali
@@ -212,14 +281,14 @@ function ScanContent() {
 
           {hasil && (
             <div className={`p-4 rounded mb-4 border-2 ${
-              hasil.status === 'valid' ? 'bg-green-50 border-green-500' : 
-              hasil.status === 'sudah_boarding' ? 'bg-yellow-50 border-yellow-500' : 
+              hasil.status === 'valid' ? 'bg-green-50 border-green-500' :
+              hasil.status === 'sudah_boarding' ? 'bg-yellow-50 border-yellow-500' :
               hasil.status === 'terlalu_awal' ? 'bg-orange-50 border-orange-500' :
               'bg-red-50 border-red-500'
             }`}>
               <p className={`font-bold text-lg ${
-                hasil.status === 'valid' ? 'text-green-700' : 
-                hasil.status === 'sudah_boarding' ? 'text-yellow-700' : 
+                hasil.status === 'valid' ? 'text-green-700' :
+                hasil.status === 'sudah_boarding' ? 'text-yellow-700' :
                 hasil.status === 'terlalu_awal' ? 'text-orange-700' :
                 'text-red-700'
               }`}>
@@ -233,7 +302,7 @@ function ScanContent() {
                 </div>
               )}
               {hasil.status !== 'valid' && (
-                <button onClick={() => { setHasil(null); scannerRef.current?.resume() }} className="mt-3 w-full bg-blue-600 text-white py-2 rounded font-medium hover:bg-blue-700">
+                <button onClick={() => { setHasil(null); safeResume() }} className="mt-3 w-full bg-blue-600 text-white py-2 rounded font-medium hover:bg-blue-700">
                   Scan Lagi
                 </button>
               )}
@@ -241,7 +310,7 @@ function ScanContent() {
           )}
 
           <div id="qr-reader" className="w-full rounded overflow-hidden" />
-          
+
           {!scannerAktif && !hasil && (
             <button onClick={mulaiScan} disabled={scanning} className="w-full bg-blue-600 text-white py-3 rounded hover:bg-blue-700 disabled:bg-gray-400 font-bold mt-2">
               {scanning ? 'Membuka Kamera...' : '📷 Buka Kamera'}
