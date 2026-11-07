@@ -81,7 +81,7 @@ export default function Home() {
 
     let { data, error } = await supabase
       .from('jadwal')
-      .select(`*, kapal:kapal_id (nama, kapasitas, layout_kursi, foto_url)`)
+      .select(`*, kapal:kapal_id (nama, kapasitas, layout_kursi)`) // foto_url dihapus
       .eq('rute_asal', asal)
       .eq('rute_tujuan', tujuan)
       .eq('tanggal', tanggalCari)
@@ -131,7 +131,7 @@ export default function Home() {
         const { data: insertedJadwal } = await supabase
           .from('jadwal')
           .insert(newJadwalPayload, { ignoreDuplicates: true })
-          .select(`*, kapal:kapal_id (nama, kapasitas, layout_kursi, foto_url)`);
+          .select(`*, kapal:kapal_id (nama, kapasitas, layout_kursi)`);
 
         if (insertedJadwal) {
           const kursiPayload: any[] = [];
@@ -156,7 +156,7 @@ export default function Home() {
 
       const { data: refreshedData } = await supabase
         .from('jadwal')
-        .select(`*, kapal:kapal_id (nama, kapasitas, layout_kursi, foto_url)`)
+        .select(`*, kapal:kapal_id (nama, kapasitas, layout_kursi)`)
         .eq('rute_asal', asal)
         .eq('rute_tujuan', tujuan)
         .eq('tanggal', tanggalCari)
@@ -256,40 +256,34 @@ export default function Home() {
             <p className="text-center text-gray-500 py-4">Tidak ada jadwal yang tersedia atau waktu pembelian sudah ditutup.</p>
           ) : (
             jadwal.map((j) => (
-              <div key={j.id} className="bg-white p-3 md:px-4 md:py-3 rounded-lg shadow border border-gray-200 flex items-stretch gap-2 md:gap-4">
+              <div key={j.id} className="bg-white p-3 md:px-4 md:py-3 rounded-lg shadow border border-gray-200 flex items-stretch gap-3 md:gap-4">
                 
-                {/* Foto */}
-                <div className="w-12 h-12 md:w-24 md:h-16 flex-shrink-0 bg-gray-100 rounded overflow-hidden flex items-center justify-center border my-auto">
-                  {j.kapal?.foto_url ? (
-                    <img src={j.kapal.foto_url} alt={j.kapal?.nama} className="w-full h-full object-cover" />
-                  ) : (
-                    <span className="text-[8px] text-gray-400">No Foto</span>
-                  )}
-                </div>
-
                 {/* Info Tengah */}
                 <div className="flex-1 min-w-0 flex flex-col justify-center">
-                  {/* Baris Atas: Jam & Harga */}
-                  <div className="flex justify-between items-start">
-                    <div className="font-bold text-sm md:text-lg text-gray-900 leading-tight">
-                      {j.jam_berangkat.substring(0,5)}
+                  {/* Baris Atas: Jam & Rute & Harga */}
+                  <div className="flex justify-between items-center mb-0.5 md:mb-1">
+                    <div className="flex items-center gap-2">
+                      <span className="font-bold text-sm md:text-lg text-gray-900 leading-tight">
+                        {j.jam_berangkat.substring(0,5)}
+                      </span>
+                      <span className="text-[10px] md:text-sm text-blue-800 font-semibold truncate">
+                        {j.rute_asal} - {j.rute_tujuan}
+                      </span>
                     </div>
                     <div className="font-bold text-blue-600 text-xs md:text-base whitespace-nowrap ml-2">
                       Rp {j.harga?.toLocaleString('id-ID')}
                     </div>
                   </div>
                   
-                  {/* Baris Bawah: Nama Kapal & Rute */}
-                  <div className="mt-0.5">
+                  {/* Baris Bawah: Nama Kapal */}
+                  <div>
                     <p className="font-bold text-xs md:text-base text-gray-900 truncate leading-tight">{j.kapal?.nama}</p>
-                    {/* RUTE: Warna diubah jadi BIRU GELAP SOLID (text-blue-800) biar ga kusam */}
-                    <p className="text-[10px] md:text-sm text-blue-800 font-semibold truncate mt-0.5">{j.rute_asal} - {j.rute_tujuan}</p>
                   </div>
                 </div>
 
                 {/* Tombol Pilih */}
-                <div className="w-[50px] md:w-24 flex-shrink-0 flex flex-col justify-center">
-                  <Link href={`/kursi?jadwal=${j.id}`} className="flex-1 flex items-center justify-center border border-transparent rounded-md shadow-sm text-[11px] md:text-sm font-medium text-white bg-green-600 hover:bg-green-700 py-2">
+                <div className="w-[60px] md:w-24 flex-shrink-0 flex items-stretch">
+                  <Link href={`/kursi?jadwal=${j.id}`} className="flex-1 flex items-center justify-center border border-transparent rounded-md shadow-sm text-[11px] md:text-sm font-medium text-white bg-green-600 hover:bg-green-700">
                     Pilih
                   </Link>
                 </div>

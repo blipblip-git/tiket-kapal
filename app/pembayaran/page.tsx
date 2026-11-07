@@ -160,110 +160,141 @@ function PembayaranContent() {
     }
   }
 
-  if (loading) return <p className="p-6 text-gray-900">Memuat data pembayaran...</p>
-  if (error && !detail) return <p className="p-6 text-red-600 font-bold">Error: {error}</p>
-  if (pesananList.length === 0 || !detail) return <p className="p-6 text-gray-900">Data pesanan tidak lengkap.</p>
+  if (loading) return <p className="p-6 text-center text-gray-900 mt-10">Memuat data pembayaran...</p>
+  if (error && !detail) return <p className="p-6 text-center text-red-600 font-bold mt-10">Error: {error}</p>
+  if (pesananList.length === 0 || !detail) return <p className="p-6 text-center text-gray-900 mt-10">Data pesanan tidak lengkap.</p>
 
   const totalHarga = detail.harga * pesananList.length
 
   return (
-    <div className="min-h-screen bg-gray-100 p-6">
-      <div className="max-w-md mx-auto">
-        <h1 className="text-2xl font-bold mb-6 text-gray-900">Pembayaran</h1>
-
-        <div className="bg-white p-6 rounded shadow mb-4 text-gray-900">
-          <h2 className="font-bold mb-3 text-gray-900">Detail Pesanan</h2>
-          <div className="text-sm space-y-2 mb-4">
-            <div className="flex justify-between">
-              <span className="text-gray-900">Rute</span>
-              <span className="font-medium text-gray-900">{detail.rute_asal} → {detail.rute_tujuan}</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-gray-900">Tanggal</span>
-              <span className="font-medium text-gray-900">{detail.tanggal}</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-gray-900">Jam</span>
-              <span className="font-medium text-gray-900">{detail.jam_berangkat}</span>
-            </div>
-          </div>
-          <hr className="my-3" />
-          <p className="font-bold text-gray-900 mb-2 text-sm">Daftar Penumpang ({pesananList.length} orang)</p>
-          <div className="space-y-1 mb-4">
-            {pesananList.map((p, idx) => (
-              <div key={p.id} className="flex justify-between text-sm">
-                <span className="text-gray-900">{idx + 1}. {p.nama_penumpang}</span>
-                <span className="text-xs text-gray-600">{p.kode_tiket}</span>
-              </div>
-            ))}
-          </div>
-          <hr className="my-3" />
-          <div className="flex justify-between items-center">
-            <span className="font-bold text-gray-900">Total Bayar</span>
-            <span className="font-bold text-blue-600 text-lg">Rp {totalHarga.toLocaleString('id-ID')}</span>
-          </div>
+    <div className="h-[100dvh] w-full bg-gray-100 flex flex-col overflow-hidden">
+      
+      {/* HEADER (Fixed) */}
+      <div className="flex-shrink-0 bg-white shadow-sm z-10 px-4 py-3 md:py-4">
+        <div className="max-w-md mx-auto">
+          <h1 className="text-xl md:text-2xl font-bold text-gray-900">Pembayaran</h1>
         </div>
-
-        {step === 'pilih' && (
-          <div className="bg-white p-6 rounded shadow mb-4">
-            <h2 className="font-bold text-gray-900 mb-3 text-sm">Pilih Metode Pembayaran</h2>
-            <button
-              onClick={() => setStep('qris')}
-              className="w-full bg-blue-600 text-white py-3 rounded hover:bg-blue-700 font-medium text-left px-4"
-            >
-              💳 Transfer / QRIS (Online)
-              <span className="block text-xs font-normal mt-1 opacity-90">
-                Bayar dari rumah lewat HP. E-tiket langsung terbit.
-              </span>
-            </button>
-          </div>
-        )}
-
-        {step === 'qris' && (
-          <>
-            <div className="bg-white p-6 rounded shadow mb-4 text-center text-gray-900">
-              <p className="text-sm text-gray-900 mb-3">Scan QR ini untuk membayar (mode simulasi)</p>
-              <div className="bg-gray-100 w-48 h-48 mx-auto flex items-center justify-center rounded border-2 border-dashed border-gray-400">
-                <span className="text-gray-900 text-sm">QR Code<br />(simulasi)</span>
-              </div>
-              <p className="text-xs text-gray-900 mt-3">Batas waktu: 10 menit</p>
-            </div>
-
-            {error && <p className="text-red-600 text-sm mb-3 font-bold">{error}</p>}
-
-            <button
-              onClick={handleBayarOnline}
-              disabled={sedangBayar}
-              className="w-full bg-green-600 text-white py-3 rounded hover:bg-green-700 disabled:bg-gray-400 font-medium"
-            >
-              {sedangBayar ? 'Memproses...' : `✓ Saya Sudah Bayar (${pesananList.length} tiket)`}
-            </button>
-
-            <button
-              onClick={() => { setStep('pilih'); setError('') }}
-              disabled={sedangBayar}
-              className="w-full text-gray-700 py-2 mt-2 text-sm hover:underline"
-            >
-              ← Ganti metode pembayaran
-            </button>
-          </>
-        )}
-
-        <button
-          onClick={handleBatal}
-          className="w-full text-red-600 py-3 mt-4 text-sm font-bold hover:underline"
-        >
-          ✕ Batalkan Pesanan
-        </button>
-
       </div>
+
+      {/* AREA TENGAH (Bisa Scroll jika layar sangat mini, tapi tidak akan menggeser tombol bawah) */}
+      <div className="flex-1 overflow-y-auto w-full">
+        <div className="max-w-md mx-auto p-3 md:p-4 space-y-3 md:space-y-4 pb-6">
+          
+          {/* KOTAK DETAIL PESANAN */}
+          <div className="bg-white p-4 md:p-5 rounded-lg shadow-sm text-gray-900 border border-gray-200">
+            <h2 className="font-bold mb-2 text-sm md:text-base text-gray-900">Detail Pesanan</h2>
+            <div className="text-[11px] md:text-sm space-y-1.5 md:space-y-2 mb-3">
+              <div className="flex justify-between">
+                <span className="text-gray-600">Rute</span>
+                <span className="font-medium text-gray-900">{detail.rute_asal} → {detail.rute_tujuan}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-gray-600">Tanggal</span>
+                <span className="font-medium text-gray-900">{detail.tanggal}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-gray-600">Jam</span>
+                <span className="font-medium text-gray-900">{detail.jam_berangkat}</span>
+              </div>
+            </div>
+            
+            <hr className="my-2 md:my-3 border-gray-200" />
+            
+            <p className="font-bold text-gray-900 mb-1.5 text-xs md:text-sm">Daftar Penumpang ({pesananList.length} orang)</p>
+            <div className="space-y-1 mb-2 md:mb-3 max-h-[100px] md:max-h-[150px] overflow-y-auto pr-1">
+              {pesananList.map((p, idx) => (
+                <div key={p.id} className="flex justify-between text-[11px] md:text-sm">
+                  <span className="text-gray-900 truncate pr-2">{idx + 1}. {p.nama_penumpang}</span>
+                  <span className="text-[10px] md:text-xs text-gray-500 whitespace-nowrap">{p.kode_tiket}</span>
+                </div>
+              ))}
+            </div>
+            
+            <hr className="my-2 md:my-3 border-gray-200" />
+            
+            <div className="flex justify-between items-center">
+              <span className="font-bold text-sm md:text-base text-gray-900">Total Bayar</span>
+              <span className="font-bold text-blue-600 text-base md:text-lg">Rp {totalHarga.toLocaleString('id-ID')}</span>
+            </div>
+          </div>
+
+          {/* KOTAK QR / METODE */}
+          {step === 'pilih' && (
+            <div className="bg-white p-4 md:p-5 rounded-lg shadow-sm border border-gray-200">
+              <h2 className="font-bold text-gray-900 mb-3 text-sm md:text-base">Pilih Metode Pembayaran</h2>
+              <button
+                onClick={() => setStep('qris')}
+                className="w-full bg-blue-600 text-white py-3 rounded-lg hover:bg-blue-700 font-medium text-left px-4 transition-colors shadow-sm"
+              >
+                <span className="block text-sm md:text-base">💳 Transfer / QRIS (Online)</span>
+                <span className="block text-[10px] md:text-xs font-normal mt-0.5 opacity-90">
+                  Bayar dari rumah lewat HP. E-tiket langsung terbit.
+                </span>
+              </button>
+            </div>
+          )}
+
+          {step === 'qris' && (
+            <div className="bg-white p-4 md:p-5 rounded-lg shadow-sm text-center text-gray-900 border border-gray-200">
+              <p className="text-xs md:text-sm text-gray-600 mb-2 md:mb-3">Scan QR ini untuk membayar (mode simulasi)</p>
+              
+              {/* QR Box Responsif biar gak makan tempat di HP */}
+              <div className="bg-gray-50 w-32 h-32 md:w-48 md:h-48 mx-auto flex items-center justify-center rounded-lg border-2 border-dashed border-gray-300">
+                <span className="text-gray-400 text-xs md:text-sm font-medium text-center">QR Code<br />(simulasi)</span>
+              </div>
+              
+              <p className="text-[10px] md:text-xs text-red-600 font-bold mt-2 md:mt-3 bg-red-50 inline-block px-3 py-1 rounded-full">
+                ⏳ Batas waktu: 10 menit
+              </p>
+            </div>
+          )}
+
+          {error && <p className="text-red-600 text-xs md:text-sm font-bold text-center bg-red-50 py-2 rounded-lg">{error}</p>}
+          
+        </div>
+      </div>
+
+      {/* FOOTER TOMBOL AKSI (Selalu diam di bawah) */}
+      <div className="flex-shrink-0 bg-white border-t border-gray-200 p-3 md:p-4 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)] z-10">
+        <div className="max-w-md mx-auto space-y-2">
+          
+          {step === 'qris' && (
+            <>
+              <button
+                onClick={handleBayarOnline}
+                disabled={sedangBayar}
+                className="w-full bg-green-600 text-white py-3 rounded-lg hover:bg-green-700 disabled:bg-gray-400 font-bold text-sm md:text-base shadow-md transition-colors"
+              >
+                {sedangBayar ? 'Memproses...' : `✓ Saya Sudah Bayar (${pesananList.length} tiket)`}
+              </button>
+
+              <button
+                onClick={() => { setStep('pilih'); setError('') }}
+                disabled={sedangBayar}
+                className="w-full text-gray-600 py-2 text-xs md:text-sm hover:underline font-medium"
+              >
+                ← Ganti metode pembayaran
+              </button>
+            </>
+          )}
+
+          <button
+            onClick={handleBatal}
+            className="w-full text-red-600 py-2 text-xs md:text-sm font-bold hover:underline"
+          >
+            ✕ Batalkan Pesanan
+          </button>
+
+        </div>
+      </div>
+
     </div>
   )
 }
 
 export default function PembayaranPage() {
   return (
-    <Suspense fallback={<p className="p-6 text-gray-900">Memuat halaman...</p>}>
+    <Suspense fallback={<p className="p-6 text-center text-gray-900 mt-10">Memuat halaman...</p>}>
       <PembayaranContent />
     </Suspense>
   )
