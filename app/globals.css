@@ -19,26 +19,26 @@
   }
 }
 
-/* 1. Kunci efek goyang / pull-to-refresh di HP */
+/* 1. Matikan efek goyang / pull-to-refresh */
 html, body {
   overscroll-behavior-y: none;
   overscroll-behavior-x: none;
-  -webkit-overflow-scrolling: touch; /* Scroll tetap halus di iOS */
-}
-
-/* 2. Paksa tinggi layar pas (Dynamic Viewport Height) */
-html, body {
-  min-height: 100dvh;
-  height: 100dvh;
-  overflow-x: hidden;
-  margin: 0;
-  padding: 0;
+  -webkit-tap-highlight-color: transparent;
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
-  display: flex;
-  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  overflow-x: hidden;
+}
+
+/* 2. Kunci tinggi layar HANYA untuk HP, biar tablet/laptop aman */
+@media (max-width: 768px) {
+  html, body {
+    height: 100dvh;
+    overflow-y: auto; /* Tetap izinkan scroll kalau konten panjang */
+  }
 }

@@ -15,7 +15,6 @@ export default function Home() {
   const [loading, setLoading] = useState(false);
   const [hasSearched, setHasSearched] = useState(false);
 
-  // Ref untuk auto-scroll ke hasil jadwal
   const hasilRef = useRef<HTMLDivElement>(null);
 
   const clickCount = useRef(0);
@@ -73,7 +72,6 @@ export default function Home() {
     const { tanggalLokal, jamLokal } = getWaktuLokal();
     const tanggalCari = tanggal ? tanggal : tanggalLokal;
 
-    // 1. Ambil Template
     const { data: templates } = await supabase
       .from('template_jadwal')
       .select(`*, kapal:kapal_id (kapasitas, layout_kursi)`)
@@ -81,7 +79,6 @@ export default function Home() {
       .eq('rute_tujuan', tujuan)
       .eq('aktif', true);
 
-    // 2. Ambil Jadwal yang sudah ada di tanggal tersebut
     let { data, error } = await supabase
       .from('jadwal')
       .select(`*, kapal:kapal_id (nama, kapasitas, layout_kursi, foto_url)`)
@@ -97,14 +94,12 @@ export default function Home() {
       return;
     }
 
-    // 3. Logika Sinkronisasi (Hanya buat jadwal jika benar-benar belum ada)
     if (templates && templates.length > 0) {
       const newJadwalPayload: any[] = [];
       
       for (const t of templates) {
         const existing = data?.find((j: any) => j.kapal_id === t.kapal_id);
         
-        // Jika jadwal dengan kapal ini belum ada di tanggal tsb, siapkan data insert
         if (!existing) {
           newJadwalPayload.push({
             kapal_id: t.kapal_id,
@@ -116,7 +111,6 @@ export default function Home() {
             status_jadwal: 'open',
           });
         } else {
-          // Jika sudah ada tapi jamnya beda (karena admin ubah template), kita update
           if (existing.jam_berangkat !== t.jam_berangkat) {
             const { count } = await supabase
               .from('pesanan')
@@ -133,7 +127,6 @@ export default function Home() {
         }
       }
 
-      // Insert jadwal baru (jika ada) menggunakan ignoreDuplicates
       if (newJadwalPayload.length > 0) {
         const { data: insertedJadwal } = await supabase
           .from('jadwal')
@@ -161,7 +154,6 @@ export default function Home() {
         }
       }
 
-      // Ambil ulang data jadwal paling fresh setelah proses sinkronisasi
       const { data: refreshedData } = await supabase
         .from('jadwal')
         .select(`*, kapal:kapal_id (nama, kapasitas, layout_kursi, foto_url)`)
@@ -174,7 +166,6 @@ export default function Home() {
       if (refreshedData) data = refreshedData;
     }
 
-    // 4. Filter jam (minimal 60 menit sebelum berangkat jika hari ini)
     let filteredData = data || [];
     if (tanggalCari === tanggalLokal) {
       filteredData = filteredData.filter((j: any) => {
@@ -190,17 +181,17 @@ export default function Home() {
     setJadwal(filteredData);
     setLoading(false);
 
-    // 5. Fitur Auto-Scroll ke Hasil Jadwal
     setTimeout(() => {
       if (hasilRef.current) {
         hasilRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
       }
-    }, 100);
+    }, 300);
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 flex flex-col items-center pt-12 px-4 pb-12">
-      <div className="max-w-md w-full bg-white rounded-xl shadow-md p-6">
+    <div className="bg-gray-50 flex flex-col items-center pt-6 px-4 pb-12 w-full min-h-screen">
+      
+      <div className={`max-w-md w-full bg-white rounded-xl shadow-md p-6 ${hasSearched ? 'hidden md:block' : 'block'}`}>
         <div className="text-center mb-6">
           <h2 onClick={handleSecretLogin} className="text-2xl font-bold text-gray-900 cursor-default select-none">
             Pesan Tiket Kapal
@@ -252,35 +243,57 @@ export default function Home() {
       </div>
 
       {hasSearched && (
-        <div ref={hasilRef} className="max-w-3xl w-full mt-8 space-y-3 mb-10 scroll-mt-6">
+        <div ref={hasilRef} className="max-w-3xl w-full mt-2 md:mt-8 space-y-3 mb-10 scroll-mt-6">
+          
+          <div className="block md:hidden mb-4">
+            <button onClick={() => setHasSearched(false)} className="text-sm text-blue-600 font-medium hover:underline flex items-center gap-1">
+              &larr; Ubah Pencarian
+            </button>
+          </div>
+
           <h3 className="text-lg font-bold text-gray-800 border-b pb-2">Jadwal Tersedia</h3>
           {jadwal.length === 0 ? (
             <p className="text-center text-gray-500 py-4">Tidak ada jadwal yang tersedia atau waktu pembelian sudah ditutup.</p>
           ) : (
             jadwal.map((j) => (
-              <div key={j.id} className="bg-white px-4 py-3 rounded-lg shadow border border-gray-200 flex items-center justify-between gap-2 md:gap-4">
-                <div className="w-16 h-12 md:w-24 md:h-16 flex-shrink-0 bg-gray-100 rounded overflow-hidden flex items-center justify-center border">
+              <div key={j.id} className="bg-white p-3 md:px-4 md:py-3 rounded-lg shadow border border-gray-200 flex items-stretch gap-2 md:gap-4">
+                
+                {/* Foto */}
+                <div className="w-12 h-12 md:w-24 md:h-16 flex-shrink-0 bg-gray-100 rounded overflow-hidden flex items-center justify-center border my-auto">
                   {j.kapal?.foto_url ? (
                     <img src={j.kapal.foto_url} alt={j.kapal?.nama} className="w-full h-full object-cover" />
                   ) : (
-                    <span className="text-[10px] text-gray-400">No Foto</span>
+                    <span className="text-[8px] text-gray-400">No Foto</span>
                   )}
                 </div>
-                <div className="font-bold text-sm md:text-lg text-gray-900 w-12 md:w-14 text-center">
-                  {j.jam_berangkat.substring(0,5)}
+
+                {/* Info Tengah */}
+                <div className="flex-1 min-w-0 flex flex-col justify-center">
+                  {/* Baris Atas: Jam & Harga */}
+                  <div className="flex justify-between items-start">
+                    <div className="font-bold text-sm md:text-lg text-gray-900 leading-tight">
+                      {j.jam_berangkat.substring(0,5)}
+                    </div>
+                    <div className="font-bold text-blue-600 text-xs md:text-base whitespace-nowrap ml-2">
+                      Rp {j.harga?.toLocaleString('id-ID')}
+                    </div>
+                  </div>
+                  
+                  {/* Baris Bawah: Nama Kapal & Rute */}
+                  <div className="mt-0.5">
+                    <p className="font-bold text-xs md:text-base text-gray-900 truncate leading-tight">{j.kapal?.nama}</p>
+                    {/* RUTE: Warna diubah jadi BIRU GELAP SOLID (text-blue-800) biar ga kusam */}
+                    <p className="text-[10px] md:text-sm text-blue-800 font-semibold truncate mt-0.5">{j.rute_asal} - {j.rute_tujuan}</p>
+                  </div>
                 </div>
-                <div className="flex-1 min-w-0">
-                  <p className="font-bold text-sm md:text-base text-gray-900 truncate">{j.kapal?.nama}</p>
-                  <p className="text-xs md:text-sm text-gray-600 truncate">{j.rute_asal} - {j.rute_tujuan}</p>
-                </div>
-                <div className="font-bold text-blue-600 text-xs md:text-base text-right w-20 md:w-24">
-                  Rp {j.harga?.toLocaleString('id-ID')}
-                </div>
-                <div className="w-20 md:w-24 flex-shrink-0">
-                  <Link href={`/kursi?jadwal=${j.id}`} className="block w-full text-center py-1.5 border border-transparent rounded-md shadow-sm text-xs md:text-sm font-medium text-white bg-green-600 hover:bg-green-700">
+
+                {/* Tombol Pilih */}
+                <div className="w-[50px] md:w-24 flex-shrink-0 flex flex-col justify-center">
+                  <Link href={`/kursi?jadwal=${j.id}`} className="flex-1 flex items-center justify-center border border-transparent rounded-md shadow-sm text-[11px] md:text-sm font-medium text-white bg-green-600 hover:bg-green-700 py-2">
                     Pilih
                   </Link>
                 </div>
+
               </div>
             ))
           )}
