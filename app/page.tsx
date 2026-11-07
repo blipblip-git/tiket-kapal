@@ -81,7 +81,7 @@ export default function Home() {
 
     let { data, error } = await supabase
       .from('jadwal')
-      .select(`*, kapal:kapal_id (nama, kapasitas, layout_kursi)`) // foto_url dihapus
+      .select(`*, kapal:kapal_id (nama, kapasitas, layout_kursi)`)
       .eq('rute_asal', asal)
       .eq('rute_tujuan', tujuan)
       .eq('tanggal', tanggalCari)
@@ -189,27 +189,65 @@ export default function Home() {
   };
 
   return (
-    <div className="bg-gray-50 flex flex-col items-center pt-6 px-4 pb-12 w-full min-h-screen">
+    <div className={`flex flex-col items-center pt-8 px-4 pb-12 w-full min-h-[100dvh] transition-colors duration-500 ${hasSearched ? 'bg-purple-100' : 'bg-purple-700'}`}>
       
-      <div className={`max-w-md w-full bg-white rounded-xl shadow-md p-6 ${hasSearched ? 'hidden md:block' : 'block'}`}>
+      {/* CSS Animasi Kustom */}
+      <style dangerouslySetInnerHTML={{__html: `
+        @keyframes muter {
+          0% { transform: rotate(0deg) scale(1); }
+          50% { transform: rotate(180deg) scale(1.2); }
+          100% { transform: rotate(360deg) scale(1); }
+        }
+        .lingkaran-loading {
+          animation: muter 1.5s infinite ease-in-out;
+        }
+        .lingkaran-loading:nth-child(2) { animation-delay: 0.1s; }
+        .lingkaran-loading:nth-child(3) { animation-delay: 0.2s; }
+        .lingkaran-loading:nth-child(4) { animation-delay: 0.3s; }
+        .lingkaran-loading:nth-child(5) { animation-delay: 0.4s; }
+        .lingkaran-loading:nth-child(6) { animation-delay: 0.5s; }
+      `}} />
+
+      {/* KARTU BRAND (PUTIH) */}
+      <div className={`w-full max-w-md bg-white rounded-xl shadow-md p-4 mb-4 flex flex-col items-center ${hasSearched ? 'hidden md:flex' : 'flex'}`}>
+        <h2 
+          onClick={handleSecretLogin} 
+          className="text-3xl font-normal text-gray-900 tracking-widest cursor-default select-none lowercase"
+        >
+          tempakul
+        </h2>
+        
+        {/* 6 Lingkaran Berputar */}
+        <div className="flex gap-1.5 mt-2">
+          <div className="w-2.5 h-2.5 rounded-full bg-red-500 lingkaran-loading"></div>
+          <div className="w-2.5 h-2.5 rounded-full bg-yellow-400 lingkaran-loading"></div>
+          <div className="w-2.5 h-2.5 rounded-full bg-green-500 lingkaran-loading"></div>
+          <div className="w-2.5 h-2.5 rounded-full bg-blue-500 lingkaran-loading"></div>
+          <div className="w-2.5 h-2.5 rounded-full bg-purple-500 lingkaran-loading"></div>
+          <div className="w-2.5 h-2.5 rounded-full bg-pink-500 lingkaran-loading"></div>
+        </div>
+      </div>
+
+      {/* KARTU PENCARIAN */}
+      <div className={`w-full max-w-md bg-white rounded-xl shadow-lg p-6 ${hasSearched ? 'hidden md:block' : 'block'}`}>
+        
         <div className="text-center mb-6">
-          <h2 onClick={handleSecretLogin} className="text-2xl font-bold text-gray-900 cursor-default select-none">
-            Pesan Tiket Kapal
-          </h2>
-          <p className="text-sm text-gray-500 mt-1">Kalimantan Utara</p>
+          <h1 className="text-xl font-bold text-gray-900">
+            Cari Jadwal Tiket Speed
+          </h1>
         </div>
 
         <form onSubmit={handleCari} className="space-y-4 relative">
           <div>
             <label className="block text-sm font-medium text-gray-700">Dari</label>
-            <select required className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm text-gray-900 focus:ring-blue-500 focus:border-blue-500" value={asal} onChange={(e) => setAsal(e.target.value)}>
+            <select required className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm text-gray-900 focus:ring-purple-500 focus:border-purple-500" value={asal} onChange={(e) => setAsal(e.target.value)}>
               <option value="">-- Pilih Kota --</option>
               {DAFTAR_KOTA.map((kota) => <option key={kota} value={kota}>{kota}</option>)}
             </select>
           </div>
 
           <div className="flex justify-center -my-2 relative z-10">
-            <button type="button" onClick={handleTukarRute} className="bg-white border border-gray-300 rounded-full p-2 shadow-sm text-gray-500 hover:text-blue-600 hover:border-blue-400 transition-colors" title="Tukar Rute">
+            <button type="button" onClick={handleTukarRute} className="bg-white border border-gray-300 rounded-full p-2 shadow-sm text-gray-500 hover:text-purple-600 hover:border-purple-400 transition-colors" title="Tukar Rute">
               <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4" />
               </svg>
@@ -218,7 +256,7 @@ export default function Home() {
           
           <div>
             <label className="block text-sm font-medium text-gray-700">Ke</label>
-            <select required className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm text-gray-900 focus:ring-blue-500 focus:border-blue-500" value={tujuan} onChange={(e) => setTujuan(e.target.value)}>
+            <select required className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm text-gray-900 focus:ring-purple-500 focus:border-purple-500" value={tujuan} onChange={(e) => setTujuan(e.target.value)}>
               <option value="">-- Pilih Kota --</option>
               {DAFTAR_KOTA.map((kota) => <option key={kota} value={kota}>{kota}</option>)}
             </select>
@@ -226,10 +264,10 @@ export default function Home() {
 
           <div className="pt-2">
             <label className="block text-sm font-medium text-gray-700">Tanggal</label>
-            <input type="date" required className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm text-gray-900 focus:ring-blue-500 focus:border-blue-500" value={tanggal} onChange={(e) => setTanggal(e.target.value)} />
+            <input type="date" required className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm text-gray-900 focus:ring-purple-500 focus:border-purple-500" value={tanggal} onChange={(e) => setTanggal(e.target.value)} />
           </div>
 
-          <button type="submit" disabled={loading} className="w-full flex justify-center py-2.5 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none disabled:opacity-50">
+          <button type="submit" disabled={loading} className="w-full flex justify-center py-2.5 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-purple-600 hover:bg-purple-700 focus:outline-none disabled:opacity-50 transition-colors">
             {loading ? 'Mencari...' : 'Cari Jadwal'}
           </button>
         </form>
@@ -243,45 +281,41 @@ export default function Home() {
       </div>
 
       {hasSearched && (
-        <div ref={hasilRef} className="max-w-3xl w-full mt-2 md:mt-8 space-y-3 mb-10 scroll-mt-6">
+        <div ref={hasilRef} className="w-full max-w-3xl mt-2 md:mt-8 space-y-3 mb-10 scroll-mt-6">
           
           <div className="block md:hidden mb-4">
-            <button onClick={() => setHasSearched(false)} className="text-sm text-blue-600 font-medium hover:underline flex items-center gap-1">
+            <button onClick={() => setHasSearched(false)} className="text-sm text-purple-700 font-medium hover:underline flex items-center gap-1">
               &larr; Ubah Pencarian
             </button>
           </div>
 
-          <h3 className="text-lg font-bold text-gray-800 border-b pb-2">Jadwal Tersedia</h3>
+          <h3 className="text-lg font-bold text-purple-900 border-b border-purple-300 pb-2">Jadwal Tersedia</h3>
           {jadwal.length === 0 ? (
-            <p className="text-center text-gray-500 py-4">Tidak ada jadwal yang tersedia atau waktu pembelian sudah ditutup.</p>
+            <p className="text-center text-purple-900 py-4 bg-purple-200 rounded-lg shadow-sm">Tidak ada jadwal yang tersedia atau waktu pembelian sudah ditutup.</p>
           ) : (
             jadwal.map((j) => (
               <div key={j.id} className="bg-white p-3 md:px-4 md:py-3 rounded-lg shadow border border-gray-200 flex items-stretch gap-3 md:gap-4">
                 
-                {/* Info Tengah */}
                 <div className="flex-1 min-w-0 flex flex-col justify-center">
-                  {/* Baris Atas: Jam & Rute & Harga */}
                   <div className="flex justify-between items-center mb-0.5 md:mb-1">
                     <div className="flex items-center gap-2">
                       <span className="font-bold text-sm md:text-lg text-gray-900 leading-tight">
                         {j.jam_berangkat.substring(0,5)}
                       </span>
-                      <span className="text-[10px] md:text-sm text-blue-800 font-semibold truncate">
+                      <span className="text-[10px] md:text-sm text-purple-800 font-semibold truncate">
                         {j.rute_asal} - {j.rute_tujuan}
                       </span>
                     </div>
-                    <div className="font-bold text-blue-600 text-xs md:text-base whitespace-nowrap ml-2">
+                    <div className="font-bold text-purple-600 text-xs md:text-base whitespace-nowrap ml-2">
                       Rp {j.harga?.toLocaleString('id-ID')}
                     </div>
                   </div>
                   
-                  {/* Baris Bawah: Nama Kapal */}
                   <div>
                     <p className="font-bold text-xs md:text-base text-gray-900 truncate leading-tight">{j.kapal?.nama}</p>
                   </div>
                 </div>
 
-                {/* Tombol Pilih */}
                 <div className="w-[60px] md:w-24 flex-shrink-0 flex items-stretch">
                   <Link href={`/kursi?jadwal=${j.id}`} className="flex-1 flex items-center justify-center border border-transparent rounded-md shadow-sm text-[11px] md:text-sm font-medium text-white bg-green-600 hover:bg-green-700">
                     Pilih
