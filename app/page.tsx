@@ -15,6 +15,9 @@ export default function Home() {
   const [loading, setLoading] = useState(false);
   const [hasSearched, setHasSearched] = useState(false);
 
+  // Ref untuk auto-scroll ke hasil jadwal
+  const hasilRef = useRef<HTMLDivElement>(null);
+
   const clickCount = useRef(0);
   const clickTimeout = useRef<NodeJS.Timeout | null>(null);
 
@@ -186,6 +189,13 @@ export default function Home() {
 
     setJadwal(filteredData);
     setLoading(false);
+
+    // 5. Fitur Auto-Scroll ke Hasil Jadwal
+    setTimeout(() => {
+      if (hasilRef.current) {
+        hasilRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+    }, 100);
   };
 
   return (
@@ -242,7 +252,7 @@ export default function Home() {
       </div>
 
       {hasSearched && (
-        <div className="max-w-3xl w-full mt-8 space-y-3 mb-10">
+        <div ref={hasilRef} className="max-w-3xl w-full mt-8 space-y-3 mb-10 scroll-mt-6">
           <h3 className="text-lg font-bold text-gray-800 border-b pb-2">Jadwal Tersedia</h3>
           {jadwal.length === 0 ? (
             <p className="text-center text-gray-500 py-4">Tidak ada jadwal yang tersedia atau waktu pembelian sudah ditutup.</p>
