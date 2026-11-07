@@ -53,67 +53,70 @@ export default function DashboardKeberangkatanPage() {
   if (!profile) return null
 
   return (
-    <div className="min-h-screen bg-gray-100 p-6">
-      <div className="max-w-5xl mx-auto">
+    <div className="h-[100dvh] bg-gray-50 flex flex-col overflow-hidden">
+      <div className="max-w-md w-full mx-auto p-4 flex-1 flex flex-col">
         
-        {/* HEADER */}
-        <div className="flex justify-between items-center mb-8 bg-white p-6 rounded-xl shadow-sm border border-gray-200">
-          <div>
-            <div className="flex items-center gap-3">
-              <h1 className="text-2xl font-bold text-gray-900">
-                Operator Keberangkatan {profile.lokasi || ''}
+        {/* HEADER (Dikasih Shadow) */}
+        <div className="bg-white p-4 rounded-xl shadow-md border border-gray-100 mb-4 flex-shrink-0">
+          <div className="flex justify-between items-start">
+            <div>
+              <h1 className="text-lg md:text-xl font-bold text-gray-900 leading-tight">
+                Operator Keberangkatan
               </h1>
-              <span className="bg-blue-100 text-blue-800 text-sm px-3 py-1 rounded-full font-bold">
-                {profile.nama}
-              </span>
+              <p className="text-sm text-gray-600 mt-1 font-medium">
+                {profile.lokasi || ''} - {profile.nama}
+              </p>
             </div>
-            <p className="text-sm text-gray-600 mt-1">Silakan pilih menu di bawah ini.</p>
+            <button 
+              onClick={handleLogout} 
+              className="text-xs bg-red-600 text-white px-3 py-1.5 rounded hover:bg-red-700 font-bold shadow-sm"
+            >
+              Logout
+            </button>
           </div>
-          <button onClick={handleLogout} className="text-sm bg-red-600 text-white px-4 py-2 rounded hover:bg-red-700 font-medium">
-            Logout
-          </button>
         </div>
 
-        {/* MENU UTAMA - 4 KARTU */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        {/* MENU UTAMA (Disusun Vertikal agar rapi 1 layar) */}
+        <div className="flex-1 flex flex-col gap-3 justify-center pb-4">
           
           <button 
             onClick={() => router.push('/scan')} 
-            className="bg-white p-8 rounded-xl shadow-md hover:shadow-lg hover:-translate-y-1 transition border border-gray-200 text-left flex flex-col items-start h-48 justify-center"
+            className="bg-white p-4 rounded-xl shadow-sm hover:shadow-md transition border border-gray-200 text-left flex items-center gap-4"
           >
-            <div className="text-5xl mb-4">📷</div>
-            <h2 className="text-xl font-bold text-gray-900 mb-2">Scan Boarding</h2>
-            <p className="text-sm text-gray-600">Scan QR Code e-tiket penumpang untuk mencatat status boarding.</p>
+            <div className="text-3xl bg-blue-50 w-14 h-14 flex items-center justify-center rounded-lg">📷</div>
+            <h2 className="text-base font-bold text-gray-900 flex-1">Scan Boarding</h2>
+            <span className="text-gray-400 text-xl font-light">&rsaquo;</span>
           </button>
 
           <button 
             onClick={() => router.push('/cari-tiket')} 
-            className="bg-white p-8 rounded-xl shadow-md hover:shadow-lg hover:-translate-y-1 transition border border-gray-200 text-left flex flex-col items-start h-48 justify-center"
+            className="bg-white p-4 rounded-xl shadow-sm hover:shadow-md transition border border-gray-200 text-left flex items-center gap-4"
           >
-            <div className="text-5xl mb-4">💵</div>
-            <h2 className="text-xl font-bold text-gray-900 mb-2">Jual / Cari Tiket</h2>
-            <p className="text-sm text-gray-600">Layani pembelian tiket mendadak atau konfirmasi pesanan online.</p>
+            <div className="text-3xl bg-green-50 w-14 h-14 flex items-center justify-center rounded-lg">💵</div>
+            <h2 className="text-base font-bold text-gray-900 flex-1">Jual Tiket</h2>
+            <span className="text-gray-400 text-xl font-light">&rsaquo;</span>
           </button>
 
           <button 
             onClick={() => router.push('/pusat-laporan-keberangkatan')} 
-            className="bg-white p-8 rounded-xl shadow-md hover:shadow-lg hover:-translate-y-1 transition border border-gray-200 text-left flex flex-col items-start h-48 justify-center"
+            className="bg-white p-4 rounded-xl shadow-sm hover:shadow-md transition border border-gray-200 text-left flex items-center gap-4"
           >
-            <div className="text-5xl mb-4">📊</div>
-            <h2 className="text-xl font-bold text-gray-900 mb-2">Pusat Laporan</h2>
-            <p className="text-sm text-gray-600">Akses Laporan Manifest (Syahbandar), Laporan Scan Boarding, dan Laporan Kasir.</p>
+            <div className="text-3xl bg-purple-50 w-14 h-14 flex items-center justify-center rounded-lg">📊</div>
+            <h2 className="text-base font-bold text-gray-900 flex-1">Pusat Laporan</h2>
+            <span className="text-gray-400 text-xl font-light">&rsaquo;</span>
           </button>
 
           <button 
             onClick={() => router.push('/cetak-ulang')} 
-            className="bg-white p-8 rounded-xl shadow-md hover:shadow-lg hover:-translate-y-1 transition border border-gray-200 text-left flex flex-col items-start h-48 justify-center"
+            className="bg-white p-4 rounded-xl shadow-sm hover:shadow-md transition border border-gray-200 text-left flex items-center gap-4"
           >
-            <div className="text-5xl mb-4">🖨️</div>
-            <h2 className="text-xl font-bold text-gray-900 mb-2">Cetak Ulang Tiket</h2>
-            <p className="text-sm text-gray-600">Cari dan simpan ulang e-tiket penumpang jika gagal unduh.</p>
+            <div className="text-3xl bg-orange-50 w-14 h-14 flex items-center justify-center rounded-lg">🖨️</div>
+            <h2 className="text-base font-bold text-gray-900 flex-1">Cetak Ulang Tiket</h2>
+            <span className="text-gray-400 text-xl font-light">&rsaquo;</span>
           </button>
 
         </div>
+
       </div>
     </div>
   )

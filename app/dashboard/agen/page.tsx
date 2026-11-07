@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { getOperatorSession, type Profile } from '@/lib/supabase'
+import { supabase, getOperatorSession, getProfile, type Profile } from '@/lib/supabase'
 
 export default function DashboardAgenPage() {
   const router = useRouter()
@@ -10,82 +10,100 @@ export default function DashboardAgenPage() {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    const sesi = getOperatorSession()
-    
-    if (!sesi) {
-      router.push('/login')
-      return
-    }
+    async function cekSesi() {
+      const sesiPetugas = getOperatorSession()
+      
+      if (sesiPetugas) {
+        if (sesiPetugas.role !== 'agen' && sesiPetugas.role !== 'admin_utama') {
+          router.push('/login')
+          return
+        }
+        setProfile(sesiPetugas)
+        setLoading(false)
+        return
+      }
 
-    if (sesi.role !== 'agen') {
-      router.push('/login')
-      return
-    }
+      // Cek apakah admin login via Supabase Auth
+      const adminProfile = await getProfile()
+      if (adminProfile && adminProfile.role === 'admin_utama') {
+        setProfile(adminProfile)
+        setLoading(false)
+        return
+      }
 
-    setProfile(sesi)
-    setLoading(false)
+      // Jika tidak ada sesi sama sekali, tendang ke login
+      router.push('/login')
+    }
+    cekSesi()
   }, [router])
 
   function handleLogout() {
+    // 1. Tembak database untuk buka gembok (TANPA await, biarkan berjalan di background)
+    if (profile) {
+      supabase.from('profiles').update({ sesi_aktif: false }).eq('id', profile.id).then();
+    }
+    
+    // 2. Langsung hapus sesi di browser dan pindah halaman (INSTAN)
     localStorage.removeItem('petugas_session')
     localStorage.removeItem('mode_kerja')
     router.push('/login')
   }
 
-  if (loading) return <p className="p-6 text-center text-gray-600">Memuat dashboard...</p>
+  if (loading) return <p className="p-6 text-center text-gray-600 mt-10">Memuat dashboard...</p>
   if (!profile) return null
 
   return (
-    <div className="min-h-screen bg-gray-100 p-6">
-      <div className="max-w-5xl mx-auto">
+    <div className="h-[100dvh] bg-gray-50 flex flex-col overflow-hidden">
+      <div className="max-w-md w-full mx-auto p-4 flex-1 flex flex-col">
         
-        {/* HEADER */}
-        <div className="flex justify-between items-center mb-8 bg-white p-6 rounded-xl shadow-sm border border-gray-200">
-          <div>
-            <div className="flex items-center gap-3">
-              <h1 className="text-2xl font-bold text-gray-900">
+        {/* HEADER (Dikasih Shadow) */}
+        <div className="bg-white p-4 rounded-xl shadow-md border border-gray-100 mb-4 flex-shrink-0">
+          <div className="flex justify-between items-start">
+            <div>
+              <h1 className="text-lg md:text-xl font-bold text-gray-900 leading-tight">
                 Dashboard Agen
               </h1>
-              <span className="bg-purple-100 text-purple-800 text-sm px-3 py-1 rounded-full font-bold">
-                {profile.nama}
-              </span>
+              <p className="text-sm text-gray-600 mt-1 font-medium">
+                {profile.lokasi || ''} - {profile.nama}
+              </p>
             </div>
-            {/* Teks "Silakan pilih menu di bawah ini" sudah dihapus */}
+            <button 
+              onClick={handleLogout} 
+              className="text-xs bg-red-600 text-white px-3 py-1.5 rounded hover:bg-red-700 font-bold shadow-sm"
+            >
+              Logout
+            </button>
           </div>
-          <button onClick={handleLogout} className="text-sm bg-red-600 text-white px-4 py-2 rounded hover:bg-red-700 font-medium">
-            Logout
-          </button>
         </div>
 
-        {/* MENU UTAMA */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        {/* MENU UTAMA (Disusun Vertikal agar rapi 1 layar) */}
+        <div className="flex-1 flex flex-col gap-3 justify-center pb-4">
           
           <button 
             onClick={() => router.push('/agen/jual-tiket')} 
-            className="bg-white p-8 rounded-xl shadow-md hover:shadow-lg hover:-translate-y-1 transition border border-gray-200 text-left flex flex-col items-start h-48 justify-center"
+            className="bg-white p-4 rounded-xl shadow-sm hover:shadow-md transition border border-gray-200 text-left flex items-center gap-4"
           >
-            <div className="text-5xl mb-4">💵</div>
-            <h2 className="text-xl font-bold text-gray-900 mb-2">Jual Tiket</h2>
-            <p className="text-sm text-gray-600">Jual tiket semua kapal (Online, Loket, dll).</p>
+            <div className="text-3xl bg-green-50 w-14 h-14 flex items-center justify-center rounded-lg">💵</div>
+            <h2 className="text-base font-bold text-gray-900 flex-1">Jual Tiket</h2>
+            <span className="text-gray-400 text-xl font-light">&rsaquo;</span>
           </button>
 
           <button 
             onClick={() => router.push('/agen/laporan')} 
-            className="bg-white p-8 rounded-xl shadow-md hover:shadow-lg hover:-translate-y-1 transition border border-gray-200 text-left flex flex-col items-start h-48 justify-center"
+            className="bg-white p-4 rounded-xl shadow-sm hover:shadow-md transition border border-gray-200 text-left flex items-center gap-4"
           >
-            <div className="text-5xl mb-4">📊</div>
-            {/* Teks diubah jadi Laporan Penjualan */}
-            <h2 className="text-xl font-bold text-gray-900 mb-2">Laporan Penjualan</h2>
-            <p className="text-sm text-gray-600">Lihat rekap penjualan tiket yang Anda jual.</p>
+            <div className="text-3xl bg-purple-50 w-14 h-14 flex items-center justify-center rounded-lg">📊</div>
+            <h2 className="text-base font-bold text-gray-900 flex-1">Laporan Penjualan</h2>
+            <span className="text-gray-400 text-xl font-light">&rsaquo;</span>
           </button>
 
           <button 
             onClick={() => router.push('/cetak-ulang')} 
-            className="bg-white p-8 rounded-xl shadow-md hover:shadow-lg hover:-translate-y-1 transition border border-gray-200 text-left flex flex-col items-start h-48 justify-center"
+            className="bg-white p-4 rounded-xl shadow-sm hover:shadow-md transition border border-gray-200 text-left flex items-center gap-4"
           >
-            <div className="text-5xl mb-4">🖨️</div>
-            <h2 className="text-xl font-bold text-gray-900 mb-2">Cetak Ulang Tiket</h2>
-            <p className="text-sm text-gray-600">Cari dan simpan ulang e-tiket penumpang jika gagal unduh.</p>
+            <div className="text-3xl bg-orange-50 w-14 h-14 flex items-center justify-center rounded-lg">🖨️</div>
+            <h2 className="text-base font-bold text-gray-900 flex-1">Cetak Ulang Tiket</h2>
+            <span className="text-gray-400 text-xl font-light">&rsaquo;</span>
           </button>
 
         </div>

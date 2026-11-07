@@ -60,9 +60,21 @@ function LoketJualAgenContent() {
   
   const [showScannerIndex, setShowScannerIndex] = useState<number | null>(null)
   const [metodeBayar, setMetodeBayar] = useState<'cash' | 'qris'>('cash')
+  
+  // State untuk Pop-up QRIS
+  const [showQrisModal, setShowQrisModal] = useState(false)
 
   useEffect(() => {
     async function init() {
+      setKursiDipilih([])
+      setPenumpangList([])
+      setNoHp('')
+      setError('')
+      setStep('pilih-kursi')
+      setLoadingSubmit(false)
+      setShowScannerIndex(null)
+      setShowQrisModal(false)
+
       const sesi = getOperatorSession()
       if (!sesi || sesi.role !== 'agen') {
         router.push('/login')
@@ -205,11 +217,11 @@ function LoketJualAgenContent() {
     return `${hh}:${mm}:${ss}`
   }
 
-  async function handleSubmit(e: React.FormEvent) {
+  // Fungsi saat klik tombol "Bayar" di form
+  function handleTombolBayar(e: React.FormEvent) {
     e.preventDefault()
-    if (!profile || !jadwal) return
-    setError('')
-
+    
+    // Validasi input dulu sebelum buka popup
     for (let i = 0; i < penumpangList.length; i++) {
       if (!penumpangList[i].nama) {
         setError(`Nama penumpang ${i + 1} wajib diisi`)
@@ -220,6 +232,20 @@ function LoketJualAgenContent() {
         return
       }
     }
+    setError('')
+
+    if (metodeBayar === 'qris') {
+      setShowQrisModal(true)
+    } else {
+      prosesPesanan()
+    }
+  }
+
+  // Fungsi utama untuk simpan ke database
+  async function prosesPesanan() {
+    if (!profile || !jadwal) return
+    setError('')
+    setShowQrisModal(false)
 
     const teksMetode = metodeBayar === 'cash' ? 'CASH (Tunai)' : 'QRIS (Simulasi)'
     const konfirmasi = confirm(
@@ -233,79 +259,83 @@ function LoketJualAgenContent() {
 
     setLoadingSubmit(true)
 
-    const sekarang = new Date()
-    const waktuKonfirmasi = sekarang.toISOString()
-    const jamTransaksi = getJamTransaksi(sekarang)
-    const grupId = generateGrupId()
-    
-    const metodePembayaran = metodeBayar === 'cash' ? 'cash_loket' : 'simulasi_online'
+    try {
+      const sekarang = new Date()
+      const waktuKonfirmasi = sekarang.toISOString()
+      const jamTransaksi = getJamTransaksi(sekarang)
+      const grupId = generateGrupId()
+      
+      const metodePembayaran = metodeBayar === 'cash' ? 'cash_loket' : 'simulasi_online'
 
-    const pesananData = penumpangList.map((p, idx) => {
-      const namaRapi = toTitleCase(p.nama);
+      const pesananData = penumpangList.map((p, idx) => {
+        const namaRapi = toTitleCase(p.nama);
 
-      return {
-        jadwal_id: jadwal.id,
-        kursi_id: kursiDipilih[idx],
-        nama_penumpang: namaRapi,
-        nik: maskNik(p.nik),
-        nomor_hp: noHp,
-        kanal: 'agen', 
-        status: 'paid',
-        kode_tiket: generateKodeTiket(idx),
+        return {
+          jadwal_id: jadwal.id,
+          kursi_id: kursiDipilih[idx],
+          nama_penumpang: namaRapi,
+          nik: maskNik(p.nik),
+          nomor_hp: noHp,
+          kanal: 'agen', 
+          status: 'paid',
+          kode_tiket: generateKodeTiket(idx),
+          waktu_bayar: waktuKonfirmasi,
+          petugas_konfirmasi: profile.email,
+          waktu_konfirmasi: waktuKonfirmasi,
+          grup_transaksi_id: grupId,
+          jam_transaksi: jamTransaksi,
+          petugas_jual: profile.email, 
+        }
+      })
+
+      const { data: inserted, error: errInsert } = await supabase
+        .from('pesanan')
+        .insert(pesananData)
+        .select()
+
+      if (errInsert || !inserted) {
+        throw new Error('Gagal simpan pesanan: ' + (errInsert?.message || 'unknown'))
+      }
+
+      await supabase
+        .from('kursi')
+        .update({ status: 'terisi' })
+        .in('id', kursiDipilih)
+
+      const pembayaranData = inserted.map((p) => ({
+        pesanan_id: p.id,
+        metode: metodePembayaran,
+        jumlah: jadwal.harga,
+        status: 'sukses',
         waktu_bayar: waktuKonfirmasi,
-        petugas_konfirmasi: profile.email,
-        waktu_konfirmasi: waktuKonfirmasi,
+      }))
+      await supabase.from('pembayaran').insert(pembayaranData)
+
+      await catatAudit(profile as any, 'jual_langsung_agen', {
+        mode: 'agen',
+        metode_bayar: metodePembayaran,
         grup_transaksi_id: grupId,
         jam_transaksi: jamTransaksi,
-        petugas_jual: profile.email, 
-      }
-    })
+        jumlah_tiket: inserted.length,
+        total_bayar: jadwal.harga * inserted.length,
+        rute: `${jadwal.rute_asal} → ${jadwal.rute_tujuan}`,
+        jam_berangkat: jadwal.jam_berangkat,
+        nomor_hp: noHp,
+        daftar_penumpang: inserted.map((p) => ({
+          nama: p.nama_penumpang,
+          kode_tiket: p.kode_tiket,
+          kursi_id: p.kursi_id,
+          jumlah: jadwal.harga,
+        })),
+      })
 
-    const { data: inserted, error: errInsert } = await supabase
-      .from('pesanan')
-      .insert(pesananData)
-      .select()
-
-    if (errInsert || !inserted) {
-      setError('Gagal simpan pesanan: ' + (errInsert?.message || 'unknown'))
+      const ids = inserted.map((p) => p.id).join(',')
+      router.push(`/etiket?pesanan=${ids}`)
+      
+    } catch (err: any) {
+      setError(err.message || 'Terjadi kesalahan saat memproses pembayaran.')
       setLoadingSubmit(false)
-      return
     }
-
-    await supabase
-      .from('kursi')
-      .update({ status: 'terisi' })
-      .in('id', kursiDipilih)
-
-    const pembayaranData = inserted.map((p) => ({
-      pesanan_id: p.id,
-      metode: metodePembayaran,
-      jumlah: jadwal.harga,
-      status: 'sukses',
-      waktu_bayar: waktuKonfirmasi,
-    }))
-    await supabase.from('pembayaran').insert(pembayaranData)
-
-    await catatAudit(profile as any, 'jual_langsung_agen', {
-      mode: 'agen',
-      metode_bayar: metodePembayaran,
-      grup_transaksi_id: grupId,
-      jam_transaksi: jamTransaksi,
-      jumlah_tiket: inserted.length,
-      total_bayar: jadwal.harga * inserted.length,
-      rute: `${jadwal.rute_asal} → ${jadwal.rute_tujuan}`,
-      jam_berangkat: jadwal.jam_berangkat,
-      nomor_hp: noHp,
-      daftar_penumpang: inserted.map((p) => ({
-        nama: p.nama_penumpang,
-        kode_tiket: p.kode_tiket,
-        kursi_id: p.kursi_id,
-        jumlah: jadwal.harga,
-      })),
-    })
-
-    const ids = inserted.map((p) => p.id).join(',')
-    router.push(`/etiket?pesanan=${ids}`)
   }
 
   function renderDenahKursi() {
@@ -318,10 +348,10 @@ function LoketJualAgenContent() {
       const hold = k.status === 'hold'
       const disabled = terisi || hold
 
-      let bg = 'bg-white border-gray-300 hover:bg-blue-50'
-      if (dipilih) bg = 'bg-blue-600 text-white border-blue-700'
-      else if (terisi) bg = 'bg-red-500 text-white border-red-600 cursor-not-allowed'
-      else if (hold) bg = 'bg-yellow-400 text-gray-900 border-yellow-500 cursor-not-allowed'
+      let bg = 'bg-green-100 text-green-800 border-green-300 hover:bg-green-200'
+      if (dipilih) bg = 'bg-blue-600 text-white border-blue-700 shadow-md'
+      else if (terisi) bg = 'bg-gray-200 text-gray-400 border-gray-300 cursor-not-allowed'
+      else if (hold) bg = 'bg-yellow-100 text-yellow-800 border-yellow-300 cursor-not-allowed'
 
       return (
         <button
@@ -329,7 +359,7 @@ function LoketJualAgenContent() {
           type="button"
           onClick={() => toggleKursi(k.id, k.status)}
           disabled={disabled}
-          className={`w-10 h-10 text-xs font-bold rounded border-2 ${bg} transition`}
+          className={`w-full h-full flex items-center justify-center text-[10px] md:text-xs font-medium rounded border transition-colors ${bg}`}
           title={`Kursi ${k.nomor_kursi} — ${k.status}`}
         >
           {k.nomor_kursi}
@@ -347,12 +377,16 @@ function LoketJualAgenContent() {
       }
 
       return (
-        <div className="flex flex-col items-center gap-2">
+        <div className="flex flex-col h-full justify-between gap-1">
           {baris.map((row, idx) => (
-            <div key={idx} className="flex items-center gap-2">
-              <div className="flex gap-1">{row.slice(0, kiriCount).map(renderKotak)}</div>
-              <div className="w-6" />
-              <div className="flex gap-1">{row.slice(kiriCount).map(renderKotak)}</div>
+            <div key={idx} className="flex items-stretch flex-1 gap-2">
+              <div className="grid grid-cols-2 gap-1 md:gap-2 flex-1 max-w-[40%]">
+                {row.slice(0, kiriCount).map(renderKotak)}
+              </div>
+              <div className="w-4" /> {/* Lorong */}
+              <div className="grid grid-cols-3 gap-1 md:gap-2 flex-1 max-w-[55%]">
+                {row.slice(kiriCount).map(renderKotak)}
+              </div>
             </div>
           ))}
         </div>
@@ -360,151 +394,245 @@ function LoketJualAgenContent() {
     }
 
     return (
-      <div className="grid grid-cols-6 gap-2 justify-items-center">
+      <div className="grid grid-cols-6 gap-1 md:gap-2 h-full w-full">
         {kursiList.map(renderKotak)}
       </div>
     )
   }
 
-  if (loading) return <p className="p-6 text-gray-900">Memuat...</p>
-  if (error && !jadwal) return <p className="p-6 text-red-600">Error: {error}</p>
-  if (!jadwal) return <p className="p-6 text-gray-900">Data tidak lengkap</p>
+  if (loading) return <p className="p-6 text-center text-gray-900 mt-10">Memuat...</p>
+  if (error && !jadwal) return <p className="p-6 text-center text-red-600 mt-10">Error: {error}</p>
+  if (!jadwal) return <p className="p-6 text-center text-gray-900 mt-10">Data tidak lengkap</p>
 
   const totalHarga = jadwal.harga * kursiDipilih.length
+  const jamPotong = jadwal.jam_berangkat.substring(0, 5)
 
   return (
-    <div className="min-h-screen bg-gray-100 p-6">
-      <div className="max-w-4xl mx-auto">
-        <div className="flex justify-between items-center mb-6">
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900">Jual Tiket Agen</h1>
-            <p className="text-sm text-gray-700">Agen: {profile?.nama}</p>
+    <div className="h-[100dvh] w-full bg-gray-50 flex flex-col overflow-hidden relative">
+      
+      {/* HEADER (Fixed) */}
+      <div className="flex-shrink-0 bg-white shadow-sm z-10 p-3 md:p-4">
+        <div className="max-w-md mx-auto">
+          <div className="flex justify-between items-start mb-2">
+            <div>
+              <h1 className="text-lg md:text-xl font-bold text-gray-900 leading-tight">Jual Tiket</h1>
+              <p className="text-xs md:text-sm text-gray-600">Agen : {profile?.lokasi}</p>
+            </div>
+            <button onClick={() => router.push('/agen/jual-tiket')} className="text-[10px] md:text-xs text-blue-600 hover:underline bg-gray-50 px-2 py-1 rounded border border-gray-200 mt-1">
+              &larr; Kembali
+            </button>
           </div>
-          <a href="/agen/jual-tiket" className="text-sm text-blue-600 hover:underline">← Kembali</a>
+
+          {/* Kartu Info Ringkas */}
+          <div className="bg-gray-50 border border-gray-200 p-2 md:p-3 rounded-lg">
+            <div className="flex justify-between items-center mb-0.5">
+              <span className="text-xs md:text-sm font-bold text-gray-900">{jadwal.rute_asal} - {jadwal.rute_tujuan}</span>
+              <span className="text-xs md:text-sm font-bold text-blue-600">Rp {jadwal.harga.toLocaleString('id-ID')} / tiket</span>
+            </div>
+            <div className="flex justify-between items-center mb-0.5">
+              <span className="text-[10px] md:text-xs text-gray-600">Jam {jamPotong}</span>
+              <span className="text-[10px] md:text-xs text-gray-600">Tgl {jadwal.tanggal}</span>
+            </div>
+            <p className="text-[10px] md:text-xs text-gray-800 font-medium">{jadwal.nama_kapal}</p>
+          </div>
         </div>
-
-        <div className="bg-white p-4 rounded shadow mb-4">
-          <p className="font-bold text-gray-900">{jadwal.rute_asal} → {jadwal.rute_tujuan}</p>
-          <p className="text-sm text-gray-700">{jadwal.nama_kapal} • {jadwal.tanggal} • Jam {jadwal.jam_berangkat}</p>
-          <p className="text-sm font-bold text-blue-600 mt-1">Harga: Rp {jadwal.harga.toLocaleString('id-ID')} / tiket</p>
-        </div>
-
-        {step === 'pilih-kursi' && (
-          <>
-            <div className="bg-white p-6 rounded shadow mb-4">
-              <div className="flex justify-between items-center mb-4">
-                <h2 className="font-bold text-gray-900">Pilih Kursi</h2>
-                <div className="text-xs text-gray-600 space-x-3">
-                  <span>⚪ Kosong</span><span className="text-blue-600">🔵 Dipilih</span><span className="text-red-600">🔴 Terisi</span>
-                </div>
-              </div>
-              <div className="overflow-x-auto py-3">{renderDenahKursi()}</div>
-            </div>
-
-            <div className="bg-blue-50 border border-blue-300 p-4 rounded mb-4">
-              <p className="text-sm text-blue-900">
-                Kursi dipilih: <b>{kursiDipilih.length}</b>
-                {kursiDipilih.length > 0 && <> — Total: <b>Rp {totalHarga.toLocaleString('id-ID')}</b></>}
-              </p>
-            </div>
-
-            <button
-              onClick={lanjutKeForm}
-              disabled={kursiDipilih.length === 0}
-              className="w-full bg-blue-600 text-white py-3 rounded hover:bg-blue-700 disabled:bg-gray-400 font-medium"
-            >
-              Lanjut Isi Data →
-            </button>
-          </>
-        )}
-
-        {step === 'form' && (
-          <form onSubmit={handleSubmit}>
-            <div className="bg-white p-4 rounded shadow mb-4">
-              <p className="text-sm text-gray-700"><b>{kursiDipilih.length}</b> kursi • Total <b className="text-blue-600">Rp {totalHarga.toLocaleString('id-ID')}</b></p>
-            </div>
-
-            {penumpangList.map((p, idx) => {
-              const kursi = kursiList.find((k) => k.id === kursiDipilih[idx])
-              return (
-                <div key={idx} className="bg-white p-4 rounded shadow mb-3">
-                  <div className="flex justify-between items-center mb-3">
-                    <p className="text-sm font-bold text-gray-900">Penumpang #{idx + 1} — Kursi {kursi?.nomor_kursi || '?'}</p>
-                    {showScannerIndex !== idx && (
-                      <button
-                        type="button"
-                        onClick={() => setShowScannerIndex(idx)}
-                        className="text-xs bg-blue-100 text-blue-700 px-3 py-1 rounded hover:bg-blue-200 font-medium"
-                      >
-                        📸 Scan KTP
-                      </button>
-                    )}
-                  </div>
-                  
-                  {showScannerIndex === idx && (
-                    <div className="mb-4">
-                      <KtpScanner onScanSuccess={handleKtpScanSuccess} />
-                    </div>
-                  )}
-
-                  <label className="block mb-1 text-sm font-medium text-gray-900">Nama Lengkap (sesuai KTP)</label>
-                  <input type="text" value={p.nama} onChange={(e) => updatePenumpang(idx, 'nama', e.target.value)} className="w-full border rounded px-3 py-2 text-gray-900 mb-3" required />
-                  <label className="block mb-1 text-sm font-medium text-gray-900">NIK (16 digit)</label>
-                  <input type="text" value={p.nik} onChange={(e) => updatePenumpang(idx, 'nik', e.target.value.replace(/\D/g, '').slice(0, 16))} className="w-full border rounded px-3 py-2 text-gray-900" placeholder="16 digit angka" required />
-                </div>
-              )
-            })}
-
-            <div className="bg-white p-4 rounded shadow mb-3">
-              <label className="block mb-2 text-sm font-medium text-gray-900">Nomor HP (opsional)</label>
-              <input type="tel" value={noHp} onChange={(e) => setNoHp(e.target.value)} className="w-full border rounded px-3 py-2 text-gray-900" placeholder="08xxxxxxxxxx" />
-            </div>
-
-            <div className="bg-white p-4 rounded shadow mb-3">
-              <p className="text-sm font-bold text-gray-900 mb-2">Metode Pembayaran</p>
-              <div className="flex gap-4">
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input type="radio" name="metode" value="cash" checked={metodeBayar === 'cash'} onChange={() => setMetodeBayar('cash')} className="w-4 h-4 text-blue-600" />
-                  <span className="text-gray-900 font-medium">💵 Tunai (Cash)</span>
-                </label>
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input type="radio" name="metode" value="qris" checked={metodeBayar === 'qris'} onChange={() => setMetodeBayar('qris')} className="w-4 h-4 text-blue-600" />
-                  <span className="text-gray-900 font-medium">📱 QRIS</span>
-                </label>
-              </div>
-            </div>
-
-            {metodeBayar === 'cash' ? (
-              <div className="bg-yellow-50 border-2 border-yellow-400 p-4 rounded mb-3">
-                <p className="text-sm text-yellow-900 font-bold">⚠️ PASTIKAN UANG SUDAH DITERIMA UTUH</p>
-                <p className="text-xs text-yellow-800 mt-1">Total yang harus diterima: <b>Rp {totalHarga.toLocaleString('id-ID')}</b></p>
-              </div>
-            ) : (
-              <div className="bg-blue-50 border-2 border-blue-400 p-4 rounded mb-3">
-                <p className="text-sm text-blue-900 font-bold">📱 Mode Simulasi QRIS</p>
-                <p className="text-xs text-blue-800 mt-1">Tunjukkan QRIS ke pembeli. Klik tombol di bawah jika sudah sukses.</p>
-              </div>
-            )}
-
-            {error && <p className="text-red-600 text-sm mb-3">{error}</p>}
-
-            <button type="submit" disabled={loadingSubmit} className="w-full bg-green-600 text-white py-3 rounded hover:bg-green-700 disabled:bg-gray-400 font-medium mb-3">
-              {loadingSubmit ? 'Memproses...' : `✓ Bayar & Terbitkan ${kursiDipilih.length} Tiket`}
-            </button>
-
-            <button type="button" onClick={kembaliKeKursi} disabled={loadingSubmit} className="w-full text-gray-700 py-2 text-sm hover:underline">
-              ← Kembali Pilih Kursi
-            </button>
-          </form>
-        )}
       </div>
+
+      {/* AREA TENGAH (Berubah sesuai step) */}
+      {step === 'pilih-kursi' ? (
+        <>
+          <div className="flex-1 overflow-hidden p-2 md:p-4 flex flex-col max-w-md mx-auto w-full">
+            <div className="bg-white p-2 md:p-4 rounded-lg shadow-sm border border-gray-200 flex-1 flex flex-col h-full overflow-hidden">
+              <div className="flex justify-between items-center mb-2">
+                <h2 className="text-xs md:text-sm font-bold text-gray-900">Pilih Kursi</h2>
+                <div className="text-[9px] md:text-[10px] text-gray-500 space-x-2">
+                  <span>🟢 Kosong</span><span className="text-blue-600">🔵 Dipilih</span><span className="text-gray-400">⚪ Terisi</span>
+                </div>
+              </div>
+              <div className="flex-1 overflow-hidden">
+                {renderDenahKursi()}
+              </div>
+            </div>
+          </div>
+
+          {/* FOOTER PILIH KURSI */}
+          <div className="flex-shrink-0 bg-white border-t border-gray-200 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)] z-10 p-3 md:p-4">
+            <div className="max-w-md mx-auto">
+              <div className="flex justify-between items-center mb-2">
+                <p className="text-xs md:text-sm text-gray-800">
+                  Kursi dipilih: <b className="text-blue-600">{kursiDipilih.length}</b>
+                </p>
+                {kursiDipilih.length > 0 && (
+                  <p className="text-xs md:text-sm font-bold text-gray-900">
+                    Total: Rp {totalHarga.toLocaleString('id-ID')}
+                  </p>
+                )}
+              </div>
+              <button
+                onClick={lanjutKeForm}
+                disabled={kursiDipilih.length === 0}
+                className={`w-full py-2.5 md:py-3 rounded-lg font-bold text-sm md:text-base transition-colors shadow-sm ${
+                  kursiDipilih.length > 0 
+                    ? 'bg-blue-600 text-white hover:bg-blue-700' 
+                    : 'bg-gray-200 text-gray-400 cursor-not-allowed'
+                }`}
+              >
+                Lanjut Isi Data →
+              </button>
+            </div>
+          </div>
+        </>
+      ) : (
+        <form onSubmit={handleTombolBayar} className="flex-1 flex flex-col overflow-hidden">
+          
+          {/* AREA FORM (Bisa di-scroll) */}
+          <div className="flex-1 overflow-y-auto p-2 md:p-4 w-full">
+            <div className="max-w-md mx-auto space-y-2 md:space-y-3 pb-4">
+              
+              <div className="bg-blue-50 border border-blue-200 p-2 rounded-lg text-center flex-shrink-0">
+                <p className="text-xs md:text-sm text-blue-900"><b>{kursiDipilih.length}</b> kursi • Total <b>Rp {totalHarga.toLocaleString('id-ID')}</b></p>
+              </div>
+
+              {penumpangList.map((p, idx) => {
+                const kursi = kursiList.find((k) => k.id === kursiDipilih[idx])
+                return (
+                  <div key={idx} className="bg-white p-2 md:p-3 rounded-lg shadow-sm border border-gray-200 flex-shrink-0">
+                    <div className="flex justify-between items-center mb-1">
+                      <p className="text-[11px] md:text-sm font-bold text-gray-900">Penumpang #{idx + 1} — Kursi {kursi?.nomor_kursi || '?'}</p>
+                      {showScannerIndex !== idx && (
+                        <button
+                          type="button"
+                          onClick={() => setShowScannerIndex(idx)}
+                          className="text-[9px] md:text-[10px] bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded hover:bg-blue-200 font-medium"
+                        >
+                          📸 Scan KTP
+                        </button>
+                      )}
+                    </div>
+                    
+                    {showScannerIndex === idx && (
+                      <div className="mb-2">
+                        <KtpScanner onScanSuccess={handleKtpScanSuccess} />
+                      </div>
+                    )}
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                      <div>
+                        <label className="block mb-0.5 text-[9px] md:text-[10px] font-medium text-gray-600">Nama Lengkap</label>
+                        <input type="text" value={p.nama} onChange={(e) => updatePenumpang(idx, 'nama', e.target.value)} className="w-full border border-gray-300 rounded px-2 py-1 md:py-1.5 text-xs text-gray-900 focus:ring-blue-500 focus:border-blue-500" placeholder="Sesuai KTP" required />
+                      </div>
+                      <div>
+                        <label className="block mb-0.5 text-[9px] md:text-[10px] font-medium text-gray-600">NIK (16 digit)</label>
+                        <input type="text" value={p.nik} onChange={(e) => updatePenumpang(idx, 'nik', e.target.value.replace(/\D/g, '').slice(0, 16))} className="w-full border border-gray-300 rounded px-2 py-1 md:py-1.5 text-xs text-gray-900 focus:ring-blue-500 focus:border-blue-500" placeholder="16 digit angka" required />
+                      </div>
+                    </div>
+                  </div>
+                )
+              })}
+
+              <div className="bg-white p-2 md:p-3 rounded-lg shadow-sm border border-gray-200 flex-shrink-0">
+                <label className="block mb-0.5 text-[9px] md:text-[10px] font-medium text-gray-600">Nomor HP (opsional)</label>
+                <input type="tel" value={noHp} onChange={(e) => setNoHp(e.target.value)} className="w-full border border-gray-300 rounded px-2 py-1 md:py-1.5 text-xs text-gray-900 focus:ring-blue-500 focus:border-blue-500" placeholder="08xxxxxxxxxx" />
+              </div>
+
+              {error && <p className="text-red-600 text-[10px] md:text-xs font-bold bg-red-50 p-1.5 rounded flex-shrink-0">{error}</p>}
+              
+            </div>
+          </div>
+
+          {/* FOOTER FORM (Fixed) - Metode Pembayaran & Tombol Taruh Sini */}
+          <div className="flex-shrink-0 bg-white border-t border-gray-200 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)] z-10 p-2 md:p-3">
+            <div className="max-w-md mx-auto space-y-1.5">
+              
+              {/* METODE PEMBAYARAN (Sekarang selalu kelihatan di atas tombol) */}
+              <div className="bg-gray-50 p-2 rounded-lg border border-gray-200">
+                <p className="text-[9px] md:text-[10px] font-bold text-gray-700 mb-1">Metode Pembayaran:</p>
+                <div className="flex gap-4">
+                  <label className="flex items-center gap-1.5 cursor-pointer">
+                    <input type="radio" name="metode" value="cash" checked={metodeBayar === 'cash'} onChange={() => setMetodeBayar('cash')} className="w-3.5 h-3.5 text-blue-600" />
+                    <span className="text-[10px] md:text-xs text-gray-900 font-medium">💵 Tunai</span>
+                  </label>
+                  <label className="flex items-center gap-1.5 cursor-pointer">
+                    <input type="radio" name="metode" value="qris" checked={metodeBayar === 'qris'} onChange={() => setMetodeBayar('qris')} className="w-3.5 h-3.5 text-blue-600" />
+                    <span className="text-[10px] md:text-xs text-gray-900 font-medium">📱 QRIS</span>
+                  </label>
+                </div>
+              </div>
+
+              {/* PERINGATAN METODE */}
+              {metodeBayar === 'cash' ? (
+                <div className="bg-yellow-50 border border-yellow-300 p-1.5 rounded-lg">
+                  <p className="text-[9px] md:text-[10px] text-yellow-900 font-bold">⚠️ UANG HARUS DITERIMA UTUH (Rp {totalHarga.toLocaleString('id-ID')})</p>
+                </div>
+              ) : (
+                <div className="bg-blue-50 border border-blue-300 p-1.5 rounded-lg">
+                  <p className="text-[9px] md:text-[10px] text-blue-900 font-bold">📱 Mode Simulasi QRIS (QR muncul saat klik bayar)</p>
+                </div>
+              )}
+
+              <button type="submit" disabled={loadingSubmit} className="w-full bg-green-600 text-white py-2 md:py-2.5 rounded-lg hover:bg-green-700 disabled:bg-gray-400 font-bold text-xs md:text-sm shadow-sm transition-colors">
+                {loadingSubmit ? 'Memproses...' : `✓ Bayar & Terbitkan ${kursiDipilih.length} Tiket`}
+              </button>
+
+              <button type="button" onClick={kembaliKeKursi} disabled={loadingSubmit} className="w-full text-gray-600 py-1 text-[10px] md:text-xs hover:underline font-medium">
+                ← Kembali Pilih Kursi
+              </button>
+            </div>
+          </div>
+        </form>
+      )}
+
+      {/* MODAL POP-UP QRIS */}
+      {showQrisModal && (
+        <div className="absolute inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-xs overflow-hidden flex flex-col">
+            <div className="bg-blue-600 text-white p-3 text-center">
+              <h3 className="font-bold text-sm">Pembayaran QRIS</h3>
+              <p className="text-[10px] opacity-90 mt-1">Total: Rp {totalHarga.toLocaleString('id-ID')}</p>
+            </div>
+            
+            <div className="p-4 flex flex-col items-center justify-center text-center">
+              <p className="text-[10px] text-gray-600 mb-3">Minta pembeli scan QRIS di bawah ini</p>
+              
+              {/* Gambar QR Palsu / Simulasi */}
+              <div className="w-40 h-40 bg-gray-100 border-2 border-dashed border-gray-400 rounded-lg flex flex-col items-center justify-center mb-3">
+                <span className="text-3xl mb-1">🏦</span>
+                <span className="text-[10px] font-bold text-gray-500">QR CODE</span>
+                <span className="text-[10px] font-bold text-gray-500">SIMULASI</span>
+              </div>
+              
+              <p className="text-[9px] text-gray-500">Pastikan notifikasi transfer/saldo sudah masuk ke rekening Anda.</p>
+            </div>
+            
+            <div className="p-3 bg-gray-50 border-t flex flex-col gap-2">
+              <button 
+                type="button"
+                onClick={prosesPesanan} 
+                disabled={loadingSubmit}
+                className="w-full bg-green-600 text-white py-2 rounded-lg text-xs font-bold hover:bg-green-700 shadow-sm"
+              >
+                {loadingSubmit ? 'Memproses...' : '✓ Pembeli Sudah Bayar'}
+              </button>
+              <button 
+                type="button"
+                onClick={() => setShowQrisModal(false)}
+                disabled={loadingSubmit}
+                className="w-full bg-white border border-gray-300 text-gray-700 py-2 rounded-lg text-xs font-bold hover:bg-gray-100 shadow-sm"
+              >
+                Batal
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
     </div>
   )
 }
 
 export default function LoketJualAgenPage() {
   return (
-    <Suspense fallback={<p className="p-6 text-gray-900">Memuat...</p>}>
+    <Suspense fallback={<p className="p-6 text-center text-gray-900 mt-10">Memuat...</p>}>
       <LoketJualAgenContent />
     </Suspense>
   )

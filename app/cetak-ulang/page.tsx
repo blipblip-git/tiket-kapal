@@ -5,7 +5,6 @@ import { useRouter } from 'next/navigation'
 import { supabase, getOperatorSession, getProfile } from '@/lib/supabase'
 import QRCode from 'qrcode'
 import { toPng } from 'html-to-image'
-// TAMBAHAN BARU: Import fungsi printer
 import { cetakTiketThermal } from '@/lib/thermalPrinter'
 
 type HasilPencarian = {
@@ -95,7 +94,7 @@ function CetakUlangContent() {
 
   async function handlePilih(tiket: HasilPencarian) {
     setDetailPilih(tiket)
-    setQrUrl('') // Reset QR dulu
+    setQrUrl('') 
     const qr = await QRCode.toDataURL(tiket.kode_tiket, { width: 300, margin: 2 })
     setQrUrl(qr)
   }
@@ -119,7 +118,6 @@ function CetakUlangContent() {
     }
   }
 
-  // REVISI: Fungsi ini sekarang manggil Web Serial dari file helper
   async function handlePrintThermal() {
     if (!detailPilih) return
     setPesan('Memproses printer...')
@@ -139,17 +137,16 @@ function CetakUlangContent() {
     }
   }
 
-  if (loading) return <p className="p-6 text-center text-gray-600">Memuat...</p>
+  if (loading) return <p className="p-6 text-center text-gray-600 mt-10">Memuat...</p>
 
-  // Cek apakah user ini Agen atau Operator Keberangkatan
   const sesi = getOperatorSession()
   const isAgenAtauKeberangkatan = sesi?.role === 'agen' || sesi?.role === 'terminal_keberangkatan'
 
   return (
-    <div className="min-h-screen bg-gray-100 p-6 print:bg-white print:p-0">
+    <div className="h-[100dvh] w-full bg-gray-50 flex flex-col overflow-hidden print:h-auto print:overflow-visible print:bg-white print:block">
       <style dangerouslySetInnerHTML={{__html: `
         @media print {
-          @page { size: 80mm auto; margin: 0; } /* Ukuran kertas thermal */
+          @page { size: 80mm auto; margin: 0; }
           body * { visibility: hidden; }
           #area-tiket-ulang, #area-tiket-ulang * { visibility: visible; }
           #area-tiket-ulang { position: absolute; left: 0; top: 0; width: 100%; border: none !important; box-shadow: none !important; }
@@ -157,144 +154,143 @@ function CetakUlangContent() {
         }
       `}} />
 
-      <div className="max-w-4xl mx-auto print:max-w-none print:w-full">
-        
-        <div className="flex justify-between items-center mb-6 print-hidden">
-          <h1 className="text-2xl font-bold text-gray-900">Cetak Ulang Tiket</h1>
-          <button onClick={handleKembali} className="text-sm bg-white px-4 py-2 rounded shadow-sm border border-gray-200 text-gray-700 font-medium">
-            &larr; Kembali ke Dashboard
+      {/* HEADER (Fixed) */}
+      <div className="flex-shrink-0 bg-white shadow-sm z-10 px-4 py-3 md:py-4 print-hidden">
+        <div className="max-w-md mx-auto flex justify-between items-center">
+          <h1 className="text-xl font-bold text-gray-900 leading-tight">Cetak Ulang Tiket</h1>
+          <button onClick={handleKembali} className="text-xs text-blue-600 hover:underline bg-gray-50 px-2 py-1.5 rounded border border-gray-200">
+            &larr; Kembali
           </button>
         </div>
+      </div>
 
-        <div className="bg-white p-6 rounded shadow mb-6 print-hidden">
-          <form onSubmit={handleCari} className="flex gap-2">
-            <input
-              type="text"
-              value={keyword}
-              onChange={(e) => setKeyword(e.target.value)}
-              placeholder="Cari berdasarkan Nama atau Kode Tiket..."
-              className="flex-1 border rounded px-4 py-2 text-gray-900"
-            />
-            <button type="submit" disabled={sedangCari} className="bg-blue-600 text-white px-6 py-2 rounded font-medium hover:bg-blue-700 disabled:bg-gray-400">
-              {sedangCari ? 'Mencari...' : 'Cari Tiket'}
-            </button>
-          </form>
-          {pesan && <p className="text-sm mt-3 text-blue-600 font-medium">{pesan}</p>}
-        </div>
-
-        {hasil.length > 0 && !detailPilih && (
-          <div className="bg-white rounded shadow overflow-hidden print-hidden">
-            <table className="w-full text-sm">
-              <thead className="bg-gray-50 border-b">
-                <tr>
-                  <th className="px-4 py-3 text-left font-medium text-gray-600">Nama</th>
-                  <th className="px-4 py-3 text-left font-medium text-gray-600">Kode</th>
-                  <th className="px-4 py-3 text-left font-medium text-gray-600">Rute</th>
-                  <th className="px-4 py-3 text-left font-medium text-gray-600">Aksi</th>
-                </tr>
-              </thead>
-              <tbody>
-                {hasil.map((h) => (
-                  <tr key={h.id} className="border-b last:border-0 hover:bg-gray-50">
-                    <td className="px-4 py-3 font-bold text-gray-900">{h.nama_penumpang}</td>
-                    <td className="px-4 py-3 font-mono text-gray-600">{h.kode_tiket}</td>
-                    <td className="px-4 py-3 text-gray-700">{h.jadwal}</td>
-                    <td className="px-4 py-3">
-                      <button onClick={() => handlePilih(h)} className="text-blue-600 font-medium hover:underline">
-                        Lihat & Cetak
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-
-        {detailPilih && (
-          <div className="flex flex-col items-center">
-            <div className="w-full max-w-md flex justify-between mb-4 print-hidden">
-              <button onClick={() => setDetailPilih(null)} className="text-sm text-gray-600 hover:underline">
-                &larr; Kembali ke Hasil Pencarian
+      {/* AREA SCROLLABLE */}
+      <div className="flex-1 overflow-y-auto w-full p-4 print:hidden">
+        <div className="max-w-md mx-auto space-y-4">
+          
+          {/* KARTU PENCARIAN */}
+          <div className="bg-white p-3 rounded-lg shadow-sm border border-gray-200">
+            <form onSubmit={handleCari} className="flex gap-2">
+              <input
+                type="text"
+                value={keyword}
+                onChange={(e) => setKeyword(e.target.value)}
+                placeholder="Cari berdasarkan Nama atau Kode..."
+                className="flex-1 border border-gray-300 rounded-md px-3 py-2 text-sm text-gray-900 focus:ring-blue-500 focus:border-blue-500 min-w-0"
+              />
+              <button type="submit" disabled={sedangCari} className="bg-blue-600 text-white px-4 py-2 rounded-md font-bold text-sm hover:bg-blue-700 disabled:bg-gray-400 whitespace-nowrap transition-colors">
+                {sedangCari ? '...' : 'Cari'}
               </button>
-              
-              {/* LOGIKA: Jika Agen atau Operator Keberangkatan, SELALU Cetak Thermal. Jika Admin/Bukan, cek kanal */}
-              {isAgenAtauKeberangkatan ? (
-                <button onClick={handlePrintThermal} className="bg-blue-600 text-white px-4 py-2 rounded font-bold text-sm hover:bg-blue-700 shadow-sm flex items-center gap-2">
-                  🖨️ Cetak Thermal
+            </form>
+            {pesan && <p className="text-xs mt-2 text-blue-600 font-medium">{pesan}</p>}
+          </div>
+
+          {/* HASIL PENCARIAN */}
+          {hasil.length > 0 && !detailPilih && (
+            <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
+              <div className="divide-y divide-gray-100">
+                {hasil.map((h) => (
+                  <div key={h.id} className="p-3 hover:bg-gray-50 transition flex justify-between items-center gap-3">
+                    <div className="min-w-0">
+                      <p className="font-bold text-sm text-gray-900 truncate">{h.nama_penumpang}</p>
+                      <p className="text-[10px] text-gray-600 font-mono truncate">{h.kode_tiket}</p>
+                      <p className="text-[10px] text-gray-600 truncate">{h.jadwal}</p>
+                    </div>
+                    <button onClick={() => handlePilih(h)} className="flex-shrink-0 text-xs bg-blue-50 text-blue-700 font-bold px-3 py-1.5 rounded hover:bg-blue-100 transition">
+                      Lihat
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* DETAIL TIKET */}
+          {detailPilih && (
+            <div className="flex flex-col items-center">
+              <div className="w-full flex justify-between mb-3">
+                <button onClick={() => setDetailPilih(null)} className="text-xs text-gray-600 hover:underline font-medium">
+                  &larr; Kembali ke Hasil
                 </button>
-              ) : (
-                detailPilih.kanal === 'online' ? (
-                  <button onClick={handleSimpan} className="bg-green-600 text-white px-4 py-2 rounded font-bold text-sm hover:bg-green-700 shadow-sm">
-                    📥 Simpan Tiket
-                  </button>
-                ) : (
-                  <button onClick={handlePrintThermal} className="bg-blue-600 text-white px-4 py-2 rounded font-bold text-sm hover:bg-blue-700 shadow-sm flex items-center gap-2">
+                
+                {isAgenAtauKeberangkatan ? (
+                  <button onClick={handlePrintThermal} className="bg-blue-600 text-white px-3 py-1.5 rounded-md font-bold text-xs hover:bg-blue-700 shadow-sm flex items-center gap-1">
                     🖨️ Cetak Thermal
                   </button>
-                )
-              )}
-            </div>
-
-            <div id="area-tiket-ulang" className="bg-white rounded shadow-md p-6 text-gray-900 w-full max-w-md print:shadow-none print:p-0">
-              <div className="text-center mb-4">
-                <p className="text-xs text-gray-600 uppercase">Kode Tiket</p>
-                <p className="font-bold text-sm">{detailPilih.kode_tiket}</p>
-              </div>
-              
-              <div className="flex justify-center mb-4">
-                {qrUrl ? (
-                  <img src={qrUrl} alt="QR" className="w-40 h-40" />
                 ) : (
-                  <div className="w-40 h-40 bg-gray-100 animate-pulse rounded-md flex items-center justify-center text-xs text-gray-400">
-                    Memuat QR...
-                  </div>
+                  detailPilih.kanal === 'online' ? (
+                    <button onClick={handleSimpan} className="bg-green-600 text-white px-3 py-1.5 rounded-md font-bold text-xs hover:bg-green-700 shadow-sm">
+                      📥 Simpan Tiket
+                    </button>
+                  ) : (
+                    <button onClick={handlePrintThermal} className="bg-blue-600 text-white px-3 py-1.5 rounded-md font-bold text-xs hover:bg-blue-700 shadow-sm flex items-center gap-1">
+                      🖨️ Cetak Thermal
+                    </button>
+                  )
                 )}
               </div>
 
-              <hr className="my-4 border-dashed border-gray-300" />
-              <div className="text-sm space-y-2">
-                <div className="flex justify-between">
-                  <span className="text-gray-500">Nama</span>
-                  <span className="font-bold text-gray-900">{detailPilih.nama_penumpang}</span>
+              {/* Kartu E-Tiket */}
+              <div id="area-tiket-ulang" className="bg-white rounded-lg shadow-md p-4 md:p-6 text-gray-900 w-full border border-gray-200 print:shadow-none print:p-0 print:border-none">
+                <div className="text-center mb-3">
+                  <p className="text-[10px] text-gray-500 uppercase tracking-wide">Kode Tiket</p>
+                  <p className="font-bold text-sm">{detailPilih.kode_tiket}</p>
                 </div>
-                <div className="flex justify-between">
-                  <span className="text-gray-500">NIK</span>
-                  <span className="font-medium text-gray-900">{detailPilih.nik}</span>
+                
+                <div className="flex justify-center mb-3">
+                  {qrUrl ? (
+                    <img src={qrUrl} alt="QR" className="w-32 h-32 md:w-40 md:h-40 object-contain" />
+                  ) : (
+                    <div className="w-32 h-32 md:w-40 md:h-40 bg-gray-100 animate-pulse rounded-md flex items-center justify-center text-xs text-gray-400">
+                      Memuat QR...
+                    </div>
+                  )}
                 </div>
-                <div className="flex justify-between">
-                  <span className="text-gray-500">Kapal</span>
-                  <span className="font-medium text-gray-900">{detailPilih.kapal}</span>
+
+                <hr className="my-3 border-dashed border-gray-300" />
+                
+                <div className="text-[11px] md:text-sm space-y-1.5">
+                  <div className="flex justify-between">
+                    <span className="text-gray-500">Nama</span>
+                    <span className="font-bold text-gray-900 text-right">{detailPilih.nama_penumpang}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-500">NIK</span>
+                    <span className="font-medium text-gray-900">{detailPilih.nik}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-500">Kapal</span>
+                    <span className="font-medium text-gray-900 text-right">{detailPilih.kapal}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-500">Rute</span>
+                    <span className="font-medium text-gray-900 text-right">{detailPilih.jadwal}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-500">Tgl / Jam</span>
+                    <span className="font-medium text-gray-900">{detailPilih.tanggal} / {detailPilih.jam.substring(0,5)}</span>
+                  </div>
+                  <div className="flex justify-between items-center bg-blue-50 p-2 rounded -mx-2 mt-2">
+                    <span className="text-blue-800 font-bold text-xs">Kursi</span>
+                    <span className="font-bold text-blue-700 text-lg">{detailPilih.kursi}</span>
+                  </div>
                 </div>
-                <div className="flex justify-between">
-                  <span className="text-gray-500">Rute</span>
-                  <span className="font-medium text-gray-900">{detailPilih.jadwal}</span>
+                
+                <hr className="my-3 border-dashed border-gray-300" />
+                
+                <div className="flex justify-between items-center">
+                  <span className="font-bold text-gray-900 text-xs md:text-sm">Total Bayar</span>
+                  <span className="font-bold text-gray-900 text-sm md:text-lg">Rp {detailPilih.harga.toLocaleString('id-ID')}</span>
                 </div>
-                <div className="flex justify-between">
-                  <span className="text-gray-500">Tanggal</span>
-                  <span className="font-medium text-gray-900">{detailPilih.tanggal}</span>
+                
+                <div className="mt-3 text-center text-[9px] md:text-xs text-gray-400 border-t pt-2">
+                  Tunjukkan e-tiket ini ke petugas saat boarding.
                 </div>
-                <div className="flex justify-between">
-                  <span className="text-gray-500">Jam</span>
-                  <span className="font-medium text-gray-900">{detailPilih.jam}</span>
-                </div>
-                <div className="flex justify-between items-center bg-blue-50 p-2 rounded -mx-2">
-                  <span className="text-blue-800 font-medium">Kursi</span>
-                  <span className="font-bold text-blue-700 text-xl">{detailPilih.kursi}</span>
-                </div>
-              </div>
-              <hr className="my-4 border-dashed border-gray-300" />
-              <div className="flex justify-between items-center">
-                <span className="font-bold text-gray-900">Total Bayar</span>
-                <span className="font-bold text-gray-900 text-lg">Rp {detailPilih.harga.toLocaleString('id-ID')}</span>
-              </div>
-              <div className="mt-4 text-center text-xs text-gray-400 border-t pt-2">
-                Tunjukkan e-tiket ini ke petugas saat boarding.
               </div>
             </div>
-          </div>
-        )}
+          )}
 
+        </div>
       </div>
     </div>
   )
@@ -302,7 +298,7 @@ function CetakUlangContent() {
 
 export default function CetakUlangPage() {
   return (
-    <Suspense fallback={<p className="p-6 text-center text-gray-600">Memuat...</p>}>
+    <Suspense fallback={<p className="p-6 text-center text-gray-600 mt-10">Memuat...</p>}>
       <CetakUlangContent />
     </Suspense>
   )

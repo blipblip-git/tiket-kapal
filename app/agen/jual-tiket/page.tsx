@@ -15,7 +15,6 @@ type JadwalTampil = {
   kursi_kosong: number
   total_kursi: number
   status_waktu: 'lewat' | 'sekarang'
-  foto_url: string | null
 }
 
 function JualTiketAgenContent() {
@@ -25,7 +24,6 @@ function JualTiketAgenContent() {
   const [jadwalList, setJadwalList] = useState<JadwalTampil[]>([])
   
   const [tanggal, setTanggal] = useState('')
-  const [keyword, setKeyword] = useState('')
   const [isRefreshing, setIsRefreshing] = useState(false)
 
   useEffect(() => {
@@ -57,7 +55,7 @@ function JualTiketAgenContent() {
       .from('template_jadwal')
       .select(`*, kapal:kapal_id(kapasitas)`)
       .eq('aktif', true)
-      .eq('rute_asal', lokasiAgen) // FILTER LOKASI
+      .eq('rute_asal', lokasiAgen)
 
     // 2. Ambil Jadwal yang sudah ada di tanggal tersebut
     let { data: jadwalData } = await supabase
@@ -65,9 +63,9 @@ function JualTiketAgenContent() {
       .select('id, rute_asal, rute_tujuan, jam_berangkat, harga, kapal_id, status_jadwal')
       .eq('tanggal', tgl)
       .eq('status', 'aktif')
-      .eq('rute_asal', lokasiAgen) // FILTER LOKASI
+      .eq('rute_asal', lokasiAgen)
 
-    // 3. SINKRONISASI: Pastikan semua template masuk ke jadwal harian
+    // 3. SINKRONISASI
     if (templates && templates.length > 0) {
       const newJadwalPayload: any[] = []
       
@@ -126,7 +124,7 @@ function JualTiketAgenContent() {
     }
 
     // 4. Tampilkan Data
-    const { data: kapalData } = await supabase.from('kapal').select('id, nama, kapasitas, foto_url')
+    const { data: kapalData } = await supabase.from('kapal').select('id, nama, kapasitas')
     const kapalMap = new Map(kapalData?.map((k) => [k.id, k]) || [])
 
     const finalList: JadwalTampil[] = []
@@ -138,7 +136,6 @@ function JualTiketAgenContent() {
     const menitSekarangWITA = witaTime.getUTCMinutes()
 
     if (jadwalData) {
-      // Hapus duplikat jadwal
       const uniqueJadwal = Array.from(new Map(jadwalData.map((j: any) => [`${j.kapal_id}-${j.rute_asal}-${j.jam_berangkat}`, j])).values())
 
       for (const j of uniqueJadwal) {
@@ -174,7 +171,6 @@ function JualTiketAgenContent() {
           kursi_kosong: total - terisi - hold,
           total_kursi: total,
           status_waktu,
-          foto_url: kapal.foto_url
         })
       }
     }
@@ -188,107 +184,110 @@ function JualTiketAgenContent() {
     router.push(`/agen/loket-jual?jadwal=${jadwalId}`)
   }
 
-  const handleRefresh = () => {
-    if (!profile) return
-    const now = new Date()
-    const witaTime = new Date(now.getTime() + (8 * 60 * 60 * 1000))
-    const hariIniWITA = witaTime.toISOString().split('T')[0]
-    setTanggal(hariIniWITA)
-    loadJadwal(hariIniWITA, profile.lokasi)
-  }
-
-  if (loading) return <p className="p-6 text-center text-gray-600">Memuat...</p>
+  if (loading) return <p className="p-6 text-center text-gray-600 mt-10">Memuat...</p>
   if (!profile) return null
 
   return (
-    <div className="min-h-screen bg-gray-100 p-6">
-      <div className="max-w-4xl mx-auto">
-        
-        <div className="flex justify-between items-center mb-6">
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900">Jual Tiket Agen</h1>
-            <p className="text-sm text-gray-700">Agen: {profile.nama} ({profile.lokasi})</p>
+    <div className="h-[100dvh] bg-gray-50 flex flex-col overflow-hidden">
+      
+      {/* HEADER & FILTER TANGGAL */}
+      <div className="flex-shrink-0 bg-white shadow-sm z-10 p-4">
+        <div className="max-w-md mx-auto">
+          <div className="flex justify-between items-start mb-3">
+            <div>
+              <h1 className="text-xl font-bold text-gray-900 leading-tight">Jual Tiket</h1>
+              {/* Judul sudah diperbaiki, tidak dobel lagi */}
+              <p className="text-sm text-gray-600 mt-0.5">Agen : {profile.lokasi}</p>
+            </div>
+            <button onClick={() => router.push('/dashboard/agen')} className="text-xs text-blue-600 hover:underline bg-gray-50 px-2 py-1.5 rounded border border-gray-200 mt-1">
+              &larr; Kembali
+            </button>
           </div>
-          <button onClick={() => router.push('/dashboard/agen')} className="text-sm text-blue-600 hover:underline">
-            &larr; Kembali ke Dashboard
-          </button>
-        </div>
 
-        <div className="bg-white p-4 rounded shadow mb-6 flex flex-col md:flex-row gap-4 items-end">
           <div>
-            <label className="block text-xs font-medium text-gray-700 mb-1">Pilih Tanggal</label>
+            <label className="block text-xs font-bold text-gray-700 mb-1">Pilih Tanggal Keberangkatan</label>
             <input
               type="date"
               value={tanggal}
               onChange={(e) => setTanggal(e.target.value)}
-              className="border rounded px-3 py-2 text-sm text-gray-900"
+              className="w-full border rounded-md px-3 py-2 text-sm text-gray-900 shadow-sm focus:ring-blue-500 focus:border-blue-500"
             />
           </div>
-          <div className="flex-1 w-full">
-            <label className="block text-xs font-medium text-gray-700 mb-1">Cari Nama/NIK/Kode (Opsional)</label>
-            <input
-              type="text"
-              value={keyword}
-              onChange={(e) => setKeyword(e.target.value)}
-              placeholder="Ketik untuk mencari..."
-              className="border rounded px-3 py-2 w-full text-sm text-gray-900"
-            />
-          </div>
-          <button 
-            onClick={handleRefresh} 
-            disabled={isRefreshing}
-            className="bg-blue-600 text-white px-4 py-2 rounded text-sm hover:bg-blue-700 font-medium disabled:bg-gray-400"
-          >
-            {isRefreshing ? 'Memuat...' : '🔄 Refresh'}
-          </button>
         </div>
+      </div>
 
-        <div className="space-y-3">
-          {jadwalList.length === 0 ? (
-            <p className="text-gray-500 bg-white p-4 rounded shadow text-sm">Tidak ada jadwal untuk tanggal ini.</p>
-          ) : (
-            jadwalList.map((j) => {
-              const isLewat = j.status_waktu === 'lewat'
-              return (
-                <div key={j.id} className={`border rounded p-4 flex justify-between items-center shadow-sm ${isLewat ? 'bg-gray-200 opacity-60' : 'bg-white'}`}>
+      {/* DAFTAR JADWAL */}
+      <div className="flex-1 overflow-y-auto w-full p-4">
+        <div className="max-w-md mx-auto space-y-3">
+          
+          {isRefreshing && jadwalList.length === 0 && (
+            <p className="text-center text-gray-500 py-4 text-sm">Memuat jadwal...</p>
+          )}
+
+          {!isRefreshing && jadwalList.length === 0 && (
+            <p className="text-center text-gray-500 py-4 bg-white rounded-lg border border-gray-200 text-sm">
+              Tidak ada jadwal untuk tanggal ini.
+            </p>
+          )}
+
+          {jadwalList.map((j) => {
+            const isLewat = j.status_waktu === 'lewat'
+            return (
+              <div 
+                key={j.id} 
+                className={`bg-white p-3 rounded-lg shadow-sm border flex items-stretch gap-3 ${
+                  isLewat ? 'border-gray-200 opacity-60' : 'border-gray-200'
+                }`}
+              >
+                {/* Info Kiri */}
+                <div className="flex-1 min-w-0 flex flex-col justify-center">
+                  {/* Baris Atas: Jam & Rute */}
+                  <div className="flex justify-between items-center mb-0.5">
+                    <div className="flex items-center gap-2">
+                      <span className={`font-bold text-sm ${isLewat ? 'text-gray-500' : 'text-gray-900'} leading-tight`}>
+                        {j.jam_berangkat.substring(0,5)}
+                      </span>
+                      <span className={`text-[10px] font-semibold truncate ${isLewat ? 'text-gray-400' : 'text-blue-800'}`}>
+                        {j.rute_asal} - {j.rute_tujuan}
+                      </span>
+                    </div>
+                    <div className={`font-bold text-xs whitespace-nowrap ml-2 ${isLewat ? 'text-gray-400' : 'text-blue-600'}`}>
+                      Rp {j.harga.toLocaleString('id-ID')}
+                    </div>
+                  </div>
                   
-                  <div className={`w-20 h-14 rounded border overflow-hidden flex items-center justify-center mr-4 flex-shrink-0 ${isLewat ? 'bg-gray-300' : 'bg-gray-100'}`}>
-                    {j.foto_url ? (
-                      <img src={j.foto_url} alt={j.nama_kapal} className={`w-full h-full object-cover ${isLewat ? 'grayscale' : ''}`} />
-                    ) : (
-                      <span className="text-[10px] text-gray-400">No Foto</span>
-                    )}
-                  </div>
-
-                  <div className="flex-1">
-                    <p className={`font-bold text-lg ${isLewat ? 'text-gray-500' : 'text-gray-900'}`}>{j.rute_asal} → {j.rute_tujuan}</p>
-                    <p className={`text-sm ${isLewat ? 'text-gray-500' : 'text-gray-700'}`}>{j.nama_kapal} • Jam {j.jam_berangkat.substring(0,5)}</p>
-                    <p className={`text-sm mt-1 ${isLewat ? 'text-gray-500' : 'text-gray-700'}`}>
-                      Sisa kursi: <span className={`font-bold ${isLewat ? 'text-gray-500' : 'text-green-700'}`}>{j.kursi_kosong}</span> / {j.total_kursi}
-                    </p>
-                  </div>
-                  <div className="text-right flex flex-col gap-2">
-                    <p className={`font-bold ${isLewat ? 'text-gray-500' : 'text-blue-600'}`}>Rp {j.harga.toLocaleString('id-ID')}</p>
-                    
-                    {isLewat ? (
-                      <button disabled className="inline-block text-sm bg-gray-300 text-gray-500 px-4 py-2 rounded cursor-not-allowed font-medium">
-                        Waktu Habis
-                      </button>
-                    ) : (
-                      <button 
-                        onClick={() => handleJualTiket(j.id)} 
-                        className="inline-block text-sm bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 font-medium"
-                      >
-                        Jual Tiket →
-                      </button>
-                    )}
+                  {/* Baris Bawah: Nama Kapal & Sisa Kursi */}
+                  <div className="flex justify-between items-end mt-1">
+                    <div className="min-w-0 pr-2">
+                      <p className={`font-bold text-xs truncate leading-tight ${isLewat ? 'text-gray-500' : 'text-gray-900'}`}>
+                        {j.nama_kapal}
+                      </p>
+                      <p className={`text-[10px] mt-0.5 ${isLewat ? 'text-gray-400' : 'text-gray-600'}`}>
+                        Sisa kursi: <span className={`font-bold ${isLewat ? 'text-gray-400' : 'text-green-700'}`}>{j.kursi_kosong}</span> / {j.total_kursi}
+                      </p>
+                    </div>
                   </div>
                 </div>
-              )
-            })
-          )}
-        </div>
 
+                {/* Tombol Aksi Kanan */}
+                <div className="w-[70px] flex-shrink-0 flex items-stretch">
+                  {isLewat ? (
+                    <button disabled className="w-full flex items-center justify-center rounded-md bg-gray-200 text-gray-500 text-[10px] font-medium cursor-not-allowed text-center px-1">
+                      Waktu Habis
+                    </button>
+                  ) : (
+                    <button 
+                      onClick={() => handleJualTiket(j.id)} 
+                      className="w-full flex items-center justify-center rounded-md bg-blue-600 text-white hover:bg-blue-700 text-[11px] font-bold shadow-sm transition-colors"
+                    >
+                      Jual Tiket
+                    </button>
+                  )}
+                </div>
+              </div>
+            )
+          })}
+        </div>
       </div>
     </div>
   )
@@ -296,7 +295,7 @@ function JualTiketAgenContent() {
 
 export default function JualTiketAgenPage() {
   return (
-    <Suspense fallback={<p className="p-6 text-center text-gray-600">Memuat...</p>}>
+    <Suspense fallback={<p className="p-6 text-center text-gray-600 mt-10">Memuat...</p>}>
       <JualTiketAgenContent />
     </Suspense>
   )
