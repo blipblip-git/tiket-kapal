@@ -23,13 +23,18 @@ export default function LaporanGabunganPage() {
   const [error, setError] = useState('')
   const [laporan, setLaporan] = useState<GabunganPerJam[]>([])
   
-  const [tanggal, setTanggal] = useState(() => {
-    const today = new Date()
-    const offset = today.getTimezoneOffset() * 60000
-    return new Date(today.getTime() - offset).toISOString().split('T')[0]
-  })
+  // Tanggal dikosongin dulu, nanti diisi di useEffect
+  const [tanggal, setTanggal] = useState('')
+  const [tanggalFormatHeader, setTanggalFormatHeader] = useState('')
 
   useEffect(() => {
+    // Set tanggal di dalam useEffect biar aman dari error Next.js 16
+    const today = new Date()
+    const offset = today.getTimezoneOffset() * 60000
+    const localDate = new Date(today.getTime() - offset).toISOString().split('T')[0]
+    setTanggal(localDate)
+    setTanggalFormatHeader(today.toLocaleDateString('id-ID', { day: '2-digit', month: 'long', year: 'numeric' }))
+
     async function init() {
       let currentProfile = getOperatorSession()
       if (!currentProfile) {
@@ -45,6 +50,7 @@ export default function LaporanGabunganPage() {
 
   useEffect(() => {
     async function fetchData() {
+      if (!profile || !tanggal) return
       setLoading(true)
       
       const { data: templateData } = await supabase
@@ -66,7 +72,6 @@ export default function LaporanGabunganPage() {
 
       if (error) { setError('Gagal memuat laporan: ' + error.message); setLoading(false); return }
 
-      // Ambil data kapal untuk dapetin nama kapal
       const kapalIds = [...new Set(pesananData?.map((p: any) => p.jadwal?.kapal_id).filter(Boolean) || [])]
       const kapalMap = new Map()
       if (kapalIds.length > 0) {
@@ -98,7 +103,6 @@ export default function LaporanGabunganPage() {
             }
           }
 
-          // Set nama kapal kalau belum ada
           if (item.jadwal.kapal_id && kapalMap.has(item.jadwal.kapal_id)) {
             grouped[jam].nama_kapal = kapalMap.get(item.jadwal.kapal_id)
           }
@@ -118,7 +122,7 @@ export default function LaporanGabunganPage() {
       setLoading(false)
     }
 
-    if (profile) fetchData()
+    if (profile && tanggal) fetchData()
   }, [profile, tanggal])
 
   const handlePrint = () => {
@@ -129,14 +133,11 @@ export default function LaporanGabunganPage() {
   if (error) return <p className="p-6 text-center text-red-600">{error}</p>
   if (!profile) return null
 
-  const tanggalFormatHeader = new Date(tanggal).toLocaleDateString('id-ID', { day: '2-digit', month: 'long', year: 'numeric' })
-
   const totalPenumpangTarakan = laporan.reduce((sum, item) => sum + item.tarakan.total_penumpang, 0)
   const totalPendapatanTarakan = laporan.reduce((sum, item) => sum + item.tarakan.total_pendapatan, 0)
   const totalPenumpangTjSelor = laporan.reduce((sum, item) => sum + item.tanjungSelor.total_penumpang, 0)
   const totalPendapatanTjSelor = laporan.reduce((sum, item) => sum + item.tanjungSelor.total_pendapatan, 0)
   
-  // Total keseluruhan
   const grandTotalPendapatan = totalPendapatanTarakan + totalPendapatanTjSelor
 
   return (
