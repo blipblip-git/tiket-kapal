@@ -87,33 +87,37 @@ function ScanContent() {
       const scanner = new Html5Qrcode('qr-reader')
       scannerRef.current = scanner
 
-      // PERBAIKAN: Resolusi 720p (HD) agar ringan untuk HP jadul
+      // Konfigurasi dikembalikan ke awal yang berhasil
       const config = {
         fps: 10,
         qrbox: { width: 250, height: 250 },
         aspectRatio: 1.0,
-        videoConstraints: {
-          facingMode: "environment",
-          width: { min: 640, ideal: 720, max: 1280 },
-          height: { min: 480, ideal: 1280, max: 1280 }
-        }
       }
 
       await scanner.start(
-        config.videoConstraints,
-        {
-          fps: config.fps,
-          qrbox: config.qrbox,
-          aspectRatio: config.aspectRatio
-        },
+        { facingMode: "environment" },
+        config,
         async (decodedText) => {
           await prosesScan(decodedText)
         },
         () => {}
       )
       setScannerAktif(true)
-    } catch (err) {
-      setError('Gagal buka kamera: ' + (err as Error).message)
+    } catch (err: any) {
+      console.error('Camera error:', err)
+      // PENANGKAPAN ERROR YANG LEBIH BAIK
+      let pesanError = 'Gagal membuka kamera.'
+      if (err?.name === 'NotAllowedError' || err?.message?.includes('Permission denied')) {
+        pesanError = 'Akses kamera ditolak. Izinkan kamera di pengaturan browser Anda.'
+      } else if (err?.name === 'NotFoundError' || err?.message?.includes('Requested device not found')) {
+        pesanError = 'Kamera tidak ditemukan di perangkat ini.'
+      } else if (err?.name === 'NotReadableError') {
+        pesanError = 'Kamera sedang dipakai aplikasi lain. Tutup aplikasi tersebut dan coba lagi.'
+      } else if (err?.message) {
+        pesanError = err.message
+      }
+      
+      setError(pesanError)
       setScanning(false)
     }
   }
@@ -282,7 +286,11 @@ function ScanContent() {
         </div>
 
         <div className="bg-white p-4 rounded shadow mb-4">
-          {error && <p className="text-red-500 text-sm mb-2">{error}</p>}
+          {error && (
+            <div className="bg-red-50 border border-red-200 text-red-600 text-sm p-3 rounded mb-4 font-medium">
+              {error}
+            </div>
+          )}
 
           {hasil && (
             <div className={`p-4 rounded mb-4 border-2 ${
@@ -336,7 +344,7 @@ function ScanContent() {
 export default function ScanPage() {
   return (
     <Suspense fallback={<p className="p-6 text-gray-900">Memuat...</p>}>
-      <ScanContent />
+      <ScanPageContent />
     </Suspense>
   )
 }
