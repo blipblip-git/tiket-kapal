@@ -87,9 +87,25 @@ function ScanContent() {
       const scanner = new Html5Qrcode('qr-reader')
       scannerRef.current = scanner
 
+      // PERBAIKAN: Resolusi 720p (HD) agar ringan untuk HP jadul
+      const config = {
+        fps: 10,
+        qrbox: { width: 250, height: 250 },
+        aspectRatio: 1.0,
+        videoConstraints: {
+          facingMode: "environment",
+          width: { min: 640, ideal: 720, max: 1280 },
+          height: { min: 480, ideal: 1280, max: 1280 }
+        }
+      }
+
       await scanner.start(
-        { facingMode: 'environment' },
-        { fps: 10, qrbox: { width: 250, height: 250 } },
+        config.videoConstraints,
+        {
+          fps: config.fps,
+          qrbox: config.qrbox,
+          aspectRatio: config.aspectRatio
+        },
         async (decodedText) => {
           await prosesScan(decodedText)
         },
@@ -114,11 +130,8 @@ function ScanContent() {
   }
 
   async function prosesScan(kodeTiket: string) {
-    // ================= GUARD ANTI DOBEL PROSES (#4) =================
     if (isProcessingRef.current) return
     isProcessingRef.current = true
-
-    // ================= PAUSE AMAN (#2) =================
     safePause()
 
     try {
@@ -133,7 +146,6 @@ function ScanContent() {
         return
       }
 
-      // ================= maybeSingle() AGAR TIDAK THROW (#1) =================
       const { data: j, error: errJ } = await supabase
         .from('jadwal')
         .select('tanggal, jam_berangkat, rute_asal, rute_tujuan')
@@ -145,7 +157,6 @@ function ScanContent() {
         return
       }
 
-      // ================= VALIDASI RUTE / LOKASI =================
       if (profile?.role !== 'admin_utama' && j.rute_asal !== profile?.lokasi) {
         setHasil({
           status: 'salah_rute',
@@ -158,8 +169,6 @@ function ScanContent() {
       const offset = now.getTimezoneOffset() * 60000
       const hariIniLokal = new Date(now.getTime() - offset).toISOString().split('T')[0]
 
-      // ================= PERBAIKAN #5: ANTI-BANTING FORMAT TANGGAL =================
-      // split('T')[0] memastikan kalau DB ngasih timestamp, kita tetap ambil tanggalnya saja
       const tanggalJadwal = String(j.tanggal).trim().split('T')[0]
 
       if (tanggalJadwal !== hariIniLokal) {
@@ -184,7 +193,6 @@ function ScanContent() {
         return
       }
 
-      // ================= VALIDASI TOLERANSI 5 MENIT =================
       if (selisihMenit < -5) {
         setHasil({
           status: 'terlambat',
@@ -193,7 +201,6 @@ function ScanContent() {
         return
       }
 
-      // ================= maybeSingle() AGAR TIDAK THROW (#1) =================
       const { data: k, error: errK } = await supabase
         .from('kursi')
         .select('nomor_kursi')
@@ -236,7 +243,6 @@ function ScanContent() {
         pesan: 'Boarding berhasil',
       })
     } catch (err) {
-      // ================= FALLBACK AGAR TIDAK NYANGKUT (#1) =================
       console.error('prosesScan error:', err)
       setHasil({
         status: 'tidak_valid',
@@ -247,7 +253,6 @@ function ScanContent() {
     }
   }
 
-  // Auto Resume setelah boarding berhasil (jeda 3 detik)
   useEffect(() => {
     if (hasil && hasil.status === 'valid' && scannerRef.current) {
       const timer = setTimeout(() => {
