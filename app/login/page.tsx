@@ -5,7 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 
 type RincianPenumpang = {
-  id: string; nama: string; kursi: string; kanal: string; kode_tiket: string
+  id: string; nama: string; kursi: string; kanal: string; kode_tiket: string; waktu_boarding: string | null
 }
 
 type LaporanPerJam = {
@@ -127,7 +127,7 @@ function LoginContent() {
       }
 
       const { data: pesananData } = await supabase.from('pesanan').select(`
-          id, nama_penumpang, kode_tiket, kanal,
+          id, nama_penumpang, kode_tiket, kanal, waktu_boarding,
           jadwal:jadwal_id (jam_berangkat, rute_asal, kapal_id),
           kursi:kursi_id (nomor_kursi)
         `).eq('status', 'paid').eq('jadwal.tanggal', sbTanggal).eq('jadwal.rute_asal', sbLokasi)
@@ -149,7 +149,14 @@ function LoginContent() {
         if (!groupedByJam[jam]) groupedByJam[jam] = { jam, total_terjual: 0, rincian: [], nama_kapal: '-', nama_kapten: '-' }
         const group = groupedByJam[jam]
         group.total_terjual += 1
-        group.rincian.push({ id: item.id, nama: item.nama_penumpang, kursi: item.kursi?.nomor_kursi || '-', kanal: item.kanal || 'loket', kode_tiket: item.kode_tiket })
+        group.rincian.push({ 
+          id: item.id, 
+          nama: item.nama_penumpang, 
+          kursi: item.kursi?.nomor_kursi || '-', 
+          kanal: item.kanal || 'loket', 
+          kode_tiket: item.kode_tiket,
+          waktu_boarding: item.waktu_boarding || null
+        })
       })
 
       const now = new Date()
@@ -174,7 +181,16 @@ function LoginContent() {
   }, [tab, sbTanggal, sbLokasi])
 
   const handlePrintSyahbandar = () => { setTimeout(() => window.print(), 100) }
-  const potongKode = (kode: string) => kode.length > 6 ? `...${kode.slice(-6)}` : kode
+  
+  const urutkanBerdasarkanScan = (rincian: RincianPenumpang[]) => {
+    return [...rincian].sort((a, b) => {
+      if (!a.waktu_boarding && !b.waktu_boarding) return 0;
+      if (!a.waktu_boarding) return 1;
+      if (!b.waktu_boarding) return -1;
+      return new Date(a.waktu_boarding).getTime() - new Date(b.waktu_boarding).getTime();
+    });
+  }
+
   const sbRincianAktif = sbExpandedJam ? sbLaporan.find(l => l.jam === sbExpandedJam) : null
 
   return (
@@ -221,45 +237,44 @@ function LoginContent() {
 
           {/* KONTEN SYAHBANDAR */}
           {tab === 'syahbandar' && (
-            <div className="p-6 bg-gray-50 min-h-[500px]">
-              <div className="flex justify-between items-center mb-6 bg-blue-800 text-white p-4 rounded print-hidden">
+            <div className="p-3 md:p-6 bg-gray-50 min-h-[500px]">
+              <div className="flex justify-between items-center mb-4 md:mb-6 bg-blue-800 text-white p-4 rounded print-hidden">
                 <div>
-                  <h1 className="text-xl font-bold">PORTAL SYAHBANDAR</h1>
-                  <p className="text-sm text-blue-200">Sistem Manifest Penumpang Kapal</p>
+                  <h1 className="text-lg md:text-xl font-bold">PORTAL SYAHBANDAR</h1>
+                  <p className="text-xs md:text-sm text-blue-200">Sistem Manifest Penumpang Kapal</p>
                 </div>
               </div>
 
-              <div className="bg-white p-4 rounded shadow mb-6 flex flex-wrap items-center gap-4 print-hidden">
-                <div>
-                  <label className="block text-xs font-medium text-gray-700 mb-1">Pilih Rute (Asal)</label>
-                  <select value={sbLokasi} onChange={(e) => setSbLokasi(e.target.value)} className="border rounded px-3 py-2 text-sm text-gray-900">
+              <div className="bg-white p-3 md:p-4 rounded shadow mb-4 md:mb-6 flex flex-col md:flex-row items-start md:items-center gap-3 md:gap-4 print-hidden">
+                <div className="w-full md:w-auto">
+                  <label className="block text-[10px] md:text-xs font-medium text-gray-700 mb-1">Pilih Rute (Asal)</label>
+                  <select value={sbLokasi} onChange={(e) => setSbLokasi(e.target.value)} className="w-full md:w-auto border rounded px-3 py-2 text-xs md:text-sm text-gray-900">
                     <option value="Tarakan">Tarakan</option>
                     <option value="Tanjung Selor">Tanjung Selor</option>
                   </select>
                 </div>
-                <div>
-                  <label className="block text-xs font-medium text-gray-700 mb-1">Pilih Tanggal</label>
-                  <input type="date" value={sbTanggal} onChange={(e) => setSbTanggal(e.target.value)} className="border rounded px-3 py-2 text-sm text-gray-900" />
+                <div className="w-full md:w-auto">
+                  <label className="block text-[10px] md:text-xs font-medium text-gray-700 mb-1">Pilih Tanggal</label>
+                  <input type="date" value={sbTanggal} onChange={(e) => setSbTanggal(e.target.value)} className="w-full md:w-auto border rounded px-3 py-2 text-xs md:text-sm text-gray-900" />
                 </div>
               </div>
 
-              <div className="space-y-3">
+              <div className="space-y-2 md:space-y-3">
                 {sbLoading ? (
-                  <p className="text-center text-gray-500">Memuat data...</p>
+                  <p className="text-center text-gray-500 text-sm">Memuat data...</p>
                 ) : sbLaporan.length === 0 ? (
-                  <p className="text-center text-gray-500 py-8">Belum ada jadwal manifest yang siap ditampilkan.</p>
+                  <p className="text-center text-gray-500 py-8 text-sm">Belum ada jadwal manifest yang siap ditampilkan.</p>
                 ) : (
                   sbLaporan.map((l) => (
                     <div key={l.jam} className="bg-white rounded shadow border border-gray-200 overflow-hidden print-hidden">
-                      <button onClick={() => setSbExpandedJam(sbExpandedJam === l.jam ? null : l.jam)} className="w-full px-4 py-3 flex justify-between items-center hover:bg-gray-50 transition">
-                        <div className="flex items-center gap-3">
-                          <span className="text-lg">🚢</span>
-                          <span className="font-bold text-gray-900">Manifest Jam {l.jam}</span>
-                          <span className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded">{l.nama_kapal}</span>
+                      <button onClick={() => setSbExpandedJam(sbExpandedJam === l.jam ? null : l.jam)} className="w-full p-3 md:px-4 md:py-3 flex flex-col md:flex-row md:justify-between md:items-center hover:bg-gray-50 transition text-left gap-2 md:gap-0">
+                        <div className="flex items-center gap-2 md:gap-3 w-full md:w-auto">
+                          <span className="font-bold text-xs md:text-sm text-gray-900">Manifest Jam {l.jam}</span>
+                          <span className="text-[10px] md:text-xs bg-blue-100 text-blue-800 px-2 py-0.5 rounded">{l.nama_kapal}</span>
                         </div>
-                        <div className="flex items-center gap-4">
-                          <span className="text-sm font-bold text-blue-600">{l.total_terjual} Penumpang</span>
-                          <span className="text-blue-600">{sbExpandedJam === l.jam ? '▲' : '▼'}</span>
+                        <div className="flex items-center justify-between md:justify-end gap-4 w-full md:w-auto mt-1 md:mt-0">
+                          <span className="text-[10px] md:text-sm font-bold text-blue-600">{l.total_terjual} Penumpang</span>
+                          <span className="text-[10px] md:text-xs text-blue-600">{sbExpandedJam === l.jam ? '▲' : '▼'}</span>
                         </div>
                       </button>
                     </div>
@@ -268,42 +283,44 @@ function LoginContent() {
               </div>
 
               {sbExpandedJam && sbRincianAktif && (
-                <div className="mt-8 print-hidden">
+                <div className="mt-4 md:mt-8 print-hidden">
                   <div className="bg-white rounded shadow border-2 border-blue-400 overflow-hidden">
-                    <div className="bg-blue-600 text-white p-4 flex justify-between items-center">
-                      <div><h3 className="font-bold text-lg">Rincian Manifest Jam {sbExpandedJam}</h3></div>
-                      <div className="flex gap-2">
-                        <button onClick={handlePrintSyahbandar} className="bg-green-600 text-white px-3 py-1 rounded text-sm font-bold hover:bg-green-700">🖨️ Cetak Manifest</button>
-                        <button onClick={() => setSbExpandedJam(null)} className="bg-red-600 text-white px-3 py-1 rounded text-sm font-bold hover:bg-red-700">Tutup</button>
+                    <div className="bg-blue-600 text-white p-3 md:p-4 flex flex-col md:flex-row justify-between items-start md:items-center gap-2 md:gap-0">
+                      <div><h3 className="font-bold text-sm md:text-lg">Rincian Manifest Jam {sbExpandedJam}</h3></div>
+                      <div className="flex gap-2 w-full md:w-auto">
+                        <button onClick={handlePrintSyahbandar} className="flex-1 md:flex-none bg-green-600 text-white px-3 py-1.5 rounded text-[10px] md:text-sm font-bold hover:bg-green-700">🖨️ Cetak</button>
+                        <button onClick={() => setSbExpandedJam(null)} className="flex-1 md:flex-none bg-red-600 text-white px-3 py-1.5 rounded text-[10px] md:text-sm font-bold hover:bg-red-700">Tutup</button>
                       </div>
                     </div>
                     
-                    <div className="p-4 bg-gray-50 border-b text-sm grid grid-cols-[200px_10px_1fr] gap-y-1 text-gray-800">
+                    <div className="p-3 md:p-4 bg-gray-50 border-b text-[10px] md:text-sm grid grid-cols-[70px_10px_1fr] md:grid-cols-[150px_10px_1fr] gap-y-1 text-gray-800">
                       <span>Tanggal</span><span>:</span><span>{sbTanggal}</span>
                       <span>Rute</span><span>:</span><span>{sbLokasi} - {sbLokasi === 'Tarakan' ? 'Tanjung Selor' : 'Tarakan'}</span>
-                      <span>Kapal</span><span>:</span><span>{sbRincianAktif.nama_kapal}</span>
+                      <span>Kapal</span><span>:</span><span className="font-medium">{sbRincianAktif.nama_kapal}</span>
                       <span>Kapten</span><span>:</span><span className="font-bold">{sbRincianAktif.nama_kapten}</span>
-                      <span className="whitespace-nowrap">Jumlah Penumpang</span><span>:</span><span className="font-bold">{sbRincianAktif.total_terjual} Orang</span>
+                      <span>Penumpang</span><span>:</span><span className="font-bold text-blue-700">{sbRincianAktif.total_terjual} Orang</span>
                     </div>
 
                     <div className="overflow-x-auto">
                       <table className="min-w-full divide-y divide-gray-200">
-                        <thead className="bg-gray-50">
+                        <thead className="bg-gray-100">
                           <tr>
-                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">No</th>
-                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Nama / Kursi</th>
-                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Kode</th>
+                            <th className="px-2 md:px-4 py-2 text-center text-[10px] md:text-xs font-bold text-gray-700 w-8">No</th>
+                            <th className="px-2 md:px-4 py-2 text-left text-[10px] md:text-xs font-bold text-gray-700">Nama / Kursi</th>
+                            <th className="px-2 md:px-4 py-2 text-center text-[10px] md:text-xs font-bold text-gray-700 w-16">Scan</th>
                           </tr>
                         </thead>
                         <tbody className="bg-white divide-y divide-gray-200">
                           {sbRincianAktif.rincian.length === 0 ? (
-                            <tr><td colSpan={3} className="px-4 py-8 text-center text-gray-500 italic">Belum ada penumpang yang terdaftar di jam ini.</td></tr>
+                            <tr><td colSpan={3} className="px-4 py-8 text-center text-gray-500 italic text-xs">Belum ada penumpang.</td></tr>
                           ) : (
-                            sbRincianAktif.rincian.map((p, idx) => (
+                            urutkanBerdasarkanScan(sbRincianAktif.rincian).map((p, idx) => (
                               <tr key={p.id} className="hover:bg-gray-50">
-                                <td className="px-4 py-3 text-sm text-gray-500">{idx + 1}</td>
-                                <td className="px-4 py-3 text-sm font-bold text-gray-900">{p.nama} / {p.kursi}</td>
-                                <td className="px-4 py-3 text-sm font-mono text-gray-600">{potongKode(p.kode_tiket)}</td>
+                                <td className="px-2 md:px-4 py-2 text-center text-[10px] md:text-sm text-gray-500">{idx + 1}</td>
+                                <td className="px-2 md:px-4 py-2 text-[10px] md:text-sm font-bold text-gray-900 break-words">{p.nama} / {p.kursi}</td>
+                                <td className="px-2 md:px-4 py-2 text-center text-[10px] md:text-sm text-gray-600">
+                                  {p.waktu_boarding ? new Date(p.waktu_boarding).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) : '-'}
+                                </td>
                               </tr>
                             ))
                           )}
@@ -319,12 +336,12 @@ function LoginContent() {
                 <div className="hidden print:block mt-8">
                   <h1 className="text-xl font-bold text-center mb-6">LAPORAN MANIFEST PENUMPANG JAM {sbRincianAktif.jam}</h1>
                   
-                  <div className="mb-4 text-sm grid grid-cols-[200px_10px_1fr] gap-y-1">
+                  <div className="mb-4 text-sm grid grid-cols-[150px_10px_1fr] gap-y-1">
                     <span>Tanggal</span><span>:</span><span>{sbTanggal}</span>
                     <span>Rute</span><span>:</span><span>{sbLokasi} - {sbLokasi === 'Tarakan' ? 'Tanjung Selor' : 'Tarakan'}</span>
                     <span>Kapal</span><span>:</span><span>{sbRincianAktif.nama_kapal}</span>
                     <span>Kapten</span><span>:</span><span>{sbRincianAktif.nama_kapten}</span>
-                    <span className="whitespace-nowrap">Jumlah Penumpang</span><span>:</span><span className="font-bold">{sbRincianAktif.total_terjual} Orang</span>
+                    <span className="whitespace-nowrap">Total Penumpang</span><span>:</span><span className="font-bold">{sbRincianAktif.total_terjual} Orang</span>
                   </div>
                   
                   <table className="w-full text-sm border-collapse border border-gray-400">
@@ -332,15 +349,17 @@ function LoginContent() {
                       <tr>
                         <th className="border border-gray-400 px-2 py-1 w-8">NO</th>
                         <th className="border border-gray-400 px-2 py-1">NAMA / KURSI</th>
-                        <th className="border border-gray-400 px-2 py-1">KODE</th>
+                        <th className="border border-gray-400 px-2 py-1">SCAN</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {sbRincianAktif.rincian.map((p, idx) => (
+                      {urutkanBerdasarkanScan(sbRincianAktif.rincian).map((p, idx) => (
                         <tr key={p.id}>
                           <td className="border border-gray-400 px-2 py-1 text-center">{idx + 1}</td>
                           <td className="border border-gray-400 px-2 py-1 font-bold">{p.nama} / {p.kursi}</td>
-                          <td className="border border-gray-400 px-2 py-1 font-mono text-xs">{potongKode(p.kode_tiket)}</td>
+                          <td className="border border-gray-400 px-2 py-1 text-center">
+                            {p.waktu_boarding ? new Date(p.waktu_boarding).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) : '-'}
+                          </td>
                         </tr>
                       ))}
                       <tr className="font-bold bg-gray-100">

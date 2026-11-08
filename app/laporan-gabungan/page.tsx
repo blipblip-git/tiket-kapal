@@ -4,12 +4,16 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase, getProfile, getOperatorSession, type Profile } from '@/lib/supabase'
 
-type DataJam = {
+type DataRute = {
+  total_penumpang: number
+  total_pendapatan: number
+}
+
+type GabunganPerJam = {
   jam: string
-  kapalTarakan: string
-  kapalTanjung: string
-  tarakan: number
-  tanjungSelor: number
+  nama_kapal: string
+  tarakan: DataRute
+  tanjungSelor: DataRute
 }
 
 export default function LaporanGabunganPage() {
@@ -17,28 +21,23 @@ export default function LaporanGabunganPage() {
   const [profile, setProfile] = useState<Profile | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  const [laporan, setLaporan] = useState<GabunganPerJam[]>([])
   
-  const [data, setData] = useState<DataJam[]>([])
-  const [tanggal, setTanggal] = useState('')
+  const [tanggal, setTanggal] = useState(() => {
+    const today = new Date()
+    const offset = today.getTimezoneOffset() * 60000
+    return new Date(today.getTime() - offset).toISOString().split('T')[0]
+  })
 
   useEffect(() => {
     async function init() {
-      let p = await getProfile()
-      if (!p) {
-        const sesiLokal = getOperatorSession()
-        if (sesiLokal) p = sesiLokal as unknown as Profile
+      let currentProfile = getOperatorSession()
+      if (!currentProfile) {
+        const adminProfile = await getProfile()
+        if (adminProfile) currentProfile = adminProfile
       }
-      if (!p || p.role !== 'admin_utama') {
-        router.push('/login')
-        return
-      }
-      setProfile(p)
-      
-      const today = new Date()
-      const offset = today.getTimezoneOffset() * 60000
-      const localDate = new Date(today.getTime() - offset).toISOString().split('T')[0]
-      setTanggal(localDate)
-      
+      if (!currentProfile) { router.push('/login'); return }
+      setProfile(currentProfile)
       setLoading(false)
     }
     init()
@@ -46,196 +45,229 @@ export default function LaporanGabunganPage() {
 
   useEffect(() => {
     async function fetchData() {
-      if (!profile || !tanggal) return
       setLoading(true)
-
-      // 1. Ambil semua jam dari template (biar jam kosong tetap muncul)
+      
       const { data: templateData } = await supabase
         .from('template_jadwal')
-        .select('jam_berangkat, rute_asal, kapal_id')
+        .select('jam_berangkat, rute_asal')
       
-      // 2. Ambil data pesanan yang sudah paid di tanggal tersebut
-      const { data: pesananData, error: errP } = await supabase
+      const jamSet = new Set<string>()
+      if (templateData) {
+        templateData.forEach((t: any) => jamSet.add(t.jam_berangkat.substring(0, 5)))
+      }
+
+      const { data: pesananData, error } = await supabase
         .from('pesanan')
         .select(`
-          jadwal:jadwal_id (rute_asal, rute_tujuan, jam_berangkat, harga, tanggal, kapal_id, kapal:kapal_id(nama)),
-          pembayaran:pembayaran (metode)
+          id, jadwal:jadwal_id (rute_asal, rute_tujuan, harga, tanggal, jam_berangkat, kapal_id)
         `)
         .eq('status', 'paid')
         .eq('jadwal.tanggal', tanggal)
 
-      if (errP) {
-        setError('Gagal memuat laporan: ' + errP.message)
-        setLoading(false)
-        return
+      if (error) { setError('Gagal memuat laporan: ' + error.message); setLoading(false); return }
+
+      // Ambil data kapal untuk dapetin nama kapal
+      const kapalIds = [...new Set(pesananData?.map((p: any) => p.jadwal?.kapal_id).filter(Boolean) || [])]
+      const kapalMap = new Map()
+      if (kapalIds.length > 0) {
+        const { data: kapalData } = await supabase.from('kapal').select('id, nama').in('id', kapalIds)
+        kapalData?.forEach((k: any) => kapalMap.set(k.id, k.nama))
       }
 
-      // 3. Ambil data kapal untuk template (karena template cuma nyimpen kapal_id)
-      const { data: kapalData } = await supabase.from('kapal').select('id, nama')
-      const kapalMap = new Map(kapalData?.map(k => [k.id, k.nama]) || [])
+      const grouped: { [key: string]: GabunganPerJam } = {}
+      
+      jamSet.forEach(jam => {
+        grouped[jam] = {
+          jam,
+          nama_kapal: '-',
+          tarakan: { total_penumpang: 0, total_pendapatan: 0 },
+          tanjungSelor: { total_penumpang: 0, total_pendapatan: 0 }
+        }
+      })
 
-      // 4. Kumpulkan semua jam unik dari template
-      const semuaJam = new Set<string>()
-      if (templateData) {
-        templateData.forEach((t: any) => {
-          if (t.jam_berangkat) semuaJam.add(t.jam_berangkat.substring(0, 5))
+      if (pesananData) {
+        pesananData.forEach((item: any) => {
+          if (!item.jadwal) return;
+          const jam = item.jadwal.jam_berangkat.substring(0, 5)
+          if (!grouped[jam]) {
+            grouped[jam] = {
+              jam,
+              nama_kapal: '-',
+              tarakan: { total_penumpang: 0, total_pendapatan: 0 },
+              tanjungSelor: { total_penumpang: 0, total_pendapatan: 0 }
+            }
+          }
+
+          // Set nama kapal kalau belum ada
+          if (item.jadwal.kapal_id && kapalMap.has(item.jadwal.kapal_id)) {
+            grouped[jam].nama_kapal = kapalMap.get(item.jadwal.kapal_id)
+          }
+
+          if (item.jadwal.rute_asal === 'Tarakan') {
+            grouped[jam].tarakan.total_penumpang += 1
+            grouped[jam].tarakan.total_pendapatan += item.jadwal.harga || 0
+          } else if (item.jadwal.rute_asal === 'Tanjung Selor') {
+            grouped[jam].tanjungSelor.total_penumpang += 1
+            grouped[jam].tanjungSelor.total_pendapatan += item.jadwal.harga || 0
+          }
         })
       }
 
-      // 5. Siapkan kerangka data (jam kosong dulu)
-      const grouped: Record<string, DataJam> = {}
-      semuaJam.forEach(jam => {
-        // Cari nama kapal dari template untuk masing-masing rute
-        const tmplTarakan = templateData?.find((t: any) => t.jam_berangkat.substring(0, 5) === jam && t.rute_asal === 'Tarakan')
-        const tmplTanjung = templateData?.find((t: any) => t.jam_berangkat.substring(0, 5) === jam && t.rute_asal === 'Tanjung Selor')
-
-        grouped[jam] = { 
-          jam, 
-          kapalTarakan: tmplTarakan ? (kapalMap.get(tmplTarakan.kapal_id) || '-') : '-',
-          kapalTanjung: tmplTanjung ? (kapalMap.get(tmplTanjung.kapal_id) || '-') : '-',
-          tarakan: 0, 
-          tanjungSelor: 0 
-        }
-      })
-
-      // 6. Masukkan data penjualan ke kerangka (DENGAN PENGAMAN)
-      pesananData?.forEach((item: any) => {
-        // PENGAMAN: Jika jadwal null (misal terhapus), lewati saja
-        if (!item.jadwal) return
-
-        const jam = item.jadwal.jam_berangkat.substring(0, 5)
-        const ruteAsal = item.jadwal.rute_asal
-        const harga = item.jadwal.harga || 0
-
-        if (!grouped[jam]) {
-          grouped[jam] = { 
-            jam, 
-            kapalTarakan: '-', 
-            kapalTanjung: '-', 
-            tarakan: 0, 
-            tanjungSelor: 0 
-          }
-        }
-
-        if (ruteAsal === 'Tarakan') {
-          grouped[jam].tarakan += harga
-          if (item.jadwal.kapal?.nama) grouped[jam].kapalTarakan = item.jadwal.kapal.nama
-        } else if (ruteAsal === 'Tanjung Selor') {
-          grouped[jam].tanjungSelor += harga
-          if (item.jadwal.kapal?.nama) grouped[jam].kapalTanjung = item.jadwal.kapal.nama
-        }
-      })
-
-      // 7. Ubah ke array dan urutkan berdasarkan jam
-      const sorted = Object.values(grouped).sort((a, b) => a.jam.localeCompare(b.jam))
-      setData(sorted)
+      const laporanArray = Object.values(grouped).sort((a, b) => a.jam.localeCompare(b.jam))
+      setLaporan(laporanArray)
       setLoading(false)
     }
-    fetchData()
+
+    if (profile) fetchData()
   }, [profile, tanggal])
 
   const handlePrint = () => {
     setTimeout(() => window.print(), 100)
   }
 
-  if (loading && data.length === 0) return <p className="p-6 text-center text-gray-600">Memuat data...</p>
+  if (loading) return <p className="p-6 text-center text-gray-600">Memuat...</p>
   if (error) return <p className="p-6 text-center text-red-600">{error}</p>
   if (!profile) return null
 
-  const grandTotalTarakan = data.reduce((sum, item) => sum + item.tarakan, 0)
-  const grandTotalTanjung = data.reduce((sum, item) => sum + item.tanjungSelor, 0)
-  const grandTotalGabungan = grandTotalTarakan + grandTotalTanjung
+  const tanggalFormatHeader = new Date(tanggal).toLocaleDateString('id-ID', { day: '2-digit', month: 'long', year: 'numeric' })
+
+  const totalPenumpangTarakan = laporan.reduce((sum, item) => sum + item.tarakan.total_penumpang, 0)
+  const totalPendapatanTarakan = laporan.reduce((sum, item) => sum + item.tarakan.total_pendapatan, 0)
+  const totalPenumpangTjSelor = laporan.reduce((sum, item) => sum + item.tanjungSelor.total_penumpang, 0)
+  const totalPendapatanTjSelor = laporan.reduce((sum, item) => sum + item.tanjungSelor.total_pendapatan, 0)
+  
+  // Total keseluruhan
+  const grandTotalPendapatan = totalPendapatanTarakan + totalPendapatanTjSelor
 
   return (
-    <div className="min-h-screen bg-gray-100 p-6 print:p-0 print:bg-white">
+    <div className="h-[100dvh] w-full bg-gray-100 p-3 md:p-6 print:p-0 print:bg-white flex flex-col overflow-hidden">
       <style dangerouslySetInnerHTML={{__html: `
         @media print {
           @page { size: A4; margin: 15mm; }
           body { background: white; margin: 0; }
           .print-hidden { display: none !important; }
+          html, body { height: auto !important; overflow: hidden !important; }
+          .no-print { display: none !important; }
+          tr { page-break-inside: avoid; }
+          table { page-break-inside: auto; }
         }
       `}} />
 
-      <div className="max-w-6xl mx-auto">
+      <div className="max-w-4xl w-full mx-auto flex flex-col h-full">
         
-        <div className="flex justify-between items-center mb-6 bg-white p-4 rounded shadow-sm border border-gray-200 print-hidden">
+        {/* HEADER BARU */}
+        <div className="flex justify-between items-start mb-3 bg-white p-3 rounded shadow-sm border border-gray-200 print-hidden flex-shrink-0">
           <div>
-            <h1 className="text-xl font-bold text-gray-900">Rekap Laporan Harian Gabungan</h1>
-            <p className="text-sm text-gray-600">Perbandingan pendapatan Tarakan & Tanjung Selor</p>
+            <h1 className="text-sm md:text-xl font-bold text-gray-900 leading-tight">Rekap Laporan Gabungan</h1>
+            <p className="text-[10px] md:text-sm font-bold text-blue-600 mt-0.5">{tanggalFormatHeader} (hari ini)</p>
           </div>
-          <div className="flex gap-2">
-            <button onClick={handlePrint} className="text-sm bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 font-bold">
-              🖨️ Cetak Laporan
-            </button>
-            <button onClick={() => router.push('/laporan-penjualan-admin')} className="text-sm text-blue-600 hover:underline py-2 px-3">
-              &larr; Kembali
-            </button>
+          <div className="flex gap-2 flex-shrink-0">
+            <button onClick={handlePrint} className="bg-blue-600 hover:bg-blue-700 text-white px-2 py-1.5 md:px-4 md:py-2 rounded text-[10px] md:text-sm font-bold transition shadow-sm">🖨️ Cetak</button>
+            <button onClick={() => router.push('/laporan-penjualan-admin')} className="bg-gray-100 hover:bg-gray-200 text-gray-700 px-2 py-1.5 md:px-4 md:py-2 rounded text-[10px] md:text-sm font-bold transition">Kembali</button>
           </div>
         </div>
 
-        <div className="hidden print:block text-center mb-6">
-          <h1 className="text-xl font-bold text-gray-900">Rekap Laporan Harian Gabungan</h1>
-          <p className="text-sm text-gray-900 mt-2">Tanggal: {tanggal}</p>
+        {/* FILTER TANGGAL */}
+        <div className="bg-white p-2 md:p-3 rounded shadow mb-3 flex items-center gap-2 print-hidden flex-shrink-0">
+          <label className="text-[10px] md:text-sm font-medium text-gray-700">Pilih Tanggal:</label>
+          <input type="date" value={tanggal} onChange={(e) => setTanggal(e.target.value)} className="border rounded px-2 py-1 text-[10px] md:text-sm text-gray-900" />
         </div>
 
-        <div className="bg-white p-4 rounded shadow mb-6 flex items-center gap-4 print-hidden">
-          <label className="text-sm font-medium text-gray-700">Pilih Tanggal:</label>
-          <input 
-            type="date" 
-            value={tanggal} 
-            onChange={(e) => setTanggal(e.target.value)} 
-            className="border rounded px-3 py-1 text-gray-900" 
-          />
+        {/* TABEL GABUNGAN (DIKUNCI 1 LAYAR) */}
+        <div className="bg-white rounded shadow border border-gray-200 overflow-hidden flex-1 flex flex-col min-h-0 print:border-none print:shadow-none">
+          <div className="overflow-y-auto flex-1">
+            <table className="w-full table-fixed border-collapse text-gray-900">
+              <thead className="bg-gray-100 border-b sticky top-0 z-10">
+                <tr>
+                  <th className="border p-1 text-[9px] md:text-xs w-[9%] text-center" rowSpan={2}>Jam</th>
+                  <th className="border p-1 text-[9px] md:text-xs w-[22%] text-center" rowSpan={2}>Kapal</th>
+                  <th className="border p-1 text-[9px] md:text-xs text-center" colSpan={2}>Rute</th>
+                  <th className="border p-1 text-[9px] md:text-xs w-[20%] text-center align-middle" rowSpan={2}>Total Penjualan</th>
+                </tr>
+                <tr className="bg-gray-100">
+                  <th className="border p-1 text-[8px] md:text-xs text-center w-[24.5%] leading-tight">Tarakan - Tanjung Selor</th>
+                  <th className="border p-1 text-[8px] md:text-xs text-center w-[24.5%] leading-tight">Tanjung Selor - Tarakan</th>
+                </tr>
+              </thead>
+              <tbody className="bg-white divide-y divide-gray-200">
+                {laporan.map((l) => {
+                  const totalBaris = l.tarakan.total_pendapatan + l.tanjungSelor.total_pendapatan;
+                  return (
+                    <tr key={l.jam} className="hover:bg-gray-50 text-center">
+                      <td className="border p-1 text-[9px] md:text-xs font-bold">{l.jam}</td>
+                      <td className="border p-1 text-[9px] md:text-xs font-medium break-words">{l.nama_kapal}</td>
+                      <td className="border p-1 text-[9px] md:text-xs">
+                        {l.tarakan.total_pendapatan > 0 ? `Rp ${l.tarakan.total_pendapatan.toLocaleString('id-ID')}` : '-'}
+                      </td>
+                      <td className="border p-1 text-[9px] md:text-xs">
+                        {l.tanjungSelor.total_pendapatan > 0 ? `Rp ${l.tanjungSelor.total_pendapatan.toLocaleString('id-ID')}` : '-'}
+                      </td>
+                      <td className="border p-1 text-[9px] md:text-xs font-bold text-blue-700">
+                        {totalBaris > 0 ? `Rp ${totalBaris.toLocaleString('id-ID')}` : '-'}
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+              <tfoot className="bg-blue-600 text-white font-bold text-center sticky bottom-0 z-10">
+                <tr>
+                  <td colSpan={2} className="p-1 border text-[9px] md:text-xs">TOTAL</td>
+                  <td className="p-1 border text-[9px] md:text-xs">Rp {totalPendapatanTarakan.toLocaleString('id-ID')}</td>
+                  <td className="p-1 border text-[9px] md:text-xs">Rp {totalPendapatanTjSelor.toLocaleString('id-ID')}</td>
+                  <td className="p-1 border text-[9px] md:text-xs">Rp {grandTotalPendapatan.toLocaleString('id-ID')}</td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
         </div>
 
-        <div className="bg-white rounded shadow border border-gray-200 overflow-hidden print:shadow-none print:border-gray-400">
-          <table className="w-full text-sm print:border-collapse print:border print:border-gray-400">
-            <thead className="bg-gray-200 border-b text-center text-gray-900 print:bg-gray-100">
-              <tr>
-                <th className="px-2 py-3 border print:border-gray-400 w-16" rowSpan={2}>Jam</th>
-                <th className="px-2 py-3 border print:border-gray-400 w-32" rowSpan={2}>Kapal</th>
-                <th className="px-4 py-3 border print:border-gray-400" colSpan={2}>Rute</th>
+        {/* TAMPILAN PRINT KHUSUS LAPORAN GABUNGAN */}
+        <div className="hidden print:block mt-8">
+          <h1 className="text-xl font-bold text-center mb-6">REKAP LAPORAN GABUNGAN</h1>
+          <div className="mb-4 text-sm grid grid-cols-[100px_10px_1fr] gap-y-1">
+            <span>Tanggal</span><span>:</span><span>{tanggal}</span>
+            <span>Rute</span><span>:</span><span>Tarakan & Tanjung Selor</span>
+          </div>
+          <table className="w-full text-sm border-collapse border border-gray-400">
+            <thead>
+              <tr className="bg-gray-200 text-center text-gray-900">
+                <th className="border border-gray-400 px-2 py-1" rowSpan={2}>Jam</th>
+                <th className="border border-gray-400 px-2 py-1" rowSpan={2}>Kapal</th>
+                <th className="border border-gray-400 px-2 py-1" colSpan={2}>Tarakan - Tanjung Selor</th>
+                <th className="border border-gray-400 px-2 py-1" colSpan={2}>Tanjung Selor - Tarakan</th>
+                <th className="border border-gray-400 px-2 py-1" rowSpan={2}>Total Penjualan</th>
               </tr>
-              <tr>
-                <th className="px-4 py-3 border print:border-gray-400 bg-gray-100">Tarakan - Tanjung Selor</th>
-                <th className="px-4 py-3 border print:border-gray-400 bg-gray-100">Tanjung Selor - Tarakan</th>
+              <tr className="bg-gray-200 text-center text-gray-900">
+                <th className="border border-gray-400 px-2 py-1">Penumpang</th>
+                <th className="border border-gray-400 px-2 py-1">Pendapatan</th>
+                <th className="border border-gray-400 px-2 py-1">Penumpang</th>
+                <th className="border border-gray-400 px-2 py-1">Pendapatan</th>
               </tr>
             </thead>
             <tbody>
-              {data.length === 0 ? (
-                <tr>
-                  <td colSpan={4} className="px-4 py-8 text-center text-gray-500">Tidak ada jadwal di tanggal ini.</td>
-                </tr>
-              ) : (
-                data.map((d) => (
-                  <tr key={d.jam} className="hover:bg-gray-50 text-center">
-                    <td className="px-2 py-3 font-bold text-gray-900 border print:border-gray-400">{d.jam}</td>
-                    <td className="px-2 py-3 text-gray-900 border print:border-gray-400 text-left">
-                      <div className="font-bold">{d.kapalTarakan}</div>
-                      {d.kapalTanjung !== '-' && <div className="text-xs text-gray-500">{d.kapalTanjung}</div>}
-                    </td>
-                    <td className="px-4 py-3 text-right text-gray-900 border print:border-gray-400">
-                      {d.tarakan > 0 ? `Rp ${d.tarakan.toLocaleString('id-ID')}` : '-'}
-                    </td>
-                    <td className="px-4 py-3 text-right text-gray-900 border print:border-gray-400">
-                      {d.tanjungSelor > 0 ? `Rp ${d.tanjungSelor.toLocaleString('id-ID')}` : '-'}
-                    </td>
+              {laporan.map((l) => {
+                const totalBaris = l.tarakan.total_pendapatan + l.tanjungSelor.total_pendapatan;
+                return (
+                  <tr key={l.jam} className="text-center text-gray-900">
+                    <td className="border border-gray-400 px-2 py-1 font-bold">{l.jam}</td>
+                    <td className="border border-gray-400 px-2 py-1">{l.nama_kapal}</td>
+                    <td className="border border-gray-400 px-2 py-1">{l.tarakan.total_penumpang}</td>
+                    <td className="border border-gray-400 px-2 py-1 text-right">Rp {l.tarakan.total_pendapatan.toLocaleString('id-ID')}</td>
+                    <td className="border border-gray-400 px-2 py-1">{l.tanjungSelor.total_penumpang}</td>
+                    <td className="border border-gray-400 px-2 py-1 text-right">Rp {l.tanjungSelor.total_pendapatan.toLocaleString('id-ID')}</td>
+                    <td className="border border-gray-400 px-2 py-1 text-right font-bold">Rp {totalBaris.toLocaleString('id-ID')}</td>
                   </tr>
-                ))
-              )}
+                )
+              })}
+              <tr className="font-bold bg-gray-300 text-center text-gray-900">
+                <td colSpan={2} className="border border-gray-400 px-2 py-1">TOTAL</td>
+                <td className="border border-gray-400 px-2 py-1">{totalPenumpangTarakan}</td>
+                <td className="border border-gray-400 px-2 py-1 text-right">Rp {totalPendapatanTarakan.toLocaleString('id-ID')}</td>
+                <td className="border border-gray-400 px-2 py-1">{totalPenumpangTjSelor}</td>
+                <td className="border border-gray-400 px-2 py-1 text-right">Rp {totalPendapatanTjSelor.toLocaleString('id-ID')}</td>
+                <td className="border border-gray-400 px-2 py-1 text-right">Rp {grandTotalPendapatan.toLocaleString('id-ID')}</td>
+              </tr>
             </tbody>
-            <tfoot className="bg-blue-600 text-white font-bold text-center print:bg-gray-100 print:text-gray-900">
-              <tr>
-                <td colSpan={2} className="px-4 py-3 border text-left print:border-gray-400">TOTAL</td>
-                <td className="px-4 py-3 border text-right print:border-gray-400">Rp {grandTotalTarakan.toLocaleString('id-ID')}</td>
-                <td className="px-4 py-3 border text-right print:border-gray-400">Rp {grandTotalTanjung.toLocaleString('id-ID')}</td>
-              </tr>
-              <tr className="bg-blue-800 border-t-2 border-blue-900 print:bg-gray-200 print:border-gray-400">
-                <td colSpan={4} className="px-4 py-4 text-center text-lg print:text-base">
-                  Total Gabungan: Rp {grandTotalGabungan.toLocaleString('id-ID')}
-                </td>
-              </tr>
-            </tfoot>
           </table>
         </div>
 

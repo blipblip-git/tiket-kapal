@@ -2,11 +2,9 @@
 
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { supabase, getProfile, getOperatorSession, logout, type Profile } from '@/lib/supabase'
+import { supabase, getProfile, getOperatorSession, type Profile } from '@/lib/supabase'
 
 type Statistik = {
-  total_kapal: number
-  total_jadwal: number
   total_pesanan_hari_ini: number
   total_pendapatan_hari_ini: number
 }
@@ -17,8 +15,6 @@ export default function DashboardAdminPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [stat, setStat] = useState<Statistik>({
-    total_kapal: 0,
-    total_jadwal: 0,
     total_pesanan_hari_ini: 0,
     total_pendapatan_hari_ini: 0,
   })
@@ -47,16 +43,8 @@ export default function DashboardAdminPage() {
 
       setProfile(p)
 
-      const { count: totalKapal } = await supabase
-        .from('kapal')
-        .select('*', { count: 'exact', head: true })
-
       const hariIni = new Date().toISOString().split('T')[0]
-      const { count: totalJadwal } = await supabase
-        .from('jadwal')
-        .select('*', { count: 'exact', head: true })
-        .eq('tanggal', hariIni)
-
+      
       const { data: pesananHariIni } = await supabase
         .from('pesanan')
         .select('id, jadwal:jadwal_id ( tanggal, harga )')
@@ -76,8 +64,6 @@ export default function DashboardAdminPage() {
       }
 
       setStat({
-        total_kapal: totalKapal || 0,
-        total_jadwal: totalJadwal || 0,
         total_pesanan_hari_ini: pesananCount,
         total_pendapatan_hari_ini: pendapatan,
       })
@@ -98,103 +84,88 @@ export default function DashboardAdminPage() {
     router.push('/login')
   }
 
-  if (loading) return <p className="p-6 text-gray-900">Memuat dashboard...</p>
+  const formatRupiah = (angka: number) => {
+    return new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 }).format(angka)
+  }
+
+  const tanggalHariIni = new Date().toLocaleDateString('id-ID', { weekday: 'long', day: '2-digit', month: 'long', year: 'numeric' })
+
+  if (loading) return <p className="p-6 text-gray-900 font-bold">Memuat dashboard...</p>
   if (error) return <p className="p-6 text-red-600">Error: {error}</p>
   if (!profile) return null
 
   return (
-    <div className="min-h-screen bg-gray-100 p-6">
-      <div className="max-w-4xl mx-auto">
-        <div className="flex justify-between items-center mb-6">
+    <div className="h-[100dvh] w-full bg-gray-100 p-3 md:p-6 flex flex-col overflow-hidden">
+      <div className="max-w-4xl w-full mx-auto flex flex-col h-full">
+        
+        {/* HEADER */}
+        <div className="flex justify-between items-start mb-4 md:mb-6 flex-shrink-0">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">Dashboard Admin Utama</h1>
-            <p className="text-sm text-gray-700">Sistem Manajemen Tiket Kapal</p>
+            <h1 className="text-xl md:text-2xl font-bold text-gray-900 leading-tight">Dashboard</h1>
+            <h2 className="text-lg md:text-xl font-bold text-gray-700">Admin Utama</h2>
           </div>
-          <div className="flex gap-2">
+          <div className="flex gap-2 flex-shrink-0">
             <button
               onClick={() => router.push('/ganti-password')}
-              className="bg-gray-600 text-white px-4 py-2 rounded hover:bg-gray-700 text-sm font-medium"
+              className="bg-gray-600 text-white px-2 py-1.5 md:px-4 md:py-2 rounded hover:bg-gray-700 text-[10px] md:text-sm font-medium"
             >
               🔑 Ganti Password
             </button>
             <button
               onClick={handleLogout}
-              className="bg-red-600 text-white px-4 py-2 rounded hover:bg-red-700 text-sm font-medium"
+              className="bg-red-600 text-white px-3 py-1.5 md:px-4 md:py-2 rounded hover:bg-red-700 text-[10px] md:text-sm font-medium"
             >
               Logout
             </button>
           </div>
         </div>
 
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-          <div className="bg-white p-4 rounded shadow">
-            <p className="text-xs text-gray-700">Total Kapal</p>
-            <p className="text-2xl font-bold text-gray-900">{stat.total_kapal}</p>
-          </div>
-          <div className="bg-white p-4 rounded shadow">
-            <p className="text-xs text-gray-700">Jadwal Hari Ini</p>
-            <p className="text-2xl font-bold text-gray-900">{stat.total_jadwal}</p>
-          </div>
-          <div className="bg-white p-4 rounded shadow">
-            <p className="text-xs text-gray-700">Pesanan Hari Ini</p>
-            <p className="text-2xl font-bold text-gray-900">{stat.total_pesanan_hari_ini}</p>
-          </div>
-          <div className="bg-white p-4 rounded shadow">
-            <p className="text-xs text-gray-700">Pendapatan Hari Ini</p>
-            <p className="text-lg font-bold text-blue-600">
-              Rp {stat.total_pendapatan_hari_ini.toLocaleString('id-ID')}
-            </p>
+        {/* KARTU PENJUALAN */}
+        <div 
+          onClick={() => router.push('/laporan-penjualan-admin')}
+          className="bg-white rounded-xl shadow-md p-4 md:p-6 mb-4 md:mb-6 flex-shrink-0 cursor-pointer hover:bg-gray-50 transition border border-gray-200"
+        >
+          <p className="text-xs md:text-sm text-gray-500 mb-1">Penjualan {tanggalHariIni}</p>
+          <div className="flex justify-between items-end">
+            <p className="text-2xl md:text-4xl font-bold text-gray-900">{stat.total_pesanan_hari_ini} <span className="text-sm md:text-lg font-medium text-gray-600">Tiket</span></p>
+            <p className="text-xl md:text-3xl font-bold text-blue-600">{formatRupiah(stat.total_pendapatan_hari_ini)}</p>
           </div>
         </div>
 
-        <div className="bg-white p-6 rounded shadow">
-          <h2 className="font-bold text-gray-900 mb-4">Menu</h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+        {/* MENU GRID (DIPERKECIL & BERWARNA) */}
+        <div className="bg-white p-3 md:p-6 rounded shadow flex-1 flex flex-col overflow-hidden">
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-2 md:gap-3 flex-1 overflow-y-auto content-start">
             
-            <a href="/jadwal" className="block p-4 border rounded hover:bg-gray-50">
-              <p className="font-medium text-gray-900">Lihat Jadwal</p>
-              <p className="text-xs text-gray-700">Halaman jadwal publik</p>
+            <a href="/laporan-penjualan-admin" className="flex items-center justify-center h-16 md:h-24 p-2 border border-blue-200 bg-blue-50 rounded-lg hover:bg-blue-100 text-center transition shadow-sm">
+              <p className="font-bold text-xs md:text-sm text-blue-800">Laporan Penjualan</p>
             </a>
 
-            <a href="/kapal" className="block p-4 border rounded hover:bg-gray-50">
-              <p className="font-medium text-gray-900">Manajemen Kapal</p>
-              <p className="text-xs text-gray-700">Tambah/edit armada, atur kapal cadangan & rusak</p>
-            </a>
-            
-            <a href="/template-jadwal" className="block p-4 border rounded hover:bg-gray-50">
-              <p className="font-medium text-gray-900">Template Jadwal</p>
-              <p className="text-xs text-gray-700">Atur jam regulasi & interval keberangkatan</p>
-            </a>
-            
-            <a href="/petugas" className="block p-4 border rounded hover:bg-gray-50">
-              <p className="font-medium text-gray-900">Manajemen Petugas</p>
-              <p className="text-xs text-gray-700">Tambah, atur password, & hapus petugas</p>
+            <a href="/jadwal" className="flex items-center justify-center h-16 md:h-24 p-2 border border-orange-200 bg-orange-50 rounded-lg hover:bg-orange-100 text-center transition shadow-sm">
+              <p className="font-bold text-xs md:text-sm text-orange-800">Lihat Jadwal</p>
             </a>
 
-            <a href="/agen-tenant" className="block p-4 border rounded hover:bg-gray-50 border-purple-300 bg-purple-50">
-              <p className="font-medium text-purple-800">Manajemen Agen</p>
-              <p className="text-xs text-purple-600">Buat akun agen khusus untuk menjual tiket kapal Anda</p>
-            </a>
-
-            {/* MENU LAPORAN PENJUALAN (MENGGANTIKAN OPERATOR KEBERANGKATAN) */}
-            <a href="/laporan-penjualan-admin" className="block p-4 border rounded hover:bg-gray-50 border-blue-300 bg-blue-50">
-              <p className="font-medium text-blue-800">Laporan Penjualan</p>
-              <p className="text-xs text-blue-600">Lihat rekap penjualan tiket Online, Agen, & Operator</p>
-            </a>
-
-            <a href="/rekap-bagi-hasil-kapal" className="block p-4 border rounded hover:bg-gray-50 border-green-300 bg-green-50">
-              <p className="font-medium text-green-800">Rekap Bagi Hasil</p>
-              <p className="text-xs text-green-600">Lihat fee sistem & jatah pemilik kapal</p>
+            <a href="/kapal" className="flex items-center justify-center h-16 md:h-24 p-2 border border-teal-200 bg-teal-50 rounded-lg hover:bg-teal-100 text-center transition shadow-sm">
+              <p className="font-bold text-xs md:text-sm text-teal-800">Manajemen Kapal</p>
             </a>
             
-            <a href="/audit" className="block p-4 border rounded hover:bg-gray-50">
-              <p className="font-medium text-gray-900">Audit Log</p>
-              <p className="text-xs text-gray-700">Riwayat aksi finansial petugas</p>
+            <a href="/petugas" className="flex items-center justify-center h-16 md:h-24 p-2 border border-rose-200 bg-rose-50 rounded-lg hover:bg-rose-100 text-center transition shadow-sm">
+              <p className="font-bold text-xs md:text-sm text-rose-800">Manajemen Petugas</p>
+            </a>
+
+            <a href="/agen-tenant" className="flex items-center justify-center h-16 md:h-24 p-2 border border-purple-200 bg-purple-50 rounded-lg hover:bg-purple-100 text-center transition shadow-sm">
+              <p className="font-bold text-xs md:text-sm text-purple-800">Manajemen Agen</p>
+            </a>
+
+            <a href="/rekap-bagi-hasil-kapal" className="flex items-center justify-center h-16 md:h-24 p-2 border border-green-200 bg-green-50 rounded-lg hover:bg-green-100 text-center transition shadow-sm">
+              <p className="font-bold text-xs md:text-sm text-green-800">Rekap Bagi Hasil</p>
             </a>
             
-            <a href="/pengaturan" className="block p-4 rounded hover:bg-gray-50 border border-gray-200">
-              <p className="font-medium text-gray-900">Pengaturan Sistem</p>
-              <p className="text-xs text-gray-700">Atur jam kerja & auto-logout petugas</p>
+            <a href="/audit" className="flex items-center justify-center h-16 md:h-24 p-2 border border-yellow-200 bg-yellow-50 rounded-lg hover:bg-yellow-100 text-center transition shadow-sm">
+              <p className="font-bold text-xs md:text-sm text-yellow-800">Audit Log</p>
+            </a>
+            
+            <a href="/pengaturan" className="flex items-center justify-center h-16 md:h-24 p-2 border border-gray-200 bg-gray-50 rounded-lg hover:bg-gray-100 text-center transition shadow-sm">
+              <p className="font-bold text-xs md:text-sm text-gray-800">Pengaturan Sistem</p>
             </a>
 
           </div>

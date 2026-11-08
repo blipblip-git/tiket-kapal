@@ -236,44 +236,11 @@ function LaporanContent() {
   if (error) return <p className="p-6 text-center text-red-600">{error}</p>
   if (!profile) return null
 
-  if (!view) {
-    return (
-      <div className="min-h-screen bg-gray-100 p-6">
-        <div className="max-w-4xl mx-auto">
-          <div className="flex justify-between items-center mb-8 bg-white p-6 rounded-xl shadow-sm border border-gray-200">
-            <div>
-              <h1 className="text-2xl font-bold text-gray-900">Pusat Laporan</h1>
-              <p className="text-sm text-gray-600 mt-1">Operator: {profile.nama} ({profile.lokasi || 'Semua'})</p>
-            </div>
-            <button onClick={() => router.push(profile.role === 'terminal_keberangkatan' ? '/dashboard/keberangkatan' : '/dashboard/operator')} className="text-sm text-blue-600 hover:underline">
-              &larr; Kembali ke Dashboard
-            </button>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <button onClick={() => router.push(`/laporan?view=penjualan&lokasi=${lokasiParam || profile.lokasi}`)} className="bg-white p-8 rounded-xl shadow-md hover:shadow-lg hover:-translate-y-1 transition border border-gray-200 text-left flex flex-col items-start h-48 justify-center">
-              <div className="text-5xl mb-4">💰</div>
-              <h2 className="text-xl font-bold text-gray-900 mb-2">Laporan Penjualan</h2>
-              <p className="text-sm text-gray-600">Lihat rekap penjualan tiket per jam beserta rincian penumpang.</p>
-            </button>
-
-            <button onClick={() => router.push(`/laporan?view=boarding&lokasi=${lokasiParam || profile.lokasi}`)} className="bg-white p-8 rounded-xl shadow-md hover:shadow-lg hover:-translate-y-1 transition border border-gray-200 text-left flex flex-col items-start h-48 justify-center">
-              <div className="text-5xl mb-4">📷</div>
-              <h2 className="text-xl font-bold text-gray-900 mb-2">Laporan Scan Boarding</h2>
-              <p className="text-sm text-gray-600">Lihat daftar penumpang yang sudah di-scan boarding.</p>
-            </button>
-          </div>
-        </div>
-      </div>
-    )
-  }
-
   let labelRole = 'Operator'
   if (profile.role === 'terminal_keberangkatan') labelRole = 'Operator Keberangkatan'
   if (profile.role === 'admin_utama') labelRole = 'Admin Utama'
   if (profile.role === 'agen') labelRole = 'Agen'
   
-  const judulHalaman = `Laporan ${labelRole} ${lokasiParam || profile.lokasi || ''} - ${profile.nama}`
   const ruteLengkap = `${lokasiParam || profile.lokasi} - ${lokasiParam === 'Tarakan' ? 'Tanjung Selor' : (lokasiParam === 'Tanjung Selor' ? 'Tarakan' : (profile.lokasi === 'Tarakan' ? 'Tanjung Selor' : 'Tarakan'))}`
 
   const now = new Date()
@@ -285,7 +252,7 @@ function LaporanContent() {
   
   const rincianAktif = expandedJam ? laporan.find(l => l.jam === expandedJam) : null
 
-  const potongKode = (kode: string) => kode ? (kode.length > 6 ? `...${kode.slice(-6)}` : kode) : '-'
+  const potongKode = (kode: string) => kode ? (kode.length > 6 ? kode.slice(-6) : kode) : '-'
 
   const getRekapPetugas = (jam: string) => {
     const dataJam = laporan.find(l => l.jam === jam)
@@ -314,9 +281,11 @@ function LaporanContent() {
   const totalBoarding = laporan.reduce((sum, item) => sum + item.rincian.filter(p => p.status_boarding === 'sudah').length, 0)
 
   const isOperator = profile.role === 'terminal_keberangkatan' || profile.role === 'agen'
+  
+  const tanggalFormatHeader = new Date(tanggal).toLocaleDateString('id-ID', { day: '2-digit', month: 'long', year: 'numeric' })
 
   return (
-    <div className="min-h-screen bg-gray-100 p-6 print:p-0 print:bg-white">
+    <div className="h-[100dvh] w-full bg-gray-100 p-3 md:p-6 print:p-0 print:bg-white flex flex-col overflow-hidden">
       <style dangerouslySetInnerHTML={{__html: `
         @media print {
           @page { 
@@ -350,76 +319,82 @@ function LaporanContent() {
         }
       `}} />
 
-      <div className="max-w-6xl mx-auto">
+      <div className="max-w-6xl w-full mx-auto flex flex-col h-full">
         
-        <div className="flex justify-between items-center mb-6 bg-white p-4 rounded shadow-sm border border-gray-200 print-hidden">
+        <div className="flex justify-between items-start mb-4 bg-white p-3 md:p-4 rounded shadow-sm border border-gray-200 print-hidden flex-shrink-0">
           <div>
-            <h1 className="text-xl font-bold text-gray-900">{judulHalaman}</h1>
-            <p className="text-sm text-gray-600">{view === 'penjualan' ? 'Laporan Penjualan' : 'Laporan Scan Boarding'}</p>
+            <h1 className="text-lg md:text-2xl font-bold text-gray-900">Laporan Rekapan</h1>
+            <p className="text-xs md:text-sm font-bold text-blue-600 mt-0.5">{tanggalFormatHeader}</p>
           </div>
-          <button onClick={() => router.push('/laporan')} className="text-sm text-blue-600 hover:underline">
-            &larr; Kembali ke Pilihan Laporan
+          <button onClick={() => router.push('/laporan-penjualan-admin')} className="text-[10px] md:text-sm bg-gray-100 hover:bg-gray-200 text-gray-700 px-3 py-1.5 rounded-md font-medium transition">
+            &larr; Kembali
           </button>
         </div>
 
-        <div className="bg-white p-4 rounded shadow mb-6 flex items-center gap-4 print-hidden">
-          <label className="text-sm font-medium text-gray-700">Pilih Tanggal:</label>
-          <input type="date" value={tanggal} onChange={(e) => setTanggal(e.target.value)} className="border rounded px-3 py-1 text-gray-900" />
-        </div>
+        {!selectedJam && (
+          <div className="bg-white p-3 rounded shadow mb-4 flex items-center gap-4 print-hidden flex-shrink-0">
+            <label className="text-xs md:text-sm font-medium text-gray-700">Ganti Tanggal:</label>
+            <input type="date" value={tanggal} onChange={(e) => setTanggal(e.target.value)} className="border rounded px-2 py-1 text-xs md:text-sm text-gray-900" />
+          </div>
+        )}
 
-        <div className="print-hidden">
+        <div className="print-hidden flex-1 flex flex-col min-h-0">
           {view === 'penjualan' && (
             <>
               {/* LEVEL 1: REKAP HARIAN */}
               {!selectedJam && (
-                <div className="bg-white rounded shadow border border-gray-200 overflow-hidden mb-6">
-                  <div className="bg-blue-600 px-4 py-3 border-b flex justify-between items-center">
-                    <h2 className="text-white font-bold">Laporan Rekapan Harian</h2>
-                    <button onClick={() => handlePrint('rekap-harian')} className="bg-white text-blue-700 px-3 py-1 rounded text-sm font-bold hover:bg-gray-100">🖨️ Cetak Rekap</button>
+                <div className="bg-white rounded shadow border border-gray-200 overflow-hidden mb-6 flex flex-col flex-1 min-h-0">
+                  <div className="bg-blue-600 px-3 md:px-4 py-2 md:py-3 border-b flex justify-between items-center flex-shrink-0">
+                    <h2 className="text-white font-bold text-xs md:text-base">Laporan Rekapan Harian</h2>
+                    <button onClick={() => handlePrint('rekap-harian')} className="bg-white text-blue-700 px-2 md:px-3 py-1 rounded text-[10px] md:text-sm font-bold hover:bg-gray-100">🖨️ Cetak</button>
                   </div>
-                  <div className="overflow-x-auto">
-                    <table className="min-w-full divide-y divide-gray-200">
-                      <thead className="bg-gray-200 border-b text-center text-gray-900">
-                        <tr>
-                          <th className="px-4 py-3 border" rowSpan={2}>No</th>
-                          <th className="px-4 py-3 border text-center" rowSpan={2}>
-                            {isOperator ? 'Jam' : 'Jam / Kapal'}
-                          </th>
-                          <th className="px-4 py-3 border" rowSpan={2}>Total Penumpang</th>
-                          <th className="px-4 py-3 border" colSpan={3}>Penjualan</th>
-                          <th className="px-4 py-3 border" rowSpan={2}>Aksi</th>
+                  
+                  <div className="overflow-x-auto flex-1">
+                    <table className="w-full table-fixed border-collapse text-gray-900">
+                      <thead>
+                        <tr className="bg-gray-200 border-b">
+                          <th className="border p-1 text-[9px] md:text-xs w-[6%]" rowSpan={2}>No</th>
+                          <th className="border p-1 text-[9px] md:text-xs w-[18%] text-center" rowSpan={2}>Jam / Kapal</th>
+                          <th className="border p-1 text-[9px] md:text-xs" colSpan={4}>Total</th>
+                          <th className="border p-1 text-[9px] md:text-xs w-[12%]" rowSpan={2}>Aksi</th>
                         </tr>
-                        <tr>
-                          <th className="px-4 py-3 border">Cash</th>
-                          <th className="px-4 py-3 border">Qris</th>
-                          <th className="px-4 py-3 border">Total</th>
+                        <tr className="bg-gray-200 border-b">
+                          <th className="border p-1 text-[9px] md:text-xs w-[5%] whitespace-nowrap">Kursi</th>
+                          <th className="border p-1 text-[9px] md:text-xs w-[14%]">Cash</th>
+                          <th className="border p-1 text-[9px] md:text-xs w-[14%]">Qris</th>
+                          <th className="border p-1 text-[9px] md:text-xs w-[16%]">Jual</th>
                         </tr>
                       </thead>
                       <tbody className="bg-white divide-y divide-gray-200">
                         {[...laporanBelumClosed, ...laporanSudahClosed].sort((a,b)=>a.jam.localeCompare(b.jam)).map((l, idx) => (
                           <tr key={l.jam} className="hover:bg-gray-50 text-center">
-                            <td className="px-4 py-3 text-sm text-gray-900">{idx + 1}</td>
-                            <td className="px-4 py-3 text-sm font-bold text-gray-900 text-center">
-                              {isOperator ? l.jam : `${l.jam} / ${l.nama_kapal}`}
+                            <td className="border p-1 text-[9px] md:text-xs">{idx + 1}</td>
+                            <td className="border p-1 text-[9px] md:text-xs font-bold text-left leading-tight">
+                              {isOperator ? l.jam : (
+                                <>
+                                  <div>{l.jam}</div>
+                                  <div className="text-[8px] md:text-[10px] font-normal">{l.nama_kapal}</div>
+                                </>
+                              )}
                             </td>
-                            <td className="px-4 py-3 text-sm font-bold text-blue-600">{l.total_terjual}</td>
-                            <td className="px-4 py-3 text-sm font-medium text-gray-900">Rp {l.total_cash.toLocaleString('id-ID')}</td>
-                            <td className="px-4 py-3 text-sm font-medium text-gray-900">Rp {l.total_qris.toLocaleString('id-ID')}</td>
-                            <td className="px-4 py-3 text-sm font-bold text-gray-900">Rp {l.total_pendapatan.toLocaleString('id-ID')}</td>
-                            <td className="px-4 py-3 text-center">
-                              <button onClick={() => setSelectedJam(l.jam)} className="bg-blue-100 text-blue-700 px-3 py-1 rounded text-xs font-bold hover:bg-blue-200">Rincian</button>
+                            <td className="border p-1 text-[9px] md:text-xs font-bold text-blue-600 whitespace-nowrap">{l.total_terjual}</td>
+                            <td className="border p-1 text-[9px] md:text-xs font-medium">Rp {l.total_cash.toLocaleString('id-ID')}</td>
+                            <td className="border p-1 text-[9px] md:text-xs font-medium">Rp {l.total_qris.toLocaleString('id-ID')}</td>
+                            <td className="border p-1 text-[9px] md:text-xs font-bold">Rp {l.total_pendapatan.toLocaleString('id-ID')}</td>
+                            <td className="border p-1 text-center">
+                              <button onClick={() => setSelectedJam(l.jam)} className="bg-blue-100 text-blue-700 px-1 py-0.5 rounded text-[9px] md:text-xs font-bold hover:bg-blue-200">Rincian</button>
                             </td>
                           </tr>
                         ))}
                       </tbody>
                       <tfoot className="bg-blue-600 text-white font-bold text-center">
                         <tr>
-                          <td colSpan={2} className="px-4 py-3 border">TOTAL</td>
-                          <td className="px-4 py-3 border">{totalPenumpang}</td>
-                          <td className="px-4 py-3 border">Rp {totalCashHarian.toLocaleString('id-ID')}</td>
-                          <td className="px-4 py-3 border">Rp {totalQrisHarian.toLocaleString('id-ID')}</td>
-                          <td className="px-4 py-3 border">Rp {totalPenjualanHarian.toLocaleString('id-ID')}</td>
-                          <td className="px-4 py-3 border"></td>
+                          <td colSpan={2} className="p-1 border text-[9px] md:text-xs">TOTAL</td>
+                          <td className="p-1 border text-[9px] md:text-xs whitespace-nowrap">{totalPenumpang}</td>
+                          <td className="p-1 border text-[9px] md:text-xs">Rp {totalCashHarian.toLocaleString('id-ID')}</td>
+                          <td className="p-1 border text-[9px] md:text-xs">Rp {totalQrisHarian.toLocaleString('id-ID')}</td>
+                          <td className="p-1 border text-[9px] md:text-xs">Rp {totalPenjualanHarian.toLocaleString('id-ID')}</td>
+                          <td className="p-1 border"></td>
                         </tr>
                       </tfoot>
                     </table>
@@ -430,40 +405,40 @@ function LaporanContent() {
               {/* LEVEL 2: REKAP PETUGAS */}
               {selectedJam && !selectedPetugas && (
                 <div className="bg-white rounded shadow border border-gray-200 overflow-hidden mb-6">
-                  <div className="bg-blue-600 px-4 py-3 border-b flex justify-between items-center">
-                    <h2 className="text-white font-bold">Rekap Petugas Jam {selectedJam}</h2>
+                  <div className="bg-blue-600 px-3 md:px-4 py-2 md:py-3 border-b flex justify-between items-center flex-wrap gap-2">
+                    <h2 className="text-white font-bold text-xs md:text-base">Rekap Petugas Jam {selectedJam}</h2>
                     <div className="flex gap-2">
-                      <button onClick={() => handlePrint('rekap-petugas')} className="bg-white text-blue-700 px-3 py-1 rounded text-sm font-bold hover:bg-gray-100">🖨️ Cetak Rekap</button>
-                      <button onClick={() => setSelectedJam(null)} className="bg-blue-700 text-white px-3 py-1 rounded text-sm hover:bg-blue-800">&larr; Kembali</button>
+                      <button onClick={() => handlePrint('rekap-petugas')} className="bg-white text-blue-700 px-2 md:px-3 py-1 rounded text-[10px] md:text-sm font-bold hover:bg-gray-100">🖨️ Cetak</button>
+                      <button onClick={() => setSelectedJam(null)} className="bg-blue-700 text-white px-2 md:px-3 py-1 rounded text-[10px] md:text-sm hover:bg-blue-800">&larr; Kembali</button>
                     </div>
                   </div>
                   <div className="overflow-x-auto">
-                    <table className="min-w-full divide-y divide-gray-200">
-                      <thead className="bg-gray-200 border-b text-center text-gray-900">
-                        <tr>
-                          <th className="px-4 py-3 border" rowSpan={2}>No</th>
-                          <th className="px-4 py-3 border text-center" rowSpan={2}>Petugas</th>
-                          <th className="px-4 py-3 border" rowSpan={2}>Total Penumpang</th>
-                          <th className="px-4 py-3 border" colSpan={3}>Penjualan</th>
-                          <th className="px-4 py-3 border" rowSpan={2}>Aksi</th>
+                    <table className="w-full table-fixed border-collapse text-gray-900">
+                      <thead>
+                        <tr className="bg-gray-200 border-b">
+                          <th className="border p-1 text-[9px] md:text-xs w-[6%]" rowSpan={2}>No</th>
+                          <th className="border p-1 text-[9px] md:text-xs w-[18%] text-center uppercase" rowSpan={2}>Petugas</th>
+                          <th className="border p-1 text-[9px] md:text-xs" colSpan={4}>Total</th>
+                          <th className="border p-1 text-[9px] md:text-xs w-[12%]" rowSpan={2}>Aksi</th>
                         </tr>
-                        <tr>
-                          <th className="px-4 py-3 border">Cash</th>
-                          <th className="px-4 py-3 border">Qris</th>
-                          <th className="px-4 py-3 border">Total</th>
+                        <tr className="bg-gray-200 border-b">
+                          <th className="border p-1 text-[9px] md:text-xs w-[5%] whitespace-nowrap">Kursi</th>
+                          <th className="border p-1 text-[9px] md:text-xs w-[14%]">Cash</th>
+                          <th className="border p-1 text-[9px] md:text-xs w-[14%]">Qris</th>
+                          <th className="border p-1 text-[9px] md:text-xs w-[16%]">Jual</th>
                         </tr>
                       </thead>
                       <tbody className="bg-white divide-y divide-gray-200">
                         {getRekapPetugas(selectedJam).map((pt, idx) => (
                           <tr key={pt.nama} className="hover:bg-gray-50 text-center">
-                            <td className="px-4 py-3 text-sm text-gray-900">{idx + 1}</td>
-                            <td className="px-4 py-3 text-sm font-bold text-gray-900 uppercase text-center">{pt.nama}</td>
-                            <td className="px-4 py-3 text-sm font-bold text-blue-600">{pt.jumlah}</td>
-                            <td className="px-4 py-3 text-sm font-medium text-gray-900">Rp {pt.cash.toLocaleString('id-ID')}</td>
-                            <td className="px-4 py-3 text-sm font-medium text-gray-900">Rp {pt.qris.toLocaleString('id-ID')}</td>
-                            <td className="px-4 py-3 text-sm font-bold text-gray-900">Rp {pt.total.toLocaleString('id-ID')}</td>
-                            <td className="px-4 py-3 text-center">
-                              <button onClick={() => setSelectedPetugas(pt.nama)} className="bg-green-100 text-green-700 px-3 py-1 rounded text-xs font-bold hover:bg-green-200">Rincian</button>
+                            <td className="border p-1 text-[9px] md:text-xs">{idx + 1}</td>
+                            <td className="border p-1 text-[9px] md:text-xs font-bold text-left leading-tight">{pt.nama}</td>
+                            <td className="border p-1 text-[9px] md:text-xs font-bold text-blue-600 whitespace-nowrap">{pt.jumlah}</td>
+                            <td className="border p-1 text-[9px] md:text-xs font-medium">Rp {pt.cash.toLocaleString('id-ID')}</td>
+                            <td className="border p-1 text-[9px] md:text-xs font-medium">Rp {pt.qris.toLocaleString('id-ID')}</td>
+                            <td className="border p-1 text-[9px] md:text-xs font-bold">Rp {pt.total.toLocaleString('id-ID')}</td>
+                            <td className="border p-1 text-center">
+                              <button onClick={() => setSelectedPetugas(pt.nama)} className="bg-green-100 text-green-700 px-1 py-0.5 rounded text-[9px] md:text-xs font-bold hover:bg-green-200">Rincian</button>
                             </td>
                           </tr>
                         ))}
@@ -477,12 +452,12 @@ function LaporanContent() {
                           const tTotal = dataPt.reduce((s, x) => s + x.total, 0);
                           return (
                             <tr>
-                              <td colSpan={2} className="px-4 py-3 border">TOTAL</td>
-                              <td className="px-4 py-3 border">{tJumlah}</td>
-                              <td className="px-4 py-3 border">Rp {tCash.toLocaleString('id-ID')}</td>
-                              <td className="px-4 py-3 border">Rp {tQris.toLocaleString('id-ID')}</td>
-                              <td className="px-4 py-3 border">Rp {tTotal.toLocaleString('id-ID')}</td>
-                              <td className="px-4 py-3 border"></td>
+                              <td colSpan={2} className="p-1 border text-[9px] md:text-xs">TOTAL</td>
+                              <td className="p-1 border text-[9px] md:text-xs whitespace-nowrap">{tJumlah}</td>
+                              <td className="p-1 border text-[9px] md:text-xs">Rp {tCash.toLocaleString('id-ID')}</td>
+                              <td className="p-1 border text-[9px] md:text-xs">Rp {tQris.toLocaleString('id-ID')}</td>
+                              <td className="p-1 border text-[9px] md:text-xs">Rp {tTotal.toLocaleString('id-ID')}</td>
+                              <td className="p-1 border"></td>
                             </tr>
                           )
                         })()}
@@ -494,27 +469,28 @@ function LaporanContent() {
 
               {/* LEVEL 3: RINCIAN PENUMPANG */}
               {selectedJam && selectedPetugas && (
-                <div className="bg-white rounded shadow border border-gray-200 overflow-hidden mb-6">
-                  <div className="bg-blue-600 px-4 py-3 border-b flex justify-between items-center">
-                    <h2 className="text-white font-bold">Rincian {selectedPetugas} - Jam {selectedJam}</h2>
+                <div className="bg-white rounded shadow border border-gray-200 overflow-hidden mb-6 flex flex-col flex-1 min-h-0">
+                  <div className="bg-blue-600 px-3 md:px-4 py-2 md:py-3 border-b flex justify-between items-center flex-wrap gap-2 flex-shrink-0">
+                    <h2 className="text-white font-bold text-xs md:text-base truncate">Rincian {selectedPetugas} - Jam {selectedJam}</h2>
                     <div className="flex gap-2">
-                      <button onClick={() => handlePrint('rincian-penumpang')} className="bg-white text-blue-700 px-3 py-1 rounded text-sm font-bold hover:bg-gray-100">🖨️ Cetak Rincian</button>
-                      <button onClick={() => setSelectedPetugas(null)} className="bg-blue-700 text-white px-3 py-1 rounded text-sm hover:bg-blue-800">&larr; Kembali</button>
+                      <button onClick={() => handlePrint('rincian-penumpang')} className="bg-white text-blue-700 px-2 md:px-3 py-1 rounded text-[10px] md:text-sm font-bold hover:bg-gray-100">🖨️ Cetak</button>
+                      <button onClick={() => setSelectedPetugas(null)} className="bg-blue-700 text-white px-2 md:px-3 py-1 rounded text-[10px] md:text-sm hover:bg-blue-800">&larr; Kembali</button>
                     </div>
                   </div>
-                  <div className="overflow-x-auto">
-                    <table className="min-w-full divide-y divide-gray-200">
-                      <thead className="bg-gray-200 border-b text-center text-gray-900">
+                  
+                  <div className="overflow-y-auto flex-1">
+                    <table className="w-full table-fixed border-collapse text-gray-900">
+                      <thead className="bg-gray-200 border-b sticky top-0 z-10">
                         <tr>
-                          <th className="px-4 py-3 border" rowSpan={2}>No</th>
-                          <th className="px-4 py-3 border text-center" rowSpan={2}>Nama / Kursi</th>
-                          <th className="px-4 py-3 border" rowSpan={2}>Kode Tiket</th>
-                          <th className="px-4 py-3 border" colSpan={3}>Penjualan</th>
+                          <th className="border p-1 text-[9px] md:text-xs w-[6%]" rowSpan={2}>No</th>
+                          <th className="border p-1 text-[9px] md:text-xs w-[25%] text-center" rowSpan={2}>Nama / Kursi</th>
+                          <th className="border p-1 text-[9px] md:text-xs w-[15%]" rowSpan={2}>Kode</th>
+                          <th className="border p-1 text-[9px] md:text-xs" colSpan={3}>Penjualan</th>
                         </tr>
                         <tr>
-                          <th className="px-4 py-3 border">Cash</th>
-                          <th className="px-4 py-3 border">Qris</th>
-                          <th className="px-4 py-3 border">Total</th>
+                          <th className="border p-1 text-[9px] md:text-xs w-[18%]">Cash</th>
+                          <th className="border p-1 text-[9px] md:text-xs w-[18%]">Qris</th>
+                          <th className="border p-1 text-[9px] md:text-xs w-[18%]">Total</th>
                         </tr>
                       </thead>
                       <tbody className="bg-white divide-y divide-gray-200">
@@ -522,34 +498,33 @@ function LaporanContent() {
                           const isCash = p.metode_bayar === 'Cash';
                           return (
                             <tr key={p.id} className="hover:bg-gray-50 text-center">
-                              <td className="px-4 py-3 text-sm text-gray-900">{idx + 1}</td>
-                              <td className="px-4 py-3 text-sm font-bold text-gray-900 text-center">{p.nama} / {p.kursi}</td>
-                              <td className="px-4 py-3 text-sm font-mono text-gray-800">{potongKode(p.kode_tiket)}</td>
-                              <td className="px-4 py-3 text-sm font-bold text-gray-900">{isCash ? `Rp ${p.harga.toLocaleString('id-ID')}` : '-'}</td>
-                              <td className="px-4 py-3 text-sm font-bold text-gray-900">{!isCash ? `Rp ${p.harga.toLocaleString('id-ID')}` : '-'}</td>
-                              <td className="px-4 py-3 text-sm font-bold text-gray-900">Rp {p.harga.toLocaleString('id-ID')}</td>
+                              <td className="border p-1 text-[9px] md:text-xs">{idx + 1}</td>
+                              <td className="border p-1 text-[9px] md:text-xs font-bold text-left break-words">{p.nama} / {p.kursi}</td>
+                              <td className="border p-1 text-[9px] md:text-xs font-mono">{potongKode(p.kode_tiket)}</td>
+                              <td className="border p-1 text-[9px] md:text-xs font-bold">{isCash ? `Rp ${p.harga.toLocaleString('id-ID')}` : '-'}</td>
+                              <td className="border p-1 text-[9px] md:text-xs font-bold">{!isCash ? `Rp ${p.harga.toLocaleString('id-ID')}` : '-'}</td>
+                              <td className="border p-1 text-[9px] md:text-xs font-bold">Rp {p.harga.toLocaleString('id-ID')}</td>
                             </tr>
                           )
                         })}
                       </tbody>
-                      <tfoot className="bg-blue-600 text-white font-bold text-center">
-                        {(() => {
-                          const rincian = getRincianPenumpang(selectedJam, selectedPetugas);
-                          const totalCash = rincian.filter(r => r.metode_bayar === 'Cash').reduce((s, x) => s + x.harga, 0);
-                          const totalQris = rincian.filter(r => r.metode_bayar === 'QRIS').reduce((s, x) => s + x.harga, 0);
-                          const totalHarga = rincian.reduce((s, x) => s + x.harga, 0);
-                          
-                          return (
-                            <tr>
-                              <td colSpan={3} className="px-4 py-3 border text-right">TOTAL</td>
-                              <td className="px-4 py-3 border">Rp {totalCash.toLocaleString('id-ID')}</td>
-                              <td className="px-4 py-3 border">Rp {totalQris.toLocaleString('id-ID')}</td>
-                              <td className="px-4 py-3 border">Rp {totalHarga.toLocaleString('id-ID')}</td>
-                            </tr>
-                          )
-                        })()}
-                      </tfoot>
                     </table>
+                  </div>
+
+                  {/* FOOTER TOTAL (DIPISAH DARI TABEL UTAMA SUPAYA TIDAK ERROR) */}
+                  <div className="bg-blue-600 text-white font-bold text-center flex-shrink-0 w-full">
+                    <div className="flex w-full">
+                      <div className="p-2 border text-[9px] md:text-xs text-center w-[46%]">TOTAL</div>
+                      <div className="p-2 border text-[9px] md:text-xs text-center w-[18%]">
+                        Rp {getRincianPenumpang(selectedJam, selectedPetugas).filter(r => r.metode_bayar === 'Cash').reduce((s, x) => s + x.harga, 0).toLocaleString('id-ID')}
+                      </div>
+                      <div className="p-2 border text-[9px] md:text-xs text-center w-[18%]">
+                        Rp {getRincianPenumpang(selectedJam, selectedPetugas).filter(r => r.metode_bayar === 'QRIS').reduce((s, x) => s + x.harga, 0).toLocaleString('id-ID')}
+                      </div>
+                      <div className="p-2 border text-[9px] md:text-xs text-center w-[18%]">
+                        Rp {getRincianPenumpang(selectedJam, selectedPetugas).reduce((s, x) => s + x.harga, 0).toLocaleString('id-ID')}
+                      </div>
+                    </div>
                   </div>
                 </div>
               )}
@@ -557,42 +532,37 @@ function LaporanContent() {
           )}
 
           {view === 'boarding' && (
-            <>
-              <div className="mb-8">
-                <h2 className="text-lg font-bold text-gray-800 mb-3 border-b pb-2">OPEN SCHEDULE</h2>
-                
+            <div className="space-y-4 overflow-y-auto">
+              <div>
+                <h2 className="text-sm md:text-lg font-bold text-gray-800 mb-2 border-b pb-1">OPEN SCHEDULE</h2>
                 {laporanBelumClosed.length === 0 ? (
-                  <p className="text-gray-500 bg-white p-4 rounded shadow text-sm">Belum ada jadwal untuk waktu yang akan datang.</p>
+                  <p className="text-gray-500 bg-white p-3 rounded shadow text-xs md:text-sm">Belum ada jadwal untuk waktu yang akan datang.</p>
                 ) : (
-                  <div className="space-y-4">
+                  <div className="space-y-2">
                     {laporanBelumClosed.map((l) => {
                       const boardingList = l.rincian.filter(p => p.status_boarding === 'sudah')
                       return (
                         <div key={l.jam} className="bg-white rounded shadow border border-gray-200 overflow-hidden">
-                          <div className="bg-blue-50 px-4 py-3 border-b flex justify-between items-center">
-                            <div className="flex items-center gap-3">
-                              <span className="text-lg">📷</span>
-                              <span className="font-bold text-gray-900">Scan Boarding Jam {l.jam}</span>
-                              <span className="text-xs bg-blue-200 text-blue-800 px-2 py-1 rounded">Berjalan</span>
+                          <div className="bg-blue-50 px-3 py-2 md:px-4 md:py-3 border-b flex justify-between items-center">
+                            <div className="flex items-center gap-2 md:gap-3">
+                              <span className="font-bold text-xs md:text-sm text-gray-900">Scan Boarding Jam {l.jam}</span>
+                              <span className="text-[9px] md:text-xs bg-blue-200 text-blue-800 px-1.5 py-0.5 rounded">Berjalan</span>
                             </div>
-                            <div className="flex items-center gap-4">
-                              <span className="text-sm font-bold text-blue-600">{boardingList.length} / {l.total_terjual} Boarding</span>
-                            </div>
+                            <span className="text-[10px] md:text-sm font-bold text-blue-600">{boardingList.length} / {l.total_terjual} Boarding</span>
                           </div>
-                          
                           <div className="overflow-x-auto">
-                            <table className="min-w-full divide-y divide-gray-200">
+                            <table className="w-full border-collapse text-gray-900">
                               <thead className="bg-gray-50">
                                 <tr>
-                                  <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">No</th>
-                                  <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Nama / Kursi</th>
-                                  <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Waktu Scan</th>
+                                  <th className="px-2 py-2 text-center text-[10px] md:text-xs font-medium text-gray-500 uppercase">No</th>
+                                  <th className="px-2 py-2 text-center text-[10px] md:text-xs font-medium text-gray-500 uppercase">Nama / Kursi</th>
+                                  <th className="px-2 py-2 text-center text-[10px] md:text-xs font-medium text-gray-500 uppercase">Waktu Scan</th>
                                 </tr>
                               </thead>
                               <tbody className="bg-white divide-y divide-gray-200">
                                 {boardingList.length === 0 ? (
                                   <tr>
-                                    <td colSpan={3} className="px-4 py-4 text-center text-sm text-gray-500">Belum ada yang boarding.</td>
+                                    <td colSpan={3} className="px-2 py-3 text-center text-[10px] md:text-xs text-gray-500">Belum ada yang boarding.</td>
                                   </tr>
                                 ) : (
                                   boardingList
@@ -603,9 +573,9 @@ function LaporanContent() {
                                     })
                                     .map((p, idx) => (
                                     <tr key={p.id} className="hover:bg-gray-50 text-center">
-                                      <td className="px-4 py-3 text-sm text-gray-500">{idx + 1}</td>
-                                      <td className="px-4 py-3 text-sm font-bold text-gray-900">{p.nama} / {p.kursi}</td>
-                                      <td className="px-4 py-3 text-sm text-gray-600">
+                                      <td className="px-2 py-2 text-[10px] md:text-xs text-gray-500">{idx + 1}</td>
+                                      <td className="px-2 py-2 text-[10px] md:text-xs font-bold text-gray-900">{p.nama} / {p.kursi}</td>
+                                      <td className="px-2 py-2 text-[10px] md:text-xs text-gray-600">
                                         {p.waktu_boarding ? new Date(p.waktu_boarding).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) : '-'}
                                       </td>
                                     </tr>
@@ -622,15 +592,12 @@ function LaporanContent() {
               </div>
 
               <div>
-                <div className="flex justify-between items-center border-b pb-2 mb-3">
-                  <h2 className="text-lg font-bold text-gray-800">CLOSING SCHEDULE</h2>
-                  <button onClick={() => handlePrint('rekap-boarding')} className="bg-blue-600 text-white px-3 py-1 rounded text-sm hover:bg-blue-700 flex items-center gap-1">
-                    🖨️ Cetak Rekap
-                  </button>
+                <div className="flex justify-between items-center border-b pb-1 mb-2">
+                  <h2 className="text-sm md:text-lg font-bold text-gray-800">CLOSING SCHEDULE</h2>
+                  <button onClick={() => handlePrint('rekap-boarding')} className="bg-blue-600 text-white px-2 py-1 rounded text-[10px] md:text-sm hover:bg-blue-700">🖨️ Cetak</button>
                 </div>
-                
                 {laporanSudahClosed.length === 0 ? (
-                  <p className="text-gray-500 bg-white p-4 rounded shadow text-sm">Belum ada jadwal yang closing pada tanggal ini.</p>
+                  <p className="text-gray-500 bg-white p-3 rounded shadow text-xs md:text-sm">Belum ada jadwal yang closing pada tanggal ini.</p>
                 ) : (
                   <div className="space-y-2">
                     {laporanSudahClosed.map((l) => {
@@ -639,16 +606,15 @@ function LaporanContent() {
                         <div key={l.jam} className="bg-white rounded shadow border border-gray-200 overflow-hidden">
                           <button 
                             onClick={() => setExpandedJam(expandedJam === l.jam ? null : l.jam)}
-                            className="w-full px-4 py-3 flex justify-between items-center hover:bg-gray-50 transition"
+                            className="w-full px-3 py-2 md:px-4 md:py-3 flex justify-between items-center hover:bg-gray-50 transition"
                           >
-                            <div className="flex items-center gap-3">
-                              <span className="text-lg">📄</span>
-                              <span className="font-bold text-gray-900">Scan Boarding Jam {l.jam}</span>
-                              <span className="text-xs bg-gray-100 text-gray-600 px-2 py-1 rounded">Closed</span>
+                            <div className="flex items-center gap-2 md:gap-3">
+                              <span className="font-bold text-xs md:text-sm text-gray-900">Scan Boarding Jam {l.jam}</span>
+                              <span className="text-[9px] md:text-xs bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded">Closed</span>
                             </div>
-                            <div className="flex items-center gap-4">
-                              <span className="text-sm font-bold text-blue-600">{boardingList.length} / {l.total_terjual} Boarding</span>
-                              <span className="text-blue-600">{expandedJam === l.jam ? '▲' : '▼'}</span>
+                            <div className="flex items-center gap-2 md:gap-4">
+                              <span className="text-[10px] md:text-sm font-bold text-blue-600">{boardingList.length} / {l.total_terjual} Boarding</span>
+                              <span className="text-blue-600 text-[10px]">{expandedJam === l.jam ? '▲' : '▼'}</span>
                             </div>
                           </button>
                         </div>
@@ -659,24 +625,24 @@ function LaporanContent() {
               </div>
 
               {expandedJam && rincianAktif && (
-                <div className="mt-8">
+                <div className="mt-4">
                   <div className="bg-white rounded shadow border-2 border-blue-400 overflow-hidden">
-                    <div className="bg-blue-600 text-white p-4 flex justify-between items-center">
-                      <div><h3 className="font-bold text-lg">Rincian Boarding Jam {expandedJam}</h3></div>
+                    <div className="bg-blue-600 text-white p-3 flex justify-between items-center flex-wrap gap-2">
+                      <h3 className="font-bold text-xs md:text-base">Rincian Boarding Jam {expandedJam}</h3>
                       <div className="flex gap-2">
-                        <button onClick={() => handlePrint('rincian-boarding')} className="bg-white text-blue-700 px-3 py-1 rounded text-sm font-bold hover:bg-gray-100 flex items-center gap-1">🖨️ Cetak Rincian</button>
-                        <button onClick={() => setExpandedJam(null)} className="bg-red-600 text-white px-3 py-1 rounded text-sm font-bold hover:bg-red-700">Tutup</button>
+                        <button onClick={() => handlePrint('rincian-boarding')} className="bg-white text-blue-700 px-2 py-1 rounded text-[10px] md:text-sm font-bold hover:bg-gray-100">🖨️ Cetak</button>
+                        <button onClick={() => setExpandedJam(null)} className="bg-red-600 text-white px-2 py-1 rounded text-[10px] md:text-sm font-bold hover:bg-red-700">Tutup</button>
                       </div>
                     </div>
                     <div className="overflow-x-auto">
-                      <table className="min-w-full divide-y divide-gray-200">
+                      <table className="w-full border-collapse text-gray-900">
                         <thead className="bg-gray-50">
                           <tr>
-                            <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">No</th>
-                            <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Nama / Kursi</th>
-                            <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Rute / Nama Kapal</th>
-                            <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Kode</th>
-                            <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Waktu Scan</th>
+                            <th className="px-2 py-2 text-center text-[10px] md:text-xs font-medium text-gray-500 uppercase">No</th>
+                            <th className="px-2 py-2 text-center text-[10px] md:text-xs font-medium text-gray-500 uppercase">Nama / Kursi</th>
+                            <th className="px-2 py-2 text-center text-[10px] md:text-xs font-medium text-gray-500 uppercase">Rute / Nama Kapal</th>
+                            <th className="px-2 py-2 text-center text-[10px] md:text-xs font-medium text-gray-500 uppercase">Kode</th>
+                            <th className="px-2 py-2 text-center text-[10px] md:text-xs font-medium text-gray-500 uppercase">Waktu Scan</th>
                           </tr>
                         </thead>
                         <tbody className="bg-white divide-y divide-gray-200">
@@ -684,27 +650,22 @@ function LaporanContent() {
                             .sort((a, b) => new Date(a.waktu_boarding!).getTime() - new Date(b.waktu_boarding!).getTime())
                             .map((p, idx) => (
                             <tr key={p.id} className="hover:bg-gray-50 text-center">
-                              <td className="px-4 py-3 text-sm text-gray-500">{idx + 1}</td>
-                              <td className="px-4 py-3 text-sm font-bold text-gray-900">{p.nama} / {p.kursi}</td>
-                              <td className="px-4 py-3 text-sm text-gray-700">{p.rute} / {p.nama_kapal}</td>
-                              <td className="px-4 py-3 text-sm font-mono text-gray-600">{potongKode(p.kode_tiket)}</td>
-                              <td className="px-4 py-3 text-sm text-gray-600">
+                              <td className="px-2 py-2 text-[10px] md:text-xs text-gray-500">{idx + 1}</td>
+                              <td className="px-2 py-2 text-[10px] md:text-xs font-bold text-gray-900">{p.nama} / {p.kursi}</td>
+                              <td className="px-2 py-2 text-[10px] md:text-xs text-gray-700">{p.rute} / {p.nama_kapal}</td>
+                              <td className="px-2 py-2 text-[10px] md:text-xs font-mono text-gray-600">{potongKode(p.kode_tiket)}</td>
+                              <td className="px-2 py-2 text-[10px] md:text-xs text-gray-600">
                                 {p.waktu_boarding ? new Date(p.waktu_boarding).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) : '-'}
                               </td>
                             </tr>
                           ))}
                         </tbody>
-                        <tfoot>
-                          <tr className="bg-gray-100 font-bold text-gray-900 border-t-2 border-gray-300">
-                            <td colSpan={5} className="px-4 py-3 text-center">TOTAL BOARDING: {rincianAktif.rincian.filter(p => p.status_boarding === 'sudah').length} Orang</td>
-                          </tr>
-                        </tfoot>
                       </table>
                     </div>
                   </div>
                 </div>
               )}
-            </>
+            </div>
           )}
         </div>
 
@@ -860,7 +821,6 @@ function LaporanContent() {
           </div>
         )}
 
-        {/* TAMPILAN PRINT: MANIFEST (DENGAN WAKTU SCAN) */}
         <div className="hidden print-manifest mt-8">
           <h1 className="text-xl font-bold text-center mb-6">LAPORAN MANIFEST PENUMPANG JAM {selectedJam}</h1>
           <div className="mb-4 text-sm grid grid-cols-[150px_10px_1fr] gap-y-1">
@@ -876,7 +836,6 @@ function LaporanContent() {
                 <th className="border border-gray-400 px-2 py-1 w-8">NO</th>
                 <th className="border border-gray-400 px-2 py-1">NAMA / KURSI</th>
                 <th className="border border-gray-400 px-2 py-1">KODE</th>
-                {/* TAMBAHAN KOLOM WAKTU SCAN */}
                 <th className="border border-gray-400 px-2 py-1">WAKTU SCAN</th>
               </tr>
             </thead>
