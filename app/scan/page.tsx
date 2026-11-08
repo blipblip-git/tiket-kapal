@@ -87,7 +87,6 @@ function ScanContent() {
       const scanner = new Html5Qrcode('qr-reader')
       scannerRef.current = scanner
 
-      // Konfigurasi dikembalikan ke awal yang berhasil
       const config = {
         fps: 10,
         qrbox: { width: 250, height: 250 },
@@ -105,7 +104,6 @@ function ScanContent() {
       setScannerAktif(true)
     } catch (err: any) {
       console.error('Camera error:', err)
-      // PENANGKAPAN ERROR YANG LEBIH BAIK
       let pesanError = 'Gagal membuka kamera.'
       if (err?.name === 'NotAllowedError' || err?.message?.includes('Permission denied')) {
         pesanError = 'Akses kamera ditolak. Izinkan kamera di pengaturan browser Anda.'
@@ -344,7 +342,7 @@ function ScanContent() {
 export default function ScanPage() {
   return (
     <Suspense fallback={<p className="p-6 text-gray-900">Memuat...</p>}>
-      <ScanPageContent />
+      <ScanContent />
     </Suspense>
   )
 }
