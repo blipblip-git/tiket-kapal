@@ -18,8 +18,13 @@ export default function DashboardAdminPage() {
     total_pesanan_hari_ini: 0,
     total_pendapatan_hari_ini: 0,
   })
+  const [tanggalHariIni, setTanggalHariIni] = useState('')
 
   useEffect(() => {
+    // Set tanggal di dalam useEffect biar aman dari error Next.js 16
+    const today = new Date()
+    setTanggalHariIni(today.toLocaleDateString('id-ID', { weekday: 'long', day: '2-digit', month: 'long', year: 'numeric' }))
+
     async function loadData() {
       let p = await getProfile()
 
@@ -88,8 +93,6 @@ export default function DashboardAdminPage() {
     return new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 }).format(angka)
   }
 
-  const tanggalHariIni = new Date().toLocaleDateString('id-ID', { weekday: 'long', day: '2-digit', month: 'long', year: 'numeric' })
-
   if (loading) return <p className="p-6 text-gray-900 font-bold">Memuat dashboard...</p>
   if (error) return <p className="p-6 text-red-600">Error: {error}</p>
   if (!profile) return null
@@ -132,7 +135,7 @@ export default function DashboardAdminPage() {
           </div>
         </div>
 
-        {/* MENU GRID (DIPERKECIL & BERWARNA) */}
+        {/* MENU GRID */}
         <div className="bg-white p-3 md:p-6 rounded shadow flex-1 flex flex-col overflow-hidden">
           <div className="grid grid-cols-2 md:grid-cols-3 gap-2 md:gap-3 flex-1 overflow-y-auto content-start">
             
