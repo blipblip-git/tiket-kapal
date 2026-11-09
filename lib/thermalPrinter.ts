@@ -1,6 +1,5 @@
 import QRCode from 'qrcode'
 
-// Fungsi untuk menghasilkan perintah ESC/POS berupa byte
 function generateEscPosCommand(tiket: any, qrUrl: string): Promise<Uint8Array> {
   return new Promise((resolve, reject) => {
     const img = new Image()
@@ -51,19 +50,21 @@ function generateEscPosCommand(tiket: any, qrUrl: string): Promise<Uint8Array> {
         textData += `${tiket.kode_tiket}\n` 
         textData += `${tiket.jadwal}\n`
         textData += '\x1B\x61\x00' // Left align
-        textData += '--------------------------------\n'
+        
+        // PERBAIKAN: Garis diperpendek jadi 30 karakter agar tidak turun baris
+        textData += '------------------------------\n'
         textData += `Nama / Kursi : ${tiket.nama_penumpang} / ${tiket.kursi}\n`
         const nikRapi = tiket.nik.replace(/\*/g, '')
         textData += `NIK          : ${nikRapi}\n`
         textData += `Kapal        : ${tiket.kapal}\n`
         const jamPotong = tiket.jam.substring(0, 5) 
         textData += `Tgl/Jam      : ${tiket.tanggal}/${jamPotong}\n` 
-        textData += '--------------------------------\n'
+        textData += '------------------------------\n'
         textData += '\x1B\x61\x01' // Center align
         textData += `TOTAL: Rp ${tiket.harga.toLocaleString('id-ID')}\n`
         textData += '\x1B\x61\x00' // Left align
-        textData += '--------------------------------\n'
-        textData += 'Tunjukan e-tiket ini ke petugas\n\n'
+        textData += '------------------------------\n'
+        textData += 'Tunjukan e-tiket ini ke petugas\n'
         textData += '\x1B\x61\x01' // Center align (for QR)
 
         const textBytes = encoder.encode(textData)
@@ -76,7 +77,6 @@ function generateEscPosCommand(tiket: any, qrUrl: string): Promise<Uint8Array> {
         const endData = '\x1B\x4A\x46\x1D\x56\x00' // Cut/feed
         const endBytes = encoder.encode(endData)
 
-        // Gabungkan semua byte
         const totalLength = textBytes.length + imageBytes.length + endBytes.length
         const finalBuffer = new Uint8Array(totalLength)
         finalBuffer.set(textBytes, 0)
@@ -94,39 +94,29 @@ function generateEscPosCommand(tiket: any, qrUrl: string): Promise<Uint8Array> {
 
 export async function cetakTiketThermal(tiket: any) {
   try {
-    // PERKECIL QR JADI 120x120
-    const qrUrl = await QRCode.toDataURL(tiket.kode_tiket, { width: 120, margin: 1 })
+    // PERBAIKAN: QR diperbesar sedikit jadi 160px agar lebih tajam
+    const qrUrl = await QRCode.toDataURL(tiket.kode_tiket, { width: 160, margin: 1 })
     
-    // Cek apakah browser mendukung Web Bluetooth
     if (!navigator.bluetooth) {
-      return { 
-        success: false, 
-        message: '❌ Browser Anda tidak mendukung Web Bluetooth. Gunakan Google Chrome versi terbaru.' 
-      }
+      return { success: false, message: '❌ Browser tidak mendukung Web Bluetooth.' }
     }
 
-    // Minta user memilih perangkat Bluetooth
     const device = await navigator.bluetooth.requestDevice({
       filters: [
-        { services: ['000018f0-0000-1000-8000-00805f9b34fb'] }, // Printer Service
+        { services: ['000018f0-0000-1000-8000-00805f9b34fb'] },
         { services: ['0000ff00-0000-1000-8000-00805f9b34fb'] },
         { services: ['e7810a71-73ae-499d-8c15-faa9aef0c3f2'] }
       ],
       optionalServices: ['generic_access', 'generic_attribute', 'device_information', 'battery_service']
     }).catch((err: any) => {
-      if (err.name === 'NotFoundError') {
-        throw new Error('Tidak ada printer yang dipilih atau printer tidak ditemukan.');
-      }
+      if (err.name === 'NotFoundError') throw new Error('Tidak ada printer yang dipilih.');
       throw err;
     });
 
-    if (!device.gatt) {
-      throw new Error('Gagal terhubung ke printer (GATT tidak tersedia).');
-    }
+    if (!device.gatt) throw new Error('Gagal terhubung ke printer (GATT tidak tersedia).');
 
     const server = await device.gatt.connect();
     
-    // Cari service printer
     let service;
     const serviceUUIDs = ['000018f0-0000-1000-8000-00805f9b34fb', '0000ff00-0000-1000-8000-00805f9b34fb', 'e7810a71-73ae-499d-8c15-faa9aef0c3f2'];
     
@@ -134,16 +124,11 @@ export async function cetakTiketThermal(tiket: any) {
       try {
         service = await server.getPrimaryService(uuid);
         if (service) break;
-      } catch (e) {
-        // Lanjut cari service lain
-      }
+      } catch (e) {}
     }
 
-    if (!service) {
-      throw new Error('Tidak dapat menemukan layanan printer pada perangkat ini.');
-    }
+    if (!service) throw new Error('Tidak dapat menemukan layanan printer.');
 
-    // Cari characteristic untuk menulis data
     const characteristics = await service.getCharacteristics();
     let writeChar = null;
     
@@ -154,14 +139,10 @@ export async function cetakTiketThermal(tiket: any) {
       }
     }
 
-    if (!writeChar) {
-      throw new Error('Tidak dapat menemukan karakteristik untuk mengirim data ke printer.');
-    }
+    if (!writeChar) throw new Error('Tidak dapat menemukan karakteristik untuk mengirim data.');
 
-    // Generate perintah cetak
     const printData = await generateEscPosCommand(tiket, qrUrl);
 
-    // Kirim data (dipecah per 256 byte agar tidak error) & Jeda 100ms agar printer tidak kewalahan
     const chunkSize = 256;
     for (let i = 0; i < printData.length; i += chunkSize) {
       const chunk = printData.slice(i, i + chunkSize);
@@ -170,7 +151,6 @@ export async function cetakTiketThermal(tiket: any) {
       } else {
         await writeChar.writeValue(chunk);
       }
-      // Jeda diperlama jadi 100ms
       await new Promise(r => setTimeout(r, 100));
     }
 
@@ -178,17 +158,9 @@ export async function cetakTiketThermal(tiket: any) {
 
   } catch (err: any) {
     console.error(err)
-    
     let pesanError = '❌ Gagal mencetak: ' + (err.message || 'Terjadi kesalahan.')
-    
-    if (err.name === 'NotFoundError') {
-      pesanError = '❌ Printer tidak dipilih atau tidak ditemukan.'
-    } else if (err.name === 'SecurityError') {
-      pesanError = '❌ Akses Bluetooth ditolak. Pastikan izin Bluetooth diaktifkan.'
-    } else if (err.name === 'NetworkError') {
-      pesanError = '❌ Koneksi ke printer terputus.'
-    }
-
+    if (err.name === 'NotFoundError') pesanError = '❌ Printer tidak dipilih.'
+    else if (err.name === 'SecurityError') pesanError = '❌ Akses Bluetooth ditolak.'
     return { success: false, message: pesanError }
   }
 }
