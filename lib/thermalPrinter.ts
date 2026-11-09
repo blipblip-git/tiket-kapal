@@ -17,7 +17,7 @@ function generateEscPosCommand(tiket: any, qrUrl: string): Promise<Uint8Array> {
         const widthBytes = Math.ceil(canvas.width / 8)
         const height = canvas.height
         
-        // KEMBALI KE RASTER BIT IMAGE (Aman dari karakter alien)
+        // Perintah cetak gambar (Raster Bit Image)
         let rasterData = `\x1D\x76\x30\x00${String.fromCharCode(widthBytes % 256, Math.floor(widthBytes / 256), height % 256, Math.floor(height / 256))}`
         
         for (let y = 0; y < height; y++) {
@@ -45,11 +45,8 @@ function generateEscPosCommand(tiket: any, qrUrl: string): Promise<Uint8Array> {
         let metodePrint = 'Cash';
         if (tiket.metode_bayar === 'simulasi_online' || tiket.kanal === 'online') metodePrint = 'Qris';
         
-        // LOGIKA BARU UNTUK NAMA LOKET
         let namaLoket = tiket.nama_penjual_asli || 'Online';
-        if (namaLoket === '-' || namaLoket === 'Online') {
-            namaLoket = 'Cetak Ulang';
-        }
+        if (namaLoket === '-') namaLoket = 'Cetak Ulang';
 
         let textData = ''
         textData += '\x1B\x40' // Initialize
@@ -60,24 +57,24 @@ function generateEscPosCommand(tiket: any, qrUrl: string): Promise<Uint8Array> {
         textData += `${tiket.jadwal}\n`
         
         textData += '\x1B\x61\x00' // Left align
-        textData += '------------------------------\n'
+        textData += '-------------------------------\n'
         textData += `Nama / Kursi : ${tiket.nama_penumpang} / ${tiket.kursi}\n`
         const nikRapi = tiket.nik.replace(/\*/g, '')
         textData += `NIK          : ${nikRapi}\n`
         textData += `Kapal        : ${tiket.kapal}\n`
         const jamPotong = tiket.jam.substring(0, 5) 
         textData += `Tgl/Jam      : ${tiket.tanggal}/${jamPotong}\n` 
-        textData += '------------------------------\n'
+        textData += '-------------------------------\n'
         
         textData += '\x1B\x61\x01' // Center align
-        // DITULIS 1 BARIS UTUH
         textData += `${metodePrint} TOTAL: Rp ${tiket.harga.toLocaleString('id-ID')}\n`
-        textData += '------------------------------\n'
+        textData += '-------------------------------\n'
         
-        textData += `Perlihatkan e-tiket ke petugas\n`
+        textData += 'Perlihatkan e-tiket ke petugas\n'
         textData += `Loket : ${namaLoket}\n`
         
-        // TIDAK ADA ENTER TAMBAHAN DI SINI (Agar QR Code naik mendekat)
+        textData += '\n'
+        
         textData += '\x1B\x61\x01' // Center align (for QR)
 
         const textBytes = encoder.encode(textData)
@@ -87,8 +84,8 @@ function generateEscPosCommand(tiket: any, qrUrl: string): Promise<Uint8Array> {
           imageBytes[i] = rasterData.charCodeAt(i)
         }
         
-        // Tarik kertas 3 baris, Lalu POTONG PENUH
-        const endData = '\x1B\x64\x03\x1D\x56\x00' 
+        // Tarik kertas 50 dots, lalu potong penuh
+        const endData = '\x1B\x4A\x32\x1D\x56\x00' 
         const endBytes = encoder.encode(endData)
 
         const totalLength = textBytes.length + imageBytes.length + endBytes.length
@@ -108,7 +105,8 @@ function generateEscPosCommand(tiket: any, qrUrl: string): Promise<Uint8Array> {
 
 export async function cetakTiketThermal(tiket: any) {
   try {
-    const qrUrl = await QRCode.toDataURL(tiket.kode_tiket, { width: 160, margin: 1 })
+    // PERBESAR QR DARI 160 MENJADI 200 PIXEL
+    const qrUrl = await QRCode.toDataURL(tiket.kode_tiket, { width: 200, margin: 1 })
     
     if (!navigator.bluetooth) {
       return { success: false, message: '❌ Browser tidak mendukung Web Bluetooth.' }
@@ -156,7 +154,6 @@ export async function cetakTiketThermal(tiket: any) {
 
     const printData = await generateEscPosCommand(tiket, qrUrl);
 
-    // Jeda pengiriman stabil 128 byte per 150ms
     const chunkSize = 128;
     for (let i = 0; i < printData.length; i += chunkSize) {
       const chunk = printData.slice(i, i + chunkSize);
