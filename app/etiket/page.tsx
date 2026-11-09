@@ -269,46 +269,26 @@ function EtiketContent() {
     }
   }
 
-  // === FUNGSI FINAL: KIRIM PERINTAH HEX ESC/POS (RAWBT) ===
-  async function handleCetakThermal(t: TiketLengkap) {
-    setPesanShare('Menyiapkan perintah cetak...')
+  // === FUNGSI CETAK MENGGUNAKAN HTML PRINT (WINDOW.PRINT) ===
+  function handleCetakThermal(t: TiketLengkap) {
+    setPesanShare('Menyiapkan format cetak thermal...')
     
-    let metodePrint = 'Cash';
-    if (t.pesanan.metode_bayar === 'simulasi_online' || t.pesanan.kanal === 'online') metodePrint = 'Qris';
+    // Pastikan tiket yang dicetak adalah tiket yang sedang aktif dilihat
+    const index = tiketList.findIndex((item) => item.pesanan.id === t.pesanan.id)
+    if (index !== -1) {
+      setActiveTiketIndex(index)
+    }
 
-    const nikRapi = t.pesanan.nik.replace(/\*/g, '');
-    const jamPotong = detail?.jam_berangkat.substring(0, 5); 
-
-    // Teks dengan format ASCII murni
-    let teksMurni = '';
-    teksMurni += `\x1B\x40`; // Reset printer
-    teksMurni += `\x1B\x61\x01`; // Center align
-    teksMurni += `${t.pesanan.kode_tiket}\n`; 
-    teksMurni += `${detail?.rute_asal} - ${detail?.rute_tujuan}\n`;
-    teksMurni += `--------------------------------\n`;
-    teksMurni += `\x1B\x61\x00`; // Left align
-    teksMurni += `Nama / Kursi : ${t.pesanan.nama_penumpang} / ${t.nomor_kursi}\n`;
-    teksMurni += `NIK          : ${nikRapi}\n`;
-    teksMurni += `Kapal        : ${detail?.nama_kapal}\n`;
-    teksMurni += `Tgl/Jam      : ${detail?.tanggal}/${jamPotong}\n`; 
-    teksMurni += `--------------------------------\n`;
-    teksMurni += `\x1B\x61\x01`; // Center align
-    teksMurni += `${metodePrint} TOTAL: Rp ${detail?.harga.toLocaleString('id-ID')}\n`;
-    teksMurni += `--------------------------------\n`;
-    teksMurni += `Perlihatkan e-tiket ke petugas\n`;
-    teksMurni += `Loket : ${t.pesanan.nama_penjual_asli}\n\n`;
-
-    // Convert teks menjadi format URL encoded (UTF-8)
-    const payload = encodeURIComponent(teksMurni);
-    const rawbtUrl = `rawbt:data:text/plain;charset=utf-8,${payload}`;
-    
-    // Redirect to RawBT
-    window.location.href = rawbtUrl;
-    setPesanShare('✅ Dikirim ke RawBT.');
+    // Beri jeda sebentar agar tampilan selesai render, lalu panggil print browser
+    setTimeout(() => {
+      window.print()
+      setPesanShare('') // Bersihkan pesan setelah print dialog muncul
+    }, 500)
   }
 
   async function handleKembali() {
     const sesi = getOperatorSession()
+    
     if (sesi) {
       if (sesi.role === 'terminal_keberangkatan') {
         router.push('/dashboard/keberangkatan')
@@ -321,6 +301,7 @@ function EtiketContent() {
       }
       return
     }
+
     router.push('/')
   }
 
@@ -387,6 +368,43 @@ function EtiketContent() {
   return (
     <div className="h-[100dvh] w-full bg-gray-100 flex flex-col overflow-hidden">
       
+      {/* CSS KHUSUS UNTUK PRINT THERMAL 58mm */}
+      <style dangerouslySetInnerHTML={{__html: `
+        @media print {
+          @page { 
+            size: 58mm auto; 
+            margin: 0; 
+          }
+          body { 
+            margin: 0; 
+            padding: 0;
+            background: white;
+            -webkit-print-color-adjust: exact;
+          }
+          .print-hidden { display: none !important; }
+          
+          /* Sembunyikan semua elemen web kecuali area yang mau dicetak */
+          body * { visibility: hidden; }
+          .thermal-wrapper, .thermal-wrapper * { visibility: visible; }
+          
+          /* Posisikan elemen cetak ke pojok kiri atas */
+          .thermal-wrapper {
+            position: absolute;
+            left: 0;
+            top: 0;
+            width: 100%;
+            margin: 0;
+            padding: 5px; /* Margin tipis untuk kertas thermal */
+          }
+
+          .thermal-card {
+            box-shadow: none !important;
+            border: none !important;
+            padding: 0 !important;
+          }
+        }
+      `}} />
+
       {/* HEADER (Fixed) */}
       <div className="flex-shrink-0 bg-white shadow-sm z-10 px-3 py-2 md:px-6 md:py-4 print-hidden">
         <div className="max-w-md mx-auto flex justify-between items-center">
@@ -408,6 +426,7 @@ function EtiketContent() {
             <p className="text-[10px] md:text-sm text-center text-gray-900 mb-2 bg-yellow-100 p-2 rounded print-hidden">{pesanShare}</p>
           )}
 
+          {/* Navigasi Tab jika tiket lebih dari 1 */}
           {tiketList.length > 1 && (
             <div className="flex overflow-x-auto gap-1 pb-1 mb-2 print-hidden">
               {tiketList.map((_, i) => (
