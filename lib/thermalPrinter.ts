@@ -112,8 +112,8 @@ export async function cetakTiketThermal(tiket: any) {
       }
       await sendData(imageBytes)
       
-      // PERBAIKAN: Maju 250 dots (0xFA) sebelum potong kertas
-      const endData = '\x1B\x4A\xFA\x1D\x56\x00' 
+      // PERBAIKAN: Maju 10 baris (0x0A) sebelum potong kertas
+      const endData = '\x1B\x64\x0A\x1D\x56\x00' 
       await sendData(encoder.encode(endData))
 
       device.gatt.disconnect()
@@ -204,8 +204,8 @@ export async function cetakTiketThermal(tiket: any) {
     }
     await writer.write(imageBytes)
     
-    // PERBAIKAN: Maju 250 dots (0xFA) sebelum potong kertas
-    const endData = '\x1B\x4A\xFA\x1D\x56\x00' 
+    // PERBAIKAN: Maju 10 baris (0x0A) sebelum potong kertas
+    const endData = '\x1B\x64\x0A\x1D\x56\x00' 
     await writer.write(encoder.encode(endData))
 
     writer.releaseLock()
