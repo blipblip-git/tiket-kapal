@@ -17,8 +17,8 @@ function generateEscPosCommand(tiket: any, qrUrl: string): Promise<Uint8Array> {
         const widthBytes = Math.ceil(canvas.width / 8)
         const height = canvas.height
         
-        // MENGGUNAKAN METODE GRAPHICS (Lebih lambat tapi stabil untuk printer murah)
-        let rasterData = `\x1B\x2A\x00${String.fromCharCode(widthBytes % 256, Math.floor(widthBytes / 256))}`
+        // KEMBALI KE RASTER BIT IMAGE (Aman dari karakter alien)
+        let rasterData = `\x1D\x76\x30\x00${String.fromCharCode(widthBytes % 256, Math.floor(widthBytes / 256), height % 256, Math.floor(height / 256))}`
         
         for (let y = 0; y < height; y++) {
           for (let x = 0; x < widthBytes; x++) {
@@ -45,8 +45,11 @@ function generateEscPosCommand(tiket: any, qrUrl: string): Promise<Uint8Array> {
         let metodePrint = 'Cash';
         if (tiket.metode_bayar === 'simulasi_online' || tiket.kanal === 'online') metodePrint = 'Qris';
         
+        // LOGIKA BARU UNTUK NAMA LOKET
         let namaLoket = tiket.nama_penjual_asli || 'Online';
-        if (namaLoket === '-') namaLoket = 'Loket';
+        if (namaLoket === '-' || namaLoket === 'Online') {
+            namaLoket = 'Cetak Ulang';
+        }
 
         let textData = ''
         textData += '\x1B\x40' // Initialize
@@ -71,12 +74,10 @@ function generateEscPosCommand(tiket: any, qrUrl: string): Promise<Uint8Array> {
         textData += `${metodePrint} TOTAL: Rp ${tiket.harga.toLocaleString('id-ID')}\n`
         textData += '------------------------------\n'
         
-        textData += 'Perlihatkan e-tiket ke petugas\n'
+        textData += `Perlihatkan e-tiket ke petugas\n`
         textData += `Loket : ${namaLoket}\n`
         
-        // Jarak 1 enter sebelum gambar
-        textData += '\n'
-        
+        // TIDAK ADA ENTER TAMBAHAN DI SINI (Agar QR Code naik mendekat)
         textData += '\x1B\x61\x01' // Center align (for QR)
 
         const textBytes = encoder.encode(textData)
@@ -86,8 +87,8 @@ function generateEscPosCommand(tiket: any, qrUrl: string): Promise<Uint8Array> {
           imageBytes[i] = rasterData.charCodeAt(i)
         }
         
-        // Tarik kertas 5 baris, Lalu POTONG PENUH (\x00)
-        const endData = '\x1B\x64\x05\x1D\x56\x00' 
+        // Tarik kertas 3 baris, Lalu POTONG PENUH
+        const endData = '\x1B\x64\x03\x1D\x56\x00' 
         const endBytes = encoder.encode(endData)
 
         const totalLength = textBytes.length + imageBytes.length + endBytes.length
@@ -155,7 +156,7 @@ export async function cetakTiketThermal(tiket: any) {
 
     const printData = await generateEscPosCommand(tiket, qrUrl);
 
-    // PERLAMBAT PENGIRIMAN: 128 byte per 150ms
+    // Jeda pengiriman stabil 128 byte per 150ms
     const chunkSize = 128;
     for (let i = 0; i < printData.length; i += chunkSize) {
       const chunk = printData.slice(i, i + chunkSize);
