@@ -18,6 +18,7 @@ function generateEscPosCommand(tiket: any, qrUrl: string): Promise<Uint8Array> {
         const widthBytes = Math.ceil(canvas.width / 8)
         const height = canvas.height
         
+        // Perintah cetak gambar (Raster Bit Image)
         let rasterData = `\x1D\x76\x30\x00${String.fromCharCode(widthBytes % 256, Math.floor(widthBytes / 256), height % 256, Math.floor(height / 256))}`
         
         for (let y = 0; y < height; y++) {
@@ -103,11 +104,10 @@ export async function cetakTiketThermal(tiket: any) {
       }
     }
 
-    // Minta user memilih perangkat Bluetooth
+    // Minta user memilih perangkat Bluetooth (hanya yang mendukung service printer)
     const device = await navigator.bluetooth.requestDevice({
-      // Filter service UUID yang umum untuk printer thermal
       filters: [
-        { services: ['000018f0-0000-1000-8000-00805f9b34fb'] }, // Printer Service
+        { services: ['000018f0-0000-1000-8000-00805f9b34fb'] },
         { services: ['0000ff00-0000-1000-8000-00805f9b34fb'] },
         { services: ['e7810a71-73ae-499d-8c15-faa9aef0c3f2'] }
       ],
