@@ -42,32 +42,36 @@ function generateEscPosCommand(tiket: any, qrUrl: string): Promise<Uint8Array> {
 
         const encoder = new TextEncoder()
         
+        let metodePrint = 'Cash';
+        if (tiket.metode_bayar === 'simulasi_online' || tiket.kanal === 'online') metodePrint = 'Qris';
+
         let textData = ''
         textData += '\x1B\x40' // Initialize
         textData += '\x1B\x33\x05' // Line spacing
-        textData += '\x1B\x4A\x0A' // Feed awal
+        
         textData += '\x1B\x61\x01' // Center align
         textData += `${tiket.kode_tiket}\n` 
         textData += `${tiket.jadwal}\n`
-        textData += '\x1B\x61\x00' // Left align
         
-        // Garis putus-putus (30 karakter)
-        textData += '------------------------------\n'
+        textData += '\x1B\x61\x00' // Left align
+        // Garis dipendekkan jadi 28 karakter agar aman
+        textData += '----------------------------\n'
         textData += `Nama / Kursi : ${tiket.nama_penumpang} / ${tiket.kursi}\n`
         const nikRapi = tiket.nik.replace(/\*/g, '')
         textData += `NIK          : ${nikRapi}\n`
         textData += `Kapal        : ${tiket.kapal}\n`
         const jamPotong = tiket.jam.substring(0, 5) 
         textData += `Tgl/Jam      : ${tiket.tanggal}/${jamPotong}\n` 
-        textData += '------------------------------\n'
-        textData += '\x1B\x61\x01' // Center align
-        textData += `TOTAL: Rp ${tiket.harga.toLocaleString('id-ID')}\n`
-        textData += '\x1B\x61\x00' // Left align
-        textData += '------------------------------\n'
-        textData += 'Tunjukan e-tiket ini ke petugas\n'
+        textData += '----------------------------\n'
         
-        // Jarak sebelum QR (Feed 10 dots)
-        textData += '\x1B\x64\x0A' 
+        textData += '\x1B\x61\x01' // Center align
+        textData += `${metodePrint} TOTAL: Rp ${tiket.harga.toLocaleString('id-ID')}\n`
+        textData += '----------------------------\n'
+        textData += 'Perlihatkan e-tiket ke petugas\n'
+        textData += `Loket : ${tiket.nama_penjual_asli || 'Online'}\n`
+        
+        // Beri jarak 1 enter sebelum QR
+        textData += '\n'
         textData += '\x1B\x61\x01' // Center align (for QR)
 
         const textBytes = encoder.encode(textData)
@@ -77,8 +81,8 @@ function generateEscPosCommand(tiket: any, qrUrl: string): Promise<Uint8Array> {
           imageBytes[i] = rasterData.charCodeAt(i)
         }
         
-        // Jarak sesudah QR (Feed 70 dots) + Potong kertas
-        const endData = '\x1B\x64\x46\x1D\x56\x00' 
+        // Perintah Cut / Feed bawaan printer
+        const endData = '\x1B\x4A\x46\x1D\x56\x00' 
         const endBytes = encoder.encode(endData)
 
         const totalLength = textBytes.length + imageBytes.length + endBytes.length
@@ -102,7 +106,7 @@ export async function cetakTiketThermal(tiket: any) {
     const qrUrl = await QRCode.toDataURL(tiket.kode_tiket, { width: 160, margin: 1 })
     
     if (!navigator.bluetooth) {
-      return { success: false, message: '❌ Browser Anda tidak mendukung Web Bluetooth.' }
+      return { success: false, message: '❌ Browser tidak mendukung Web Bluetooth.' }
     }
 
     const device = await navigator.bluetooth.requestDevice({
