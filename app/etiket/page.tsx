@@ -6,6 +6,7 @@ import { supabase, getOperatorSession } from '@/lib/supabase'
 import QRCode from 'qrcode'
 import { toPng } from 'html-to-image'
 import { jsPDF } from 'jspdf'
+import { cetakTiketThermal } from '@/lib/thermalPrinter' // <-- Import fungsi printer
 
 type Pesanan = {
   id: string
@@ -269,21 +270,30 @@ function EtiketContent() {
     }
   }
 
-  // === FUNGSI CETAK MENGGUNAKAN HTML PRINT (WINDOW.PRINT) ===
-  function handleCetakThermal(t: TiketLengkap) {
-    setPesanShare('Menyiapkan format cetak thermal...')
-    
-    // Pastikan tiket yang dicetak adalah tiket yang sedang aktif dilihat
-    const index = tiketList.findIndex((item) => item.pesanan.id === t.pesanan.id)
-    if (index !== -1) {
-      setActiveTiketIndex(index)
-    }
+  // === FUNGSI PINTAR: DETEKSI LAPTOP vs HP ===
+  async function handleCetakThermal(t: TiketLengkap) {
+    // 1. Deteksi apakah user pakai HP/Tablet atau Laptop/PC
+    const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)
 
-    // Beri jeda sebentar agar tampilan selesai render, lalu panggil print browser
-    setTimeout(() => {
-      window.print()
-      setPesanShare('') // Bersihkan pesan setelah print dialog muncul
-    }, 500)
+    if (isMobile) {
+      // --- JALUR HP: Pakai Web Bluetooth ---
+      setPesanShare('Menghubungkan ke printer Bluetooth...')
+      const result = await cetakTiketThermal(t.pesanan)
+      setPesanShare(result.message)
+    } else {
+      // --- JALUR LAPTOP: Pakai Window Print (Driver Laptop) ---
+      setPesanShare('Menyiapkan format cetak thermal untuk Laptop...')
+      
+      const index = tiketList.findIndex((item) => item.pesanan.id === t.pesanan.id)
+      if (index !== -1) {
+        setActiveTiketIndex(index)
+      }
+
+      setTimeout(() => {
+        window.print()
+        setPesanShare('')
+      }, 500)
+    }
   }
 
   async function handleKembali() {
@@ -368,7 +378,7 @@ function EtiketContent() {
   return (
     <div className="h-[100dvh] w-full bg-gray-100 flex flex-col overflow-hidden">
       
-      {/* CSS KHUSUS UNTUK PRINT THERMAL 58mm */}
+      {/* CSS KHUSUS UNTUK PRINT THERMAL 58mm (Dipakai saat di Laptop) */}
       <style dangerouslySetInnerHTML={{__html: `
         @media print {
           @page { 
@@ -383,18 +393,16 @@ function EtiketContent() {
           }
           .print-hidden { display: none !important; }
           
-          /* Sembunyikan semua elemen web kecuali area yang mau dicetak */
           body * { visibility: hidden; }
           .thermal-wrapper, .thermal-wrapper * { visibility: visible; }
           
-          /* Posisikan elemen cetak ke pojok kiri atas */
           .thermal-wrapper {
             position: absolute;
             left: 0;
             top: 0;
             width: 100%;
             margin: 0;
-            padding: 5px; /* Margin tipis untuk kertas thermal */
+            padding: 5px;
           }
 
           .thermal-card {
