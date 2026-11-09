@@ -112,8 +112,8 @@ export async function cetakTiketThermal(tiket: any) {
       }
       await sendData(imageBytes)
       
-      // BALIK KE SETTINGAN 255 DOTS (0xFF)
-      const endData = '\x1B\x4A\xFF\x1D\x56\x00' 
+      // HP: TETAP 10 BARIS (Tidak diubah)
+      const endData = '\x1B\x64\x0A\x1D\x56\x00' 
       await sendData(encoder.encode(endData))
 
       device.gatt.disconnect()
@@ -204,8 +204,8 @@ export async function cetakTiketThermal(tiket: any) {
     }
     await writer.write(imageBytes)
     
-    // BALIK KE SETTINGAN 255 DOTS (0xFF)
-    const endData = '\x1B\x4A\xFF\x1D\x56\x00' 
+    // LAPTOP: DIUBAH JADI 60 DOTS (0x3C)
+    const endData = '\x1B\x4A\x3C\x1D\x56\x00' 
     await writer.write(encoder.encode(endData))
 
     writer.releaseLock()
