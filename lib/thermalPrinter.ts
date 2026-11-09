@@ -84,7 +84,7 @@ function generateEscPosCommand(tiket: any, qrUrl: string): Promise<Uint8Array> {
           imageBytes[i] = rasterData.charCodeAt(i)
         }
         
-        // PERUBAHAN: Tarik kertas 80 dots (0x50), lalu potong penuh
+        // Tarik kertas 80 dots (0x50), lalu potong penuh
         const endData = '\x1B\x4A\x50\x1D\x56\x00' 
         const endBytes = encoder.encode(endData)
 
@@ -105,8 +105,8 @@ function generateEscPosCommand(tiket: any, qrUrl: string): Promise<Uint8Array> {
 
 export async function cetakTiketThermal(tiket: any) {
   try {
-    // PERUBAHAN: Ukuran QR diubah menjadi 230px
-    const qrUrl = await QRCode.toDataURL(tiket.kode_tiket, { width: 230, margin: 1 })
+    // Ukuran QR dikembalikan ke 225px
+    const qrUrl = await QRCode.toDataURL(tiket.kode_tiket, { width: 225, margin: 1 })
     
     if (!navigator.bluetooth) {
       return { success: false, message: '❌ Browser tidak mendukung Web Bluetooth.' }
