@@ -339,6 +339,7 @@ function EtiketContent() {
               {tiket.pesanan.is_balita && <span className="text-[9px] text-orange-600 ml-1">(Balita)</span>}
             </span>
           </div>
+          {/* NIK SUDAH DIHAPUS TOTAL DARI SINI */}
           <div className="flex justify-between">
             <span className="text-gray-500">Kapal</span>
             <span className="font-medium text-gray-900 text-right">{detail?.nama_kapal}</span>
