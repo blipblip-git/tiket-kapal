@@ -118,19 +118,21 @@ function CetakUlangContent() {
     }
   }
 
-  // === FUNGSI PINTAR: DETEKSI LAPTOP vs HP ===
+  // === FUNGSI FINAL: PAKSA LAPTOP PAKAI PRINT, HP PAKAI BLUETOOTH ===
   async function handlePrintThermal() {
     if (!detailPilih) return
     
+    // Deteksi perangkat
     const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)
 
     if (isMobile) {
+      // --- JALUR HP: Pakai Web Bluetooth ---
       setPesan('Menghubungkan ke printer Bluetooth...')
       const result = await cetakTiketThermal(detailPilih)
       setPesan(result.message)
     } else {
+      // --- JALUR LAPTOP: Paksa panggil Window Print ---
       setPesan('Menyiapkan format cetak thermal untuk Laptop...')
-      // Panggil dialog print bawaan browser
       setTimeout(() => {
         window.print()
         setPesan('')
@@ -162,11 +164,10 @@ function CetakUlangContent() {
           body { margin: 0; padding: 0; background: white; -webkit-print-color-adjust: exact; }
           .print-hidden { display: none !important; }
           
-          /* Sembunyikan semua elemen web kecuali area yang mau dicetak */
+          /* Trik pencetakan yang aman untuk Chrome Desktop */
           body * { visibility: hidden; }
           #area-tiket-ulang, #area-tiket-ulang * { visibility: visible; }
           
-          /* Posisikan elemen cetak ke pojok kiri atas */
           #area-tiket-ulang { 
             position: absolute; 
             left: 0; 
