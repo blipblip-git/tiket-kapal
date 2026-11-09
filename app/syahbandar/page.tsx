@@ -10,6 +10,7 @@ type RincianPenumpang = {
   kursi: string
   status_boarding: string
   waktu_boarding: string | null
+  is_balita: boolean
 }
 
 type LaporanPerJam = {
@@ -65,7 +66,7 @@ function ManifestDetailContent() {
       }
 
       const { data: pesananData } = await supabase.from('pesanan').select(`
-          id, nama_penumpang, status_boarding, waktu_boarding,
+          id, nama_penumpang, status_boarding, waktu_boarding, is_balita,
           jadwal:jadwal_id (jam_berangkat, rute_asal, kapal_id),
           kursi:kursi_id (nomor_kursi)
         `).eq('status', 'paid').eq('jadwal.tanggal', tanggal).eq('jadwal.rute_asal', lokasi)
@@ -96,7 +97,8 @@ function ManifestDetailContent() {
           nama: item.nama_penumpang, 
           kursi: item.kursi?.nomor_kursi || '-', 
           status_boarding: item.status_boarding || 'belum',
-          waktu_boarding: item.waktu_boarding || null
+          waktu_boarding: item.waktu_boarding || null,
+          is_balita: item.is_balita || false
         })
       })
 
@@ -148,7 +150,7 @@ function ManifestDetailContent() {
               ${urutkanBerdasarkanScan(rincianAktif.rincian).map((p, idx) => `
                 <tr>
                   <td class="text-center">${idx + 1}</td>
-                  <td class="font-bold text-left">${p.nama} / ${p.kursi}</td>
+                  <td class="font-bold text-left">${p.nama} / ${p.kursi}${p.is_balita ? ' (Balita)' : ''}</td>
                   <td class="text-center">${p.waktu_boarding ? new Date(p.waktu_boarding).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) : '-'}</td>
                 </tr>
               `).join('')}
@@ -322,7 +324,10 @@ function ManifestDetailContent() {
                     {rincianAktif && urutkanBerdasarkanScan(rincianAktif.rincian).map((p, idx) => (
                       <tr key={p.id} className="hover:bg-gray-50 text-center">
                         <td className="border p-1 text-[9px] md:text-xs">{idx + 1}</td>
-                        <td className="border p-1 text-[9px] md:text-xs font-bold text-left">{p.nama} / {p.kursi}</td>
+                        <td className="border p-1 text-[9px] md:text-xs font-bold text-left">
+                          {p.nama} / {p.kursi}
+                          {p.is_balita && <span className="text-[8px] md:text-[10px] text-orange-600 ml-1">(Balita)</span>}
+                        </td>
                         <td className="border p-1 text-[9px] md:text-xs">
                           {p.waktu_boarding ? new Date(p.waktu_boarding).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) : '-'}
                         </td>

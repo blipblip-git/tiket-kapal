@@ -20,6 +20,7 @@ type RincianPenumpang = {
   petugas_jual: string | null
   nama_petugas: string
   metode_bayar: string
+  is_balita: boolean
 }
 
 type LaporanPerJam = {
@@ -89,7 +90,7 @@ function LaporanContent() {
       let query = supabase
         .from('pesanan')
         .select(`
-          id, nama_penumpang, kode_tiket, kanal, status, status_boarding, waktu_boarding, petugas_jual,
+          id, nama_penumpang, kode_tiket, kanal, status, status_boarding, waktu_boarding, petugas_jual, is_balita,
           jadwal:jadwal_id (rute_asal, rute_tujuan, harga, tanggal, jam_berangkat, status_jadwal, kapal_id),
           kursi:kursi_id (nomor_kursi)
         `)
@@ -203,7 +204,8 @@ function LaporanContent() {
             waktu_boarding: item.waktu_boarding || null,
             petugas_jual: item.petugas_jual || null,
             nama_petugas: namaPetugas,
-            metode_bayar: labelMetode
+            metode_bayar: labelMetode,
+            is_balita: item.is_balita || false
           })
 
           if (item.jadwal.status_jadwal === 'berangkat') {
@@ -499,7 +501,10 @@ function LaporanContent() {
                           return (
                             <tr key={p.id} className="hover:bg-gray-50 text-center">
                               <td className="border p-1 text-[9px] md:text-xs">{idx + 1}</td>
-                              <td className="border p-1 text-[9px] md:text-xs font-bold text-left break-words">{p.nama} / {p.kursi}</td>
+                              <td className="border p-1 text-[9px] md:text-xs font-bold text-left break-words">
+                                {p.nama} / {p.kursi}
+                                {p.is_balita && <span className="text-[8px] md:text-[10px] text-orange-600 ml-1">(Balita)</span>}
+                              </td>
                               <td className="border p-1 text-[9px] md:text-xs font-mono">{potongKode(p.kode_tiket)}</td>
                               <td className="border p-1 text-[9px] md:text-xs font-bold">{isCash ? `Rp ${p.harga.toLocaleString('id-ID')}` : '-'}</td>
                               <td className="border p-1 text-[9px] md:text-xs font-bold">{!isCash ? `Rp ${p.harga.toLocaleString('id-ID')}` : '-'}</td>
@@ -511,7 +516,6 @@ function LaporanContent() {
                     </table>
                   </div>
 
-                  {/* FOOTER TOTAL (DIPISAH DARI TABEL UTAMA SUPAYA TIDAK ERROR) */}
                   <div className="bg-blue-600 text-white font-bold text-center flex-shrink-0 w-full">
                     <div className="flex w-full">
                       <div className="p-2 border text-[9px] md:text-xs text-center w-[46%]">TOTAL</div>
@@ -574,7 +578,10 @@ function LaporanContent() {
                                     .map((p, idx) => (
                                     <tr key={p.id} className="hover:bg-gray-50 text-center">
                                       <td className="px-2 py-2 text-[10px] md:text-xs text-gray-500">{idx + 1}</td>
-                                      <td className="px-2 py-2 text-[10px] md:text-xs font-bold text-gray-900">{p.nama} / {p.kursi}</td>
+                                      <td className="px-2 py-2 text-[10px] md:text-xs font-bold text-gray-900">
+                                        {p.nama} / {p.kursi}
+                                        {p.is_balita && <span className="text-[9px] text-orange-600 ml-1">(Balita)</span>}
+                                      </td>
                                       <td className="px-2 py-2 text-[10px] md:text-xs text-gray-600">
                                         {p.waktu_boarding ? new Date(p.waktu_boarding).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) : '-'}
                                       </td>
@@ -651,7 +658,10 @@ function LaporanContent() {
                             .map((p, idx) => (
                             <tr key={p.id} className="hover:bg-gray-50 text-center">
                               <td className="px-2 py-2 text-[10px] md:text-xs text-gray-500">{idx + 1}</td>
-                              <td className="px-2 py-2 text-[10px] md:text-xs font-bold text-gray-900">{p.nama} / {p.kursi}</td>
+                              <td className="px-2 py-2 text-[10px] md:text-xs font-bold text-gray-900">
+                                {p.nama} / {p.kursi}
+                                {p.is_balita && <span className="text-[9px] text-orange-600 ml-1">(Balita)</span>}
+                              </td>
                               <td className="px-2 py-2 text-[10px] md:text-xs text-gray-700">{p.rute} / {p.nama_kapal}</td>
                               <td className="px-2 py-2 text-[10px] md:text-xs font-mono text-gray-600">{potongKode(p.kode_tiket)}</td>
                               <td className="px-2 py-2 text-[10px] md:text-xs text-gray-600">
@@ -793,7 +803,10 @@ function LaporanContent() {
                   return (
                     <tr key={d.id} className="text-center text-gray-900">
                       <td className="border border-gray-400 px-2 py-1">{idx + 1}</td>
-                      <td className="border border-gray-400 px-2 py-1 text-center font-bold">{d.nama} / {d.kursi}</td>
+                      <td className="border border-gray-400 px-2 py-1 text-center font-bold">
+                        {d.nama} / {d.kursi}
+                        {d.is_balita && <span className="text-xs text-orange-600 ml-1">(Balita)</span>}
+                      </td>
                       <td className="border border-gray-400 px-2 py-1 font-mono text-xs">{potongKode(d.kode_tiket)}</td>
                       <td className="border border-gray-400 px-2 py-1 text-right">{isCash ? `Rp ${d.harga.toLocaleString('id-ID')}` : '-'}</td>
                       <td className="border border-gray-400 px-2 py-1 text-right">{!isCash ? `Rp ${d.harga.toLocaleString('id-ID')}` : '-'}</td>
@@ -843,7 +856,10 @@ function LaporanContent() {
               {laporan.find(l => l.jam === selectedJam)?.rincian.map((p, idx) => (
                 <tr key={p.id} className="text-gray-900 text-center">
                   <td className="border border-gray-400 px-2 py-1">{idx + 1}</td>
-                  <td className="border border-gray-400 px-2 py-1 font-bold text-center">{p.nama} / {p.kursi}</td>
+                  <td className="border border-gray-400 px-2 py-1 font-bold text-center">
+                    {p.nama} / {p.kursi}
+                    {p.is_balita && <span className="text-xs text-orange-600 ml-1">(Balita)</span>}
+                  </td>
                   <td className="border border-gray-400 px-2 py-1 font-mono text-xs">{potongKode(p.kode_tiket)}</td>
                   <td className="border border-gray-400 px-2 py-1">
                     {p.waktu_boarding ? new Date(p.waktu_boarding).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) : '-'}
@@ -915,7 +931,10 @@ function LaporanContent() {
                   .map((p, idx) => (
                   <tr key={p.id} className="text-center text-gray-900">
                     <td className="border border-gray-400 px-2 py-1">{idx + 1}</td>
-                    <td className="border border-gray-400 px-2 py-1 font-bold text-center">{p.nama} / {p.kursi}</td>
+                    <td className="border border-gray-400 px-2 py-1 font-bold text-center">
+                      {p.nama} / {p.kursi}
+                      {p.is_balita && <span className="text-xs text-orange-600 ml-1">(Balita)</span>}
+                    </td>
                     <td className="border border-gray-400 px-2 py-1">{p.nama_kapal}</td>
                     <td className="border border-gray-400 px-2 py-1 font-mono text-xs">{potongKode(p.kode_tiket)}</td>
                     <td className="border border-gray-400 px-2 py-1">

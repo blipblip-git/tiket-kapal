@@ -1,177 +1,239 @@
 import QRCode from 'qrcode'
 
-function generateEscPosCommand(tiket: any, qrUrl: string): Promise<Uint8Array> {
-  return new Promise((resolve, reject) => {
-    const img = new Image()
-    img.src = qrUrl
-    img.onload = () => {
-      try {
-        const canvas = document.createElement('canvas')
-        canvas.width = img.width
-        canvas.height = img.height
-        const ctx = canvas.getContext('2d')
-        if (!ctx) throw new Error('Gagal membuat canvas')
-        ctx.drawImage(img, 0, 0)
-        
-        const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height)
-        const widthBytes = Math.ceil(canvas.width / 8)
-        const height = canvas.height
-        
-        // Perintah cetak gambar (Raster Bit Image)
-        let rasterData = `\x1D\x76\x30\x00${String.fromCharCode(widthBytes % 256, Math.floor(widthBytes / 256), height % 256, Math.floor(height / 256))}`
-        
-        for (let y = 0; y < height; y++) {
-          for (let x = 0; x < widthBytes; x++) {
-            let byte = 0
-            for (let bit = 0; bit < 8; bit++) {
-              const pixelX = x * 8 + bit
-              if (pixelX < canvas.width) {
-                const idx = (y * canvas.width + pixelX) * 4
-                const r = imgData.data[idx]
-                const g = imgData.data[idx + 1]
-                const b = imgData.data[idx + 2]
-                const isBlack = (r + g + b) / 3 < 128
-                if (isBlack) {
-                  byte |= (1 << (7 - bit))
-                }
-              }
-            }
-            rasterData += String.fromCharCode(byte)
-          }
-        }
-
-        const encoder = new TextEncoder()
-        
-        let metodePrint = 'Cash';
-        if (tiket.metode_bayar === 'simulasi_online' || tiket.kanal === 'online') metodePrint = 'Qris';
-        
-        let namaLoket = tiket.nama_penjual_asli || 'Online';
-        if (namaLoket === '-') namaLoket = 'Cetak Ulang';
-
-        let textData = ''
-        textData += '\x1B\x40' // Initialize
-        textData += '\x1B\x33\x05' // Line spacing
-        
-        textData += '\x1B\x61\x01' // Center align
-        textData += `${tiket.kode_tiket}\n` 
-        textData += `${tiket.jadwal}\n`
-        
-        textData += '\x1B\x61\x00' // Left align
-        textData += '-------------------------------\n'
-        textData += `Nama / Kursi : ${tiket.nama_penumpang} / ${tiket.kursi}\n`
-        const nikRapi = tiket.nik.replace(/\*/g, '')
-        textData += `NIK          : ${nikRapi}\n`
-        textData += `Kapal        : ${tiket.kapal}\n`
-        const jamPotong = tiket.jam.substring(0, 5) 
-        textData += `Tgl/Jam      : ${tiket.tanggal}/${jamPotong}\n` 
-        textData += '-------------------------------\n'
-        
-        textData += '\x1B\x61\x01' // Center align
-        textData += `${metodePrint} TOTAL: Rp ${tiket.harga.toLocaleString('id-ID')}\n`
-        textData += '-------------------------------\n'
-        
-        textData += 'Perlihatkan e-tiket ke petugas\n'
-        textData += `Loket : ${namaLoket}\n`
-        
-        textData += '\n'
-        
-        textData += '\x1B\x61\x01' // Center align (for QR)
-
-        const textBytes = encoder.encode(textData)
-        
-        const imageBytes = new Uint8Array(rasterData.length)
-        for (let i = 0; i < rasterData.length; i++) {
-          imageBytes[i] = rasterData.charCodeAt(i)
-        }
-        
-        // Tarik kertas 80 dots (0x50), lalu potong penuh
-        const endData = '\x1B\x4A\x50\x1D\x56\x00' 
-        const endBytes = encoder.encode(endData)
-
-        const totalLength = textBytes.length + imageBytes.length + endBytes.length
-        const finalBuffer = new Uint8Array(totalLength)
-        finalBuffer.set(textBytes, 0)
-        finalBuffer.set(imageBytes, textBytes.length)
-        finalBuffer.set(endBytes, textBytes.length + imageBytes.length)
-
-        resolve(finalBuffer)
-      } catch (err) {
-        reject(err)
-      }
-    }
-    img.onerror = () => reject(new Error('Gagal memuat QR Code'))
-  })
+// FUNGSI UNTUK MENGIRIM TEKS KE RAWBT (CADANGAN KALAU BLUETOOTH GAGAL)
+function formatTeksRawBT(tiket: any): string {
+  let teks = ''
+  teks += `\n`
+  teks += `${tiket.kode_tiket}\n`
+  teks += `${tiket.jadwal}\n`
+  teks += `--------------------------------\n`
+  teks += `Nama / Kursi : ${tiket.nama_penumpang} / ${tiket.kursi}\n`
+  const nikRapi = tiket.nik ? tiket.nik.replace(/\*/g, '') : '-'
+  teks += `NIK          : ${nikRapi}\n`
+  teks += `Kapal        : ${tiket.kapal}\n`
+  const jamPotong = tiket.jam.substring(0, 5) 
+  teks += `Tgl/Jam      : ${tiket.tanggal}/${jamPotong}\n` 
+  teks += `--------------------------------\n`
+  teks += `TOTAL: Rp ${tiket.harga.toLocaleString('id-ID')}\n`
+  teks += `--------------------------------\n`
+  teks += `Tunjukan e-tiket ini ke petugas saat boarding\n`
+  return teks
 }
 
 export async function cetakTiketThermal(tiket: any) {
-  try {
-    // Ukuran QR diubah menjadi 200px
-    const qrUrl = await QRCode.toDataURL(tiket.kode_tiket, { width: 200, margin: 1 })
-    
-    if (!navigator.bluetooth) {
-      return { success: false, message: '❌ Browser tidak mendukung Web Bluetooth.' }
-    }
+  const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)
 
-    const device = await navigator.bluetooth.requestDevice({
-      filters: [
-        { services: ['000018f0-0000-1000-8000-00805f9b34fb'] },
-        { services: ['0000ff00-0000-1000-8000-00805f9b34fb'] },
-        { services: ['e7810a71-73ae-499d-8c15-faa9aef0c3f2'] }
-      ],
-      optionalServices: ['generic_access', 'generic_attribute', 'device_information', 'battery_service']
-    }).catch((err: any) => {
-      if (err.name === 'NotFoundError') throw new Error('Tidak ada printer yang dipilih.')
-      throw err;
-    });
-
-    if (!device.gatt) throw new Error('Gagal terhubung ke printer.')
-
-    const server = await device.gatt.connect();
-    
-    let service;
-    const serviceUUIDs = ['000018f0-0000-1000-8000-00805f9b34fb', '0000ff00-0000-1000-8000-00805f9b34fb', 'e7810a71-73ae-499d-8c15-faa9aef0c3f2'];
-    
-    for (const uuid of serviceUUIDs) {
+  // =========================================================
+  // MODE 1: HP/TABLET -> PAKAI WEB BLUETOOTH ATAU RAWBT
+  // =========================================================
+  if (isMobile) {
+    if (navigator.bluetooth) {
       try {
-        service = await server.getPrimaryService(uuid);
-        if (service) break;
-      } catch (e) {}
+        const device = await navigator.bluetooth.requestDevice({
+          acceptAllDevices: true,
+          optionalServices: ['000018f0-0000-1000-8000-00805f9b34fb', 'e7810a71-73ae-499d-8c15-faa9aef0c3f2']
+        })
+
+        if (device.gatt) {
+          const server = await device.gatt.connect()
+          let service
+          try {
+            service = await server.getPrimaryService('000018f0-0000-1000-8000-00805f9b34fb')
+          } catch {
+            service = await server.getPrimaryService('e7810a71-73ae-499d-8c15-faa9aef0c3f2')
+          }
+          const characteristic = await service.getCharacteristic('00002af1-0000-1000-8000-00805f9b34fb')
+
+          const qrUrl = await QRCode.toDataURL(tiket.kode_tiket, { width: 200, margin: 1 })
+          const img = new Image()
+          img.src = qrUrl
+          await new Promise((resolve) => { img.onload = resolve })
+
+          const canvas = document.createElement('canvas')
+          canvas.width = img.width
+          canvas.height = img.height
+          const ctx = canvas.getContext('2d')
+          if (!ctx) throw new Error('Gagal membuat canvas')
+          ctx.drawImage(img, 0, 0)
+
+          const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height)
+          const widthBytes = Math.ceil(canvas.width / 8)
+          const height = canvas.height
+          let rasterData = `\x1D\x76\x30\x00${String.fromCharCode(widthBytes % 256, Math.floor(widthBytes / 256), height % 256, Math.floor(height / 256))}`
+
+          for (let y = 0; y < height; y++) {
+            for (let x = 0; x < widthBytes; x++) {
+              let byte = 0
+              for (let bit = 0; bit < 8; bit++) {
+                const pixelX = x * 8 + bit
+                if (pixelX < canvas.width) {
+                  const idx = (y * canvas.width + pixelX) * 4
+                  const r = imgData.data[idx]
+                  const g = imgData.data[idx + 1]
+                  const b = imgData.data[idx + 2]
+                  const isBlack = (r + g + b) / 3 < 128
+                  if (isBlack) byte |= (1 << (7 - bit))
+                }
+              }
+              rasterData += String.fromCharCode(byte)
+            }
+          }
+
+          let textData = ''
+          textData += '\x1B\x40'
+          textData += '\x1B\x33\x05'
+          textData += '\x1B\x4A\x0A'
+          textData += '\x1B\x61\x01'
+          textData += `${tiket.kode_tiket}\n`
+          textData += `${tiket.jadwal}\n`
+          textData += '\x1B\x61\x00'
+          textData += '--------------------------------\n'
+          textData += `Nama / Kursi : ${tiket.nama_penumpang} / ${tiket.kursi}\n`
+          textData += `Kapal        : ${tiket.kapal}\n`
+          const jamPotong = tiket.jam.substring(0, 5)
+          textData += `Tgl/Jam      : ${tiket.tanggal}/${jamPotong}\n`
+          textData += '--------------------------------\n'
+          textData += '\x1B\x61\x01'
+          textData += `TOTAL: Rp ${tiket.harga.toLocaleString('id-ID')}\n`
+          textData += '\x1B\x61\x00'
+          textData += '--------------------------------\n'
+          textData += 'Tunjukan e-tiket ini ke petugas saat boarding\n'
+          textData += '\x1B\x61\x01'
+
+          const encoder = new TextEncoder()
+          const textBytes = encoder.encode(textData)
+
+          for (let i = 0; i < textBytes.length; i += 20) {
+            const chunk = textBytes.slice(i, i + 20)
+            await characteristic.writeValue(chunk)
+            await new Promise(resolve => setTimeout(resolve, 50))
+          }
+
+          const imageBytes = new Uint8Array(rasterData.length)
+          for (let i = 0; i < rasterData.length; i++) {
+            imageBytes[i] = rasterData.charCodeAt(i)
+          }
+
+          for (let i = 0; i < imageBytes.length; i += 20) {
+            const chunk = imageBytes.slice(i, i + 20)
+            await characteristic.writeValue(chunk)
+            await new Promise(resolve => setTimeout(resolve, 50))
+          }
+
+          const endData = encoder.encode('\x1B\x4A\x46\x1D\x56\x00')
+          await characteristic.writeValue(endData)
+          device.gatt.disconnect()
+
+          return { success: true, message: '✅ Berhasil dicetak via Bluetooth!' }
+        }
+      } catch (err: any) {
+        console.error('Bluetooth gagal, fallback ke RawBT:', err)
+      }
     }
 
-    if (!service) throw new Error('Layanan printer tidak ditemukan.')
+    // Fallback ke RawBT
+    try {
+      const teks = formatTeksRawBT(tiket)
+      const encodedText = encodeURIComponent(teks)
+      window.location.href = `rawbt:${encodedText}`
+      return { success: true, message: '📱 Membuka RawBT...' }
+    } catch (err: any) {
+      return { success: false, message: '❌ Gagal membuka RawBT: ' + (err.message || 'Pastikan aplikasi RawBT terinstall.') }
+    }
+  }
 
-    const characteristics = await service.getCharacteristics();
-    let writeChar = null;
+  // =========================================================
+  // MODE 2: LAPTOP/PC -> PAKAI WEB SERIAL (KABEL)
+  // =========================================================
+  if (!('serial' in navigator)) {
+    return { success: false, message: '❌ Browser tidak mendukung Web Serial. Gunakan Chrome/Edge terbaru.' }
+  }
+
+  try {
+    const qrUrlForPrint = await QRCode.toDataURL(tiket.kode_tiket, { width: 200, margin: 1 })
     
-    for (const char of characteristics) {
-      if (char.properties.write || char.properties.writeWithoutResponse) {
-        writeChar = char;
-        break;
+    const img = new Image()
+    img.src = qrUrlForPrint
+    await new Promise((resolve) => { img.onload = resolve })
+    
+    const canvas = document.createElement('canvas')
+    canvas.width = img.width
+    canvas.height = img.height
+    const ctx = canvas.getContext('2d')
+    if (!ctx) throw new Error('Gagal membuat canvas')
+    ctx.drawImage(img, 0, 0)
+    
+    const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height)
+    const widthBytes = Math.ceil(canvas.width / 8)
+    const height = canvas.height
+    
+    let rasterData = `\x1D\x76\x30\x00${String.fromCharCode(widthBytes % 256, Math.floor(widthBytes / 256), height % 256, Math.floor(height / 256))}`
+    
+    for (let y = 0; y < height; y++) {
+      for (let x = 0; x < widthBytes; x++) {
+        let byte = 0
+        for (let bit = 0; bit < 8; bit++) {
+          const pixelX = x * 8 + bit
+          if (pixelX < canvas.width) {
+            const idx = (y * canvas.width + pixelX) * 4
+            const r = imgData.data[idx]
+            const g = imgData.data[idx + 1]
+            const b = imgData.data[idx + 2]
+            const isBlack = (r + g + b) / 3 < 128
+            if (isBlack) {
+              byte |= (1 << (7 - bit))
+            }
+          }
+        }
+        rasterData += String.fromCharCode(byte)
       }
     }
 
-    if (!writeChar) throw new Error('Karakteristik printer tidak ditemukan.')
+    const port = await (navigator as any).serial.requestPort()
+    await port.open({ baudRate: 9600 })
+    
+    const encoder = new TextEncoder()
+    const writer = port.writable.getWriter()
 
-    const printData = await generateEscPosCommand(tiket, qrUrl);
+    let textData = ''
+    textData += '\x1B\x40' 
+    textData += '\x1B\x33\x05' 
+    textData += '\x1B\x4A\x0A' 
+    textData += '\x1B\x61\x01' 
+    textData += `${tiket.kode_tiket}\n` 
+    textData += `${tiket.jadwal}\n`
+    textData += '\x1B\x61\x00' 
+    textData += '--------------------------------\n'
+    textData += `Nama / Kursi : ${tiket.nama_penumpang} / ${tiket.kursi}\n`
+    textData += `Kapal        : ${tiket.kapal}\n`
+    const jamPotong = tiket.jam.substring(0, 5) 
+    textData += `Tgl/Jam      : ${tiket.tanggal}/${jamPotong}\n` 
+    textData += '--------------------------------\n'
+    textData += '\x1B\x61\x01' 
+    textData += `TOTAL: Rp ${tiket.harga.toLocaleString('id-ID')}\n`
+    textData += '\x1B\x61\x00' 
+    textData += '--------------------------------\n'
+    textData += 'Tunjukan e-tiket ini ke petugas saat boarding\n'
 
-    const chunkSize = 128;
-    for (let i = 0; i < printData.length; i += chunkSize) {
-      const chunk = printData.slice(i, i + chunkSize);
-      if (writeChar.properties.writeWithoutResponse) {
-        await writeChar.writeValueWithoutResponse(chunk);
-      } else {
-        await writeChar.writeValue(chunk);
-      }
-      await new Promise(r => setTimeout(r, 150));
+    await writer.write(encoder.encode(textData))
+    await writer.write(encoder.encode('\x1B\x61\x01'))
+
+    const imageBytes = new Uint8Array(rasterData.length)
+    for (let i = 0; i < rasterData.length; i++) {
+      imageBytes[i] = rasterData.charCodeAt(i)
     }
+    await writer.write(imageBytes)
+    
+    const endData = '\x1B\x4A\x46\x1D\x56\x00' 
+    await writer.write(encoder.encode(endData))
 
-    return { success: true, message: '✅ Berhasil dicetak!' }
-
+    writer.releaseLock()
+    await port.close()
+    
+    return { success: true, message: '✅ Berhasil dikirim ke printer via kabel!' }
+    
   } catch (err: any) {
     console.error(err)
-    let pesanError = '❌ Gagal mencetak: ' + (err.message || 'Kesalahan tidak diketahui.')
-    if (err.name === 'NotFoundError') pesanError = '❌ Printer tidak dipilih.'
-    else if (err.name === 'SecurityError') pesanError = '❌ Akses Bluetooth ditolak.'
-    return { success: false, message: pesanError }
+    return { success: false, message: '❌ Gagal mencetak: ' + (err.message || 'Pastikan printer menyala dan port dipilih.') }
   }
 }

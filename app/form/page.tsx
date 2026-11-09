@@ -3,7 +3,6 @@
 import { useEffect, useState, Suspense } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
-import KtpScanner from '@/components/KtpScanner'
 
 type Kursi = {
   id: string
@@ -13,7 +12,6 @@ type Kursi = {
 
 type Penumpang = {
   nama: string
-  nik: string
 }
 
 const toTitleCase = (str: string) => {
@@ -35,7 +33,10 @@ function FormContent() {
 
   const [penumpangList, setPenumpangList] = useState<Penumpang[]>([])
   const [noHp, setNoHp] = useState('')
-  const [showScannerIndex, setShowScannerIndex] = useState<number | null>(null)
+
+  // State Balita
+  const [bawaBalita, setBawaBalita] = useState(false)
+  const [namaBalita, setNamaBalita] = useState('')
 
   const kursiIds = kursiIdStr ? kursiIdStr.split(',') : []
 
@@ -59,7 +60,7 @@ function FormContent() {
 
       if (jData && kData) {
         setJadwal(jData)
-        setPenumpangList(kursiIds.map(() => ({ nama: '', nik: '' })))
+        setPenumpangList(kursiIds.map(() => ({ nama: '' })))
         setKursiList(kData)
       }
       setLoading(false)
@@ -67,16 +68,6 @@ function FormContent() {
 
     fetchData()
   }, [jadwalId, kursiIdStr, router])
-
-  const handleKtpScanSuccess = (nama: string, nik: string) => {
-    if (showScannerIndex !== null) {
-      const baru = [...penumpangList]
-      if (nama) baru[showScannerIndex].nama = nama
-      if (nik) baru[showScannerIndex].nik = nik
-      setPenumpangList(baru)
-      setShowScannerIndex(null)
-    }
-  }
 
   const updatePenumpang = (idx: number, field: keyof Penumpang, value: string) => {
     const baru = [...penumpangList]
@@ -89,10 +80,15 @@ function FormContent() {
     if (!jadwal || kursiList.length === 0) return
     
     for (let i = 0; i < penumpangList.length; i++) {
-      if (!penumpangList[i].nama || penumpangList[i].nik.length !== 16) {
-        setError(`Data penumpang #${i + 1} belum lengkap (Nama & NIK 16 digit).`)
+      if (!penumpangList[i].nama) {
+        setError(`Nama penumpang #${i + 1} wajib diisi.`)
         return
       }
+    }
+
+    if (bawaBalita && !namaBalita) {
+      setError('Nama balita wajib diisi.')
+      return
     }
     
     setProses(true)
@@ -103,19 +99,15 @@ function FormContent() {
       const waktuSekarang = new Date().toISOString()
       const waktuExpired = new Date(Date.now() + 10 * 60 * 1000).toISOString()
 
+      // Data Penumpang Dewasa
       const pesananPayload = penumpangList.map((p, idx) => {
-        let maskedNik = p.nik
-        if (p.nik.length === 16) {
-          maskedNik = p.nik.substring(0, 4) + '**********' + p.nik.substring(12)
-        }
-
         const namaRapi = toTitleCase(p.nama)
 
         return {
           jadwal_id: jadwalId,
           kursi_id: kursiList[idx].id,
           nama_penumpang: namaRapi,
-          nik: maskedNik,
+          nik: '-',
           nomor_hp: noHp,
           kanal: 'online',
           status: 'pending',
@@ -123,8 +115,27 @@ function FormContent() {
           grup_transaksi_id: grupTransaksiId,
           waktu_pesan: waktuSekarang,
           waktu_expired: waktuExpired,
+          is_balita: false,
         }
       })
+
+      // Data Balita
+      if (bawaBalita && namaBalita) {
+        pesananPayload.push({
+          jadwal_id: jadwalId,
+          kursi_id: null as any, // Tanpa kursi
+          nama_penumpang: toTitleCase(namaBalita),
+          nik: '-',
+          nomor_hp: noHp,
+          kanal: 'online',
+          status: 'pending',
+          kode_tiket: 'BALITA-' + Math.random().toString(36).substring(2, 8).toUpperCase(),
+          grup_transaksi_id: grupTransaksiId,
+          waktu_pesan: waktuSekarang,
+          waktu_expired: waktuExpired,
+          is_balita: true,
+        })
+      }
 
       const { data: insertedPesanan, error: errPesanan } = await supabase
         .from('pesanan')
@@ -166,22 +177,7 @@ function FormContent() {
                 <p className="font-bold text-gray-900">
                   Penumpang #{idx + 1}
                 </p>
-                {showScannerIndex !== idx && (
-                  <button
-                    type="button"
-                    onClick={() => setShowScannerIndex(idx)}
-                    className="text-xs bg-blue-100 text-blue-700 px-3 py-1 rounded hover:bg-blue-200 font-medium"
-                  >
-                    📸 Scan KTP
-                  </button>
-                )}
               </div>
-
-              {showScannerIndex === idx && (
-                <div className="mb-4">
-                  <KtpScanner onScanSuccess={handleKtpScanSuccess} />
-                </div>
-              )}
 
               <div className="space-y-3">
                 <div>
@@ -195,21 +191,38 @@ function FormContent() {
                     placeholder="Sesuai KTP"
                   />
                 </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">NIK (16 Digit)</label>
-                  <input
-                    type="text"
-                    required
-                    maxLength={16}
-                    className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm text-gray-900 focus:ring-blue-500 focus:border-blue-500"
-                    value={p.nik}
-                    onChange={(e) => updatePenumpang(idx, 'nik', e.target.value.replace(/\D/g, ''))}
-                    placeholder="16 digit angka"
-                  />
-                </div>
               </div>
             </div>
           ))}
+
+          {/* OPSI BALITA */}
+          <div className="bg-orange-50 p-3 rounded-md border border-orange-200">
+            <div className="flex items-center gap-2 mb-2">
+              <input 
+                type="checkbox" 
+                id="bawaBalita"
+                checked={bawaBalita} 
+                onChange={(e) => setBawaBalita(e.target.checked)} 
+                className="w-4 h-4 text-orange-600 rounded focus:ring-orange-500"
+              />
+              <label htmlFor="bawaBalita" className="text-sm font-bold text-orange-900 cursor-pointer">
+                Bawa Balita di bawah 4 tahun? (Gratis)
+              </label>
+            </div>
+            {bawaBalita && (
+              <div>
+                <label className="block mb-1 text-xs font-medium text-orange-900">Nama Balita</label>
+                <input 
+                  type="text" 
+                  value={namaBalita} 
+                  onChange={(e) => setNamaBalita(e.target.value)} 
+                  className="w-full border border-orange-300 rounded px-3 py-1.5 text-sm text-gray-900" 
+                  placeholder="Nama anak" 
+                />
+                <p className="text-xs text-orange-700 mt-1 italic">*Balita tidak memerlukan kursi dan tidak dikenakan biaya.</p>
+              </div>
+            )}
+          </div>
 
           <div className="border-t pt-4">
             <label className="block text-sm font-medium text-gray-700">Nomor HP (Aktif)</label>

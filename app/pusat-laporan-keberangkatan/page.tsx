@@ -16,6 +16,7 @@ type RincianPenumpang = {
   nama_kapal: string
   nama_kapten: string
   rute: string
+  is_balita: boolean
 }
 
 type LaporanPerJam = {
@@ -87,7 +88,7 @@ function PusatLaporanContent() {
     }
 
     const { data, error } = await supabase.from('pesanan').select(`
-        id, nama_penumpang, kode_tiket, kanal, status, status_boarding, waktu_boarding,
+        id, nama_penumpang, kode_tiket, kanal, status, status_boarding, waktu_boarding, is_balita,
         jadwal:jadwal_id (rute_asal, rute_tujuan, harga, tanggal, jam_berangkat, status_jadwal, kapal_id),
         kursi:kursi_id (nomor_kursi)
       `).eq('status', 'paid').eq('jadwal.tanggal', tanggal)
@@ -126,7 +127,7 @@ function PusatLaporanContent() {
       group.total_pendapatan += item.jadwal.harga || 0
       
       group.rincian.push({
-        id: item.id, nama: item.nama_penumpang, kursi: item.kursi?.nomor_kursi || '-', kanal: item.kanal || 'loket', kode_tiket: item.kode_tiket, harga: item.jadwal.harga || 0, status_boarding: item.status_boarding || 'belum', waktu_boarding: item.waktu_boarding || null, nama_kapal: group.nama_kapal, nama_kapten: group.nama_kapten, rute: `${item.jadwal.rute_asal} - ${item.jadwal.rute_tujuan}`
+        id: item.id, nama: item.nama_penumpang, kursi: item.kursi?.nomor_kursi || '-', kanal: item.kanal || 'loket', kode_tiket: item.kode_tiket, harga: item.jadwal.harga || 0, status_boarding: item.status_boarding || 'belum', waktu_boarding: item.waktu_boarding || null, nama_kapal: group.nama_kapal, nama_kapten: group.nama_kapten, rute: `${item.jadwal.rute_asal} - ${item.jadwal.rute_tujuan}`, is_balita: item.is_balita || false
       })
     })
     setLaporan(Object.values(groupedByJam).sort((a, b) => a.jam.localeCompare(b.jam)))
@@ -181,13 +182,8 @@ function PusatLaporanContent() {
             height: auto !important;
             overflow: visible !important;
           }
-          /* Sembunyikan semua elemen */
           body * { visibility: hidden; }
-          
-          /* Tampilkan HANYA print container */
           .print-container, .print-container * { visibility: visible; }
-          
-          /* Posisi print container nempel atas kiri */
           .print-container {
             position: absolute;
             left: 0;
@@ -201,7 +197,6 @@ function PusatLaporanContent() {
         }
       `}} />
 
-      {/* ================= TAMPILAN UTAMA (SCREEN ONLY) ================= */}
       <div className="screen-only h-[100dvh] w-full bg-gray-50 flex flex-col overflow-hidden">
         
         {mode === 'menu' && (
@@ -296,6 +291,7 @@ function PusatLaporanContent() {
                                   l.rincian.map((p, idx) => (
                                     <div key={p.id} className="text-[11px] p-1 text-gray-800 border-b border-gray-100 last:border-0">
                                       {idx + 1}. {p.nama} / {p.kursi} <span className="text-gray-500">({potongKode(p.kode_tiket)})</span>
+                                      {p.is_balita && <span className="text-[9px] text-orange-600 ml-1">(Balita)</span>}
                                     </div>
                                   ))
                                 )}
@@ -379,7 +375,10 @@ function PusatLaporanContent() {
                           rincianAktif && urutkanBerdasarkanScan(rincianAktif.rincian).map((p, idx) => (
                             <tr key={p.id} className="hover:bg-gray-50 text-center text-gray-900">
                               <td className="px-2 py-3 text-[11px]">{idx + 1}</td>
-                              <td className="px-2 py-3 text-[11px] font-bold text-left">{p.nama} / {p.kursi}</td>
+                              <td className="px-2 py-3 text-[11px] font-bold text-left">
+                                {p.nama} / {p.kursi}
+                                {p.is_balita && <span className="text-[9px] text-orange-600 ml-1">(Balita)</span>}
+                              </td>
                               <td className="px-2 py-3 text-[10px]">
                                 {p.waktu_boarding ? new Date(p.waktu_boarding).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) : '-'}
                               </td>
@@ -404,7 +403,6 @@ function PusatLaporanContent() {
         )}
       </div>
 
-      {/* ================= AREA KHUSUS PRINT (TERPISAH TOTAL DARI SCREEN) ================= */}
       {rincianAktif && (
         <div className="print-container" style={{ display: 'none' }}>
           <style>{`
@@ -434,7 +432,10 @@ function PusatLaporanContent() {
               {urutkanBerdasarkanScan(rincianAktif.rincian).map((p, idx) => (
                 <tr key={p.id} className="text-gray-900 text-center">
                   <td className="border border-gray-400 px-2 py-1">{idx + 1}</td>
-                  <td className="border border-gray-400 px-2 py-1 font-bold text-left">{p.nama} / {p.kursi}</td>
+                  <td className="border border-gray-400 px-2 py-1 font-bold text-left">
+                    {p.nama} / {p.kursi}
+                    {p.is_balita && <span className="text-xs text-orange-600 ml-1">(Balita)</span>}
+                  </td>
                   <td className="border border-gray-400 px-2 py-1">
                     {p.waktu_boarding ? new Date(p.waktu_boarding).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) : '-'}
                   </td>

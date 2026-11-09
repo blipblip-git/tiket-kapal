@@ -21,9 +21,7 @@ function KursiContent() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [dipilih, setDipilih] = useState<string[]>([])
-  const [sisaWaktu, setSisaWaktu] = useState<number>(30)
 
-  // Fungsi ambil data kursi
   const fetchKursi = async () => {
     if (!jadwalId) return
 
@@ -55,7 +53,6 @@ function KursiContent() {
         return
       }
 
-      // Panggil pembersih pesanan expired (10 menit)
       await bersihkanPesananExpired()
       await fetchKursi()
 
@@ -81,80 +78,21 @@ function KursiContent() {
     init()
   }, [jadwalId])
 
-  // TIMER FASE 1: HOLD 30 DETIK
-  useEffect(() => {
-    let interval: NodeJS.Timeout
-
-    if (dipilih.length > 0) {
-      setSisaWaktu(30) // Reset timer ke 30 detik saat pilih kursi
-      
-      interval = setInterval(() => {
-        setSisaWaktu((prev) => {
-          if (prev <= 1) {
-            clearInterval(interval)
-            lepasKursi()
-            return 0
-          }
-          return prev - 1
-        })
-      }, 1000)
-    }
-
-    return () => clearInterval(interval)
-  }, [dipilih])
-
-  // Fungsi lepas kursi jika timer habis
-  const lepasKursi = async () => {
-    if (dipilih.length > 0) {
-      await supabase
-        .from('kursi')
-        .update({ status: 'kosong', waktu_hold: null })
-        .in('id', dipilih)
-      
-      setDipilih([])
-      await fetchKursi()
-      alert('Waktu pemilihan kursi habis (30 detik). Silakan pilih ulang.')
-    }
-  }
-
-  // Fungsi saat klik kursi
-  const toggleKursi = async (id: string) => {
+  // FUNGSI KLIK KURSI: HANYA MENYIMPAN DI STATE, TIDAK NGUNCI DATABASE
+  const toggleKursi = (id: string) => {
     if (dipilih.includes(id)) {
-      // Batal pilih
-      const baru = dipilih.filter((k) => k !== id)
-      setDipilih(baru)
-      await supabase.from('kursi').update({ status: 'kosong', waktu_hold: null }).eq('id', id)
+      setDipilih(dipilih.filter((k) => k !== id))
     } else {
       if (dipilih.length >= 30) {
         alert('Maksimal 30 kursi per pembelian')
         return
       }
-      
-      // Hold kursi di database
-      await supabase
-        .from('kursi')
-        .update({ 
-          status: 'hold', 
-          waktu_hold: new Date().toISOString() 
-        })
-        .eq('id', id)
-
       setDipilih([...dipilih, id])
-      await fetchKursi()
     }
   }
 
   function renderKursiButton(k: Kursi) {
-    // Cek apakah kursi masih di-hold oleh orang lain dan sudah lewat 30 detik
-    let isHoldValid = false
-    if (k.status === 'hold' && k.waktu_hold) {
-      const selisihDetik = (new Date().getTime() - new Date(k.waktu_hold).getTime()) / 1000
-      if (selisihDetik < 30) {
-        isHoldValid = true
-      }
-    }
-
-    const terisi = k.status === 'terisi' || isHoldValid
+    const terisi = k.status === 'terisi' || k.status === 'hold'
     const terpilih = dipilih.includes(k.id)
 
     return (
@@ -255,7 +193,7 @@ function KursiContent() {
         </div>
       </div>
 
-      {/* FOOTER (Tombol Lanjut & Timer - Selalu Tampil) */}
+      {/* FOOTER (Tombol Lanjut - Tanpa Timer) */}
       <div className="flex-shrink-0 p-3 md:p-6 bg-white border-t border-gray-200 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)] z-10">
         <div className="max-w-md mx-auto">
           
@@ -268,11 +206,6 @@ function KursiContent() {
                   : '-'}
               </span>
             </p>
-            {dipilih.length > 0 && (
-              <p className="text-xs md:text-sm text-red-600 font-bold bg-red-50 px-2 py-1 rounded">
-                ⏳ {sisaWaktu} dtk
-              </p>
-            )}
           </div>
 
           <a

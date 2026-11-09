@@ -11,7 +11,6 @@ type HasilPencarian = {
   id: string
   nama_penumpang: string
   kode_tiket: string
-  nik: string
   kanal: string
   kursi: string
   jadwal: string
@@ -58,7 +57,7 @@ function CetakUlangContent() {
     const { data, error } = await supabase
       .from('pesanan')
       .select(`
-        id, nama_penumpang, kode_tiket, nik, kanal,
+        id, nama_penumpang, kode_tiket, kanal,
         jadwal:jadwal_id (rute_asal, rute_tujuan, tanggal, jam_berangkat, harga, kapal:kapal_id(nama)),
         kursi:kursi_id (nomor_kursi)
       `)
@@ -76,7 +75,6 @@ function CetakUlangContent() {
         id: item.id,
         nama_penumpang: item.nama_penumpang,
         kode_tiket: item.kode_tiket,
-        nik: item.nik,
         kanal: item.kanal,
         kursi: item.kursi?.nomor_kursi || '-',
         jadwal: `${item.jadwal?.rute_asal} - ${item.jadwal?.rute_tujuan}`,
@@ -118,20 +116,16 @@ function CetakUlangContent() {
     }
   }
 
-  // === FUNGSI FINAL: PAKSA LAPTOP PAKAI PRINT, HP PAKAI BLUETOOTH ===
   async function handlePrintThermal() {
     if (!detailPilih) return
     
-    // Deteksi perangkat
     const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)
 
     if (isMobile) {
-      // --- JALUR HP: Pakai Web Bluetooth ---
       setPesan('Menghubungkan ke printer Bluetooth...')
       const result = await cetakTiketThermal(detailPilih)
       setPesan(result.message)
     } else {
-      // --- JALUR LAPTOP: Paksa panggil Window Print ---
       setPesan('Menyiapkan format cetak thermal untuk Laptop...')
       setTimeout(() => {
         window.print()
@@ -164,7 +158,6 @@ function CetakUlangContent() {
           body { margin: 0; padding: 0; background: white; -webkit-print-color-adjust: exact; }
           .print-hidden { display: none !important; }
           
-          /* Trik pencetakan yang aman untuk Chrome Desktop */
           body * { visibility: hidden; }
           #area-tiket-ulang, #area-tiket-ulang * { visibility: visible; }
           
@@ -181,7 +174,6 @@ function CetakUlangContent() {
         }
       `}} />
 
-      {/* HEADER (Fixed) */}
       <div className="flex-shrink-0 bg-white shadow-sm z-10 px-4 py-3 md:py-4 print-hidden">
         <div className="max-w-md mx-auto flex justify-between items-center">
           <h1 className="text-xl font-bold text-gray-900 leading-tight">Cetak Ulang Tiket</h1>
@@ -191,11 +183,9 @@ function CetakUlangContent() {
         </div>
       </div>
 
-      {/* AREA SCROLLABLE */}
       <div className="flex-1 overflow-y-auto w-full p-4 print:hidden">
         <div className="max-w-md mx-auto space-y-4">
           
-          {/* KARTU PENCARIAN */}
           <div className="bg-white p-3 rounded-lg shadow-sm border border-gray-200">
             <form onSubmit={handleCari} className="flex gap-2">
               <input
@@ -212,7 +202,6 @@ function CetakUlangContent() {
             {pesan && <p className="text-xs mt-2 text-blue-600 font-medium">{pesan}</p>}
           </div>
 
-          {/* HASIL PENCARIAN */}
           {hasil.length > 0 && !detailPilih && (
             <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
               <div className="divide-y divide-gray-100">
@@ -232,7 +221,6 @@ function CetakUlangContent() {
             </div>
           )}
 
-          {/* DETAIL TIKET */}
           {detailPilih && (
             <div className="flex flex-col items-center">
               <div className="w-full flex justify-between mb-3">
@@ -257,7 +245,6 @@ function CetakUlangContent() {
                 )}
               </div>
 
-              {/* Kartu E-Tiket */}
               <div id="area-tiket-ulang" className="bg-white rounded-lg shadow-md p-4 md:p-6 text-gray-900 w-full border border-gray-200 print:shadow-none print:p-0 print:border-none">
                 <div className="text-center mb-3">
                   <p className="text-[10px] text-gray-500 uppercase tracking-wide">Kode Tiket</p>
@@ -281,10 +268,7 @@ function CetakUlangContent() {
                     <span className="text-gray-500">Nama</span>
                     <span className="font-bold text-gray-900 text-right">{detailPilih.nama_penumpang}</span>
                   </div>
-                  <div className="flex justify-between">
-                    <span className="text-gray-500">NIK</span>
-                    <span className="font-medium text-gray-900">{detailPilih.nik}</span>
-                  </div>
+                  {/* BARIS NIK DIHAPUS DI SINI */}
                   <div className="flex justify-between">
                     <span className="text-gray-500">Kapal</span>
                     <span className="font-medium text-gray-900 text-right">{detailPilih.kapal}</span>

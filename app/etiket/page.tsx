@@ -6,7 +6,7 @@ import { supabase, getOperatorSession } from '@/lib/supabase'
 import QRCode from 'qrcode'
 import { toPng } from 'html-to-image'
 import { jsPDF } from 'jspdf'
-import { cetakTiketThermal } from '@/lib/thermalPrinter' // <-- Import fungsi printer
+import { cetakTiketThermal } from '@/lib/thermalPrinter'
 
 type Pesanan = {
   id: string
@@ -21,6 +21,7 @@ type Pesanan = {
   petugas_jual: string | null
   metode_bayar?: string
   nama_penjual_asli?: string
+  is_balita: boolean
 }
 
 type Detail = {
@@ -270,30 +271,18 @@ function EtiketContent() {
     }
   }
 
-  // === FUNGSI PINTAR: DETEKSI LAPTOP vs HP ===
   async function handleCetakThermal(t: TiketLengkap) {
-    // 1. Deteksi apakah user pakai HP/Tablet atau Laptop/PC
-    const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)
-
-    if (isMobile) {
-      // --- JALUR HP: Pakai Web Bluetooth ---
-      setPesanShare('Menghubungkan ke printer Bluetooth...')
-      const result = await cetakTiketThermal(t.pesanan)
-      setPesanShare(result.message)
-    } else {
-      // --- JALUR LAPTOP: Pakai Window Print (Driver Laptop) ---
-      setPesanShare('Menyiapkan format cetak thermal untuk Laptop...')
-      
-      const index = tiketList.findIndex((item) => item.pesanan.id === t.pesanan.id)
-      if (index !== -1) {
-        setActiveTiketIndex(index)
-      }
-
-      setTimeout(() => {
-        window.print()
-        setPesanShare('')
-      }, 500)
-    }
+    setPesanShare('Menghubungkan ke printer...')
+    const result = await cetakTiketThermal({
+      ...t.pesanan,
+      jadwal: `${detail?.rute_asal} - ${detail?.rute_tujuan}`,
+      kapal: detail?.nama_kapal || '-',
+      jam: detail?.jam_berangkat || '00:00',
+      tanggal: detail?.tanggal || '-',
+      harga: t.pesanan.is_balita ? 0 : (detail?.harga || 0),
+      kursi: t.nomor_kursi,
+    })
+    setPesanShare(result.message)
   }
 
   async function handleKembali() {
@@ -326,6 +315,8 @@ function EtiketContent() {
     let labelMetode = 'Cash';
     if (tiket.pesanan.metode_bayar === 'simulasi_online' || tiket.pesanan.kanal === 'online') labelMetode = 'Qris';
 
+    const hargaTampil = tiket.pesanan.is_balita ? 0 : (detail?.harga || 0)
+
     return (
       <div className="thermal-card p-3 md:p-6 text-gray-900 bg-white h-full flex flex-col justify-between">
         <div className="text-center mb-2 md:mb-4">
@@ -343,11 +334,10 @@ function EtiketContent() {
         <div className="text-[11px] md:text-sm space-y-1 md:space-y-2 thermal-text">
           <div className="flex justify-between">
             <span className="text-gray-500">Nama / Kursi</span>
-            <span className="font-bold text-gray-900 text-right">{tiket.pesanan.nama_penumpang} / {tiket.nomor_kursi}</span>
-          </div>
-          <div className="flex justify-between">
-            <span className="text-gray-500">NIK</span>
-            <span className="font-medium text-gray-900">{tiket.pesanan.nik.replace(/\*/g, '')}</span>
+            <span className="font-bold text-gray-900 text-right">
+              {tiket.pesanan.nama_penumpang} / {tiket.nomor_kursi}
+              {tiket.pesanan.is_balita && <span className="text-[9px] text-orange-600 ml-1">(Balita)</span>}
+            </span>
           </div>
           <div className="flex justify-between">
             <span className="text-gray-500">Kapal</span>
@@ -363,7 +353,7 @@ function EtiketContent() {
         
         <div className="flex justify-between items-center thermal-text">
           <span className="font-bold text-gray-900 text-center w-full block text-xs md:text-sm">
-            {labelMetode} TOTAL: Rp {detail?.harga.toLocaleString('id-ID')}
+            {tiket.pesanan.is_balita ? 'GRATIS (Balita)' : `${labelMetode} TOTAL: Rp ${hargaTampil.toLocaleString('id-ID')}`}
           </span>
         </div>
         
@@ -378,7 +368,6 @@ function EtiketContent() {
   return (
     <div className="h-[100dvh] w-full bg-gray-100 flex flex-col overflow-hidden">
       
-      {/* CSS KHUSUS UNTUK PRINT THERMAL 58mm (Dipakai saat di Laptop) */}
       <style dangerouslySetInnerHTML={{__html: `
         @media print {
           @page { 
@@ -413,7 +402,6 @@ function EtiketContent() {
         }
       `}} />
 
-      {/* HEADER (Fixed) */}
       <div className="flex-shrink-0 bg-white shadow-sm z-10 px-3 py-2 md:px-6 md:py-4 print-hidden">
         <div className="max-w-md mx-auto flex justify-between items-center">
           <button onClick={handleKembali} className="text-blue-600 text-[11px] md:text-sm hover:underline font-medium bg-gray-50 px-2 py-1.5 md:px-3 md:py-1.5 rounded border border-gray-200">
@@ -426,7 +414,6 @@ function EtiketContent() {
         </div>
       </div>
 
-      {/* AREA TENGAH (Scrollable) */}
       <div className="flex-1 overflow-y-auto w-full">
         <div className="max-w-md mx-auto p-3 md:p-4 space-y-3 md:space-y-6 pb-4">
           
@@ -434,7 +421,6 @@ function EtiketContent() {
             <p className="text-[10px] md:text-sm text-center text-gray-900 mb-2 bg-yellow-100 p-2 rounded print-hidden">{pesanShare}</p>
           )}
 
-          {/* Navigasi Tab jika tiket lebih dari 1 */}
           {tiketList.length > 1 && (
             <div className="flex overflow-x-auto gap-1 pb-1 mb-2 print-hidden">
               {tiketList.map((_, i) => (
@@ -470,19 +456,16 @@ function EtiketContent() {
         </div>
       </div>
 
-      {/* FOOTER TOMBOL AKSI (Fixed di Bawah) */}
       <div className="flex-shrink-0 bg-white border-t border-gray-200 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)] z-20 print-hidden relative">
         <div className="max-w-md mx-auto p-3 md:p-4 space-y-2">
           
           <div className="flex gap-2">
-            {!isOnline && (
-              <button
-                onClick={() => handleCetakThermal(t)}
-                className="w-full bg-orange-500 text-white py-2 md:py-2.5 rounded-md hover:bg-orange-600 text-[11px] md:text-sm font-bold shadow-sm transition-colors"
-              >
-                🖨️ Cetak Thermal
-              </button>
-            )}
+            <button
+              onClick={() => handleCetakThermal(t)}
+              className="w-full bg-orange-500 text-white py-2 md:py-2.5 rounded-md hover:bg-orange-600 text-[11px] md:text-sm font-bold shadow-sm transition-colors"
+            >
+              🖨️ Cetak Thermal
+            </button>
             
             <button
               onClick={() => simpanPdfSatu(t.pesanan.id, t.pesanan.nama_penumpang)}

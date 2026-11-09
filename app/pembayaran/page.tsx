@@ -10,7 +10,8 @@ type PesananItem = {
   kode_tiket: string
   status: string
   jadwal_id: string
-  kursi_id: string
+  kursi_id: string | null
+  is_balita: boolean
 }
 
 type Detail = {
@@ -46,7 +47,7 @@ function PembayaranContent() {
       try {
         const { data: p, error: errP } = await supabase
           .from('pesanan')
-          .select('id, nama_penumpang, kode_tiket, status, jadwal_id, kursi_id')
+          .select('id, nama_penumpang, kode_tiket, status, jadwal_id, kursi_id, is_balita')
           .in('id', pesananIds)
 
         if (errP) throw errP
@@ -86,7 +87,7 @@ function PembayaranContent() {
   async function handleBatal() {
     if (pesananList.length === 0) return
     const ids = pesananList.map(p => p.id)
-    const kursiIds = pesananList.map(p => p.kursi_id).filter(Boolean)
+    const kursiIds = pesananList.map(p => p.kursi_id).filter(Boolean) as string[]
 
     await supabase.from('pesanan').delete().in('id', ids)
     
@@ -112,7 +113,6 @@ function PembayaranContent() {
 
     try {
       console.log('1. Mulai update pesanan', ids)
-      // 1. Update status pesanan
       const { error: errP } = await supabase
         .from('pesanan')
         .update({
@@ -125,20 +125,19 @@ function PembayaranContent() {
       if (errP) throw new Error('Gagal update pesanan: ' + errP.message)
       console.log('2. Selesai update pesanan')
 
-      console.log('3. Mulai update kursi')
-      // 2. Update status kursi
-      const kursiIds = pesananList.map((p) => p.kursi_id)
-      const { error: errK } = await supabase
-        .from('kursi')
-        .update({ status: 'terisi' })
-        .in('id', kursiIds)
+      const kursiIds = pesananList.map((p) => p.kursi_id).filter(Boolean) as string[]
+      if (kursiIds.length > 0) {
+        const { error: errK } = await supabase
+          .from('kursi')
+          .update({ status: 'terisi', waktu_hold: null })
+          .in('id', kursiIds)
 
-      if (errK) throw new Error('Gagal update kursi: ' + errK.message)
+        if (errK) throw new Error('Gagal update kursi: ' + errK.message)
+      }
       console.log('4. Selesai update kursi')
 
-      console.log('5. Mulai insert pembayaran')
-      // 3. Simpan data pembayaran
-      const pembayaranData = pesananList.map((p) => ({
+      const pesananDewasa = pesananList.filter(p => !p.is_balita)
+      const pembayaranData = pesananDewasa.map((p) => ({
         pesanan_id: p.id,
         metode: 'simulasi_online',
         jumlah: detail.harga,
@@ -146,12 +145,12 @@ function PembayaranContent() {
         waktu_bayar: waktuBayar,
       }))
       
-      const { error: errPay } = await supabase.from('pembayaran').insert(pembayaranData)
-      if (errPay) throw new Error('Gagal simpan pembayaran: ' + errPay.message)
+      if (pembayaranData.length > 0) {
+        const { error: errPay } = await supabase.from('pembayaran').insert(pembayaranData)
+        if (errPay) throw new Error('Gagal simpan pembayaran: ' + errPay.message)
+      }
       console.log('6. Selesai insert pembayaran')
 
-      console.log('7. Pindah ke etiket')
-      // 4. Pindah ke E-Tiket jika semua sukses
       router.push(`/etiket?pesanan=${ids.join(',')}`)
     } catch (err: any) {
       console.error('Error di handleBayarOnline:', err)
@@ -164,23 +163,21 @@ function PembayaranContent() {
   if (error && !detail) return <p className="p-6 text-center text-red-600 font-bold mt-10">Error: {error}</p>
   if (pesananList.length === 0 || !detail) return <p className="p-6 text-center text-gray-900 mt-10">Data pesanan tidak lengkap.</p>
 
-  const totalHarga = detail.harga * pesananList.length
+  const jumlahDewasa = pesananList.filter(p => !p.is_balita).length
+  const totalHarga = detail.harga * jumlahDewasa
 
   return (
     <div className="h-[100dvh] w-full bg-gray-100 flex flex-col overflow-hidden">
       
-      {/* HEADER (Fixed) */}
       <div className="flex-shrink-0 bg-white shadow-sm z-10 px-4 py-3 md:py-4">
         <div className="max-w-md mx-auto">
           <h1 className="text-xl md:text-2xl font-bold text-gray-900">Pembayaran</h1>
         </div>
       </div>
 
-      {/* AREA TENGAH (Bisa Scroll jika layar sangat mini, tapi tidak akan menggeser tombol bawah) */}
       <div className="flex-1 overflow-y-auto w-full">
         <div className="max-w-md mx-auto p-3 md:p-4 space-y-3 md:space-y-4 pb-6">
           
-          {/* KOTAK DETAIL PESANAN */}
           <div className="bg-white p-4 md:p-5 rounded-lg shadow-sm text-gray-900 border border-gray-200">
             <h2 className="font-bold mb-2 text-sm md:text-base text-gray-900">Detail Pesanan</h2>
             <div className="text-[11px] md:text-sm space-y-1.5 md:space-y-2 mb-3">
@@ -204,7 +201,10 @@ function PembayaranContent() {
             <div className="space-y-1 mb-2 md:mb-3 max-h-[100px] md:max-h-[150px] overflow-y-auto pr-1">
               {pesananList.map((p, idx) => (
                 <div key={p.id} className="flex justify-between text-[11px] md:text-sm">
-                  <span className="text-gray-900 truncate pr-2">{idx + 1}. {p.nama_penumpang}</span>
+                  <span className="text-gray-900 truncate pr-2">
+                    {idx + 1}. {p.nama_penumpang}
+                    {p.is_balita && <span className="text-[9px] text-orange-600 ml-1">(Balita)</span>}
+                  </span>
                   <span className="text-[10px] md:text-xs text-gray-500 whitespace-nowrap">{p.kode_tiket}</span>
                 </div>
               ))}
@@ -218,7 +218,6 @@ function PembayaranContent() {
             </div>
           </div>
 
-          {/* KOTAK QR / METODE */}
           {step === 'pilih' && (
             <div className="bg-white p-4 md:p-5 rounded-lg shadow-sm border border-gray-200">
               <h2 className="font-bold text-gray-900 mb-3 text-sm md:text-base">Pilih Metode Pembayaran</h2>
@@ -238,7 +237,6 @@ function PembayaranContent() {
             <div className="bg-white p-4 md:p-5 rounded-lg shadow-sm text-center text-gray-900 border border-gray-200">
               <p className="text-xs md:text-sm text-gray-600 mb-2 md:mb-3">Scan QR ini untuk membayar (mode simulasi)</p>
               
-              {/* QR Box Responsif biar gak makan tempat di HP */}
               <div className="bg-gray-50 w-32 h-32 md:w-48 md:h-48 mx-auto flex items-center justify-center rounded-lg border-2 border-dashed border-gray-300">
                 <span className="text-gray-400 text-xs md:text-sm font-medium text-center">QR Code<br />(simulasi)</span>
               </div>
@@ -254,7 +252,6 @@ function PembayaranContent() {
         </div>
       </div>
 
-      {/* FOOTER TOMBOL AKSI (Selalu diam di bawah) */}
       <div className="flex-shrink-0 bg-white border-t border-gray-200 p-3 md:p-4 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)] z-10">
         <div className="max-w-md mx-auto space-y-2">
           
@@ -265,7 +262,7 @@ function PembayaranContent() {
                 disabled={sedangBayar}
                 className="w-full bg-green-600 text-white py-3 rounded-lg hover:bg-green-700 disabled:bg-gray-400 font-bold text-sm md:text-base shadow-md transition-colors"
               >
-                {sedangBayar ? 'Memproses...' : `✓ Saya Sudah Bayar (${pesananList.length} tiket)`}
+                {sedangBayar ? 'Memproses...' : `✓ Saya Sudah Bayar (${jumlahDewasa} tiket)`}
               </button>
 
               <button
