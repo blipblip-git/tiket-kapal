@@ -82,9 +82,6 @@ export async function cetakTiketThermal(tiket: any) {
       textData += '\x1B\x61\x00' 
       textData += '--------------------------------\n'
       textData += `Nama / Kursi : ${tiket.nama_penumpang} / ${tiket.kursi}\n`
-      // PERBAIKAN: Cek jika NIK undefined atau kosong
-      const nikRapi = tiket.nik ? tiket.nik.replace(/\*/g, '') : '-'
-      textData += `NIK          : ${nikRapi}\n`
       textData += `Kapal        : ${tiket.kapal}\n`
       const jamPotong = tiket.jam.substring(0, 5) 
       textData += `Tgl/Jam      : ${tiket.tanggal}/${jamPotong}\n` 
@@ -115,7 +112,8 @@ export async function cetakTiketThermal(tiket: any) {
       }
       await sendData(imageBytes)
       
-      const endData = '\x1B\x4A\x96\x1D\x56\x00' 
+      // PERBAIKAN: Maju 250 dots (0xFA) sebelum potong kertas
+      const endData = '\x1B\x4A\xFA\x1D\x56\x00' 
       await sendData(encoder.encode(endData))
 
       device.gatt.disconnect()
@@ -187,9 +185,6 @@ export async function cetakTiketThermal(tiket: any) {
     textData += '\x1B\x61\x00' 
     textData += '--------------------------------\n'
     textData += `Nama / Kursi : ${tiket.nama_penumpang} / ${tiket.kursi}\n`
-    // PERBAIKAN: Cek jika NIK undefined atau kosong
-    const nikRapi = tiket.nik ? tiket.nik.replace(/\*/g, '') : '-'
-    textData += `NIK          : ${nikRapi}\n`
     textData += `Kapal        : ${tiket.kapal}\n`
     const jamPotong = tiket.jam.substring(0, 5) 
     textData += `Tgl/Jam      : ${tiket.tanggal}/${jamPotong}\n` 
@@ -209,7 +204,8 @@ export async function cetakTiketThermal(tiket: any) {
     }
     await writer.write(imageBytes)
     
-    const endData = '\x1B\x4A\x96\x1D\x56\x00' 
+    // PERBAIKAN: Maju 250 dots (0xFA) sebelum potong kertas
+    const endData = '\x1B\x4A\xFA\x1D\x56\x00' 
     await writer.write(encoder.encode(endData))
 
     writer.releaseLock()
