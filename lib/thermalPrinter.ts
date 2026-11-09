@@ -105,8 +105,8 @@ function generateEscPosCommand(tiket: any, qrUrl: string): Promise<Uint8Array> {
 
 export async function cetakTiketThermal(tiket: any) {
   try {
-    // Ukuran QR dikembalikan ke 225px
-    const qrUrl = await QRCode.toDataURL(tiket.kode_tiket, { width: 225, margin: 1 })
+    // Ukuran QR diubah menjadi 200px
+    const qrUrl = await QRCode.toDataURL(tiket.kode_tiket, { width: 200, margin: 1 })
     
     if (!navigator.bluetooth) {
       return { success: false, message: '❌ Browser tidak mendukung Web Bluetooth.' }
