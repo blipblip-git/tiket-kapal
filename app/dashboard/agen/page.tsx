@@ -23,7 +23,6 @@ export default function DashboardAgenPage() {
         return
       }
 
-      // Cek apakah admin login via Supabase Auth
       const adminProfile = await getProfile()
       if (adminProfile && adminProfile.role === 'admin_utama') {
         setProfile(adminProfile)
@@ -31,19 +30,16 @@ export default function DashboardAgenPage() {
         return
       }
 
-      // Jika tidak ada sesi sama sekali, tendang ke login
       router.push('/login')
     }
     cekSesi()
   }, [router])
 
   function handleLogout() {
-    // 1. Tembak database untuk buka gembok (TANPA await, biarkan berjalan di background)
     if (profile) {
       supabase.from('profiles').update({ sesi_aktif: false }).eq('id', profile.id).then();
     }
     
-    // 2. Langsung hapus sesi di browser dan pindah halaman (INSTAN)
     localStorage.removeItem('petugas_session')
     localStorage.removeItem('mode_kerja')
     router.push('/login')
@@ -56,7 +52,7 @@ export default function DashboardAgenPage() {
     <div className="h-[100dvh] bg-gray-50 flex flex-col overflow-hidden">
       <div className="max-w-md w-full mx-auto p-4 flex-1 flex flex-col">
         
-        {/* HEADER (Dikasih Shadow) */}
+        {/* HEADER */}
         <div className="bg-white p-4 rounded-xl shadow-md border border-gray-100 mb-4 flex-shrink-0">
           <div className="flex justify-between items-start">
             <div>
@@ -76,8 +72,8 @@ export default function DashboardAgenPage() {
           </div>
         </div>
 
-        {/* MENU UTAMA (Disusun Vertikal agar rapi 1 layar) */}
-        <div className="flex-1 flex flex-col gap-3 justify-center pb-4">
+        {/* MENU UTAMA (GAP DIHILANGKAN) */}
+        <div className="flex-1 flex flex-col gap-3 justify-start pb-4">
           
           <button 
             onClick={() => router.push('/agen/jual-tiket')} 
