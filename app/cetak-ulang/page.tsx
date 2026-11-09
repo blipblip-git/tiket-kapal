@@ -118,12 +118,26 @@ function CetakUlangContent() {
     }
   }
 
+  // === FUNGSI PINTAR: DETEKSI LAPTOP vs HP ===
   async function handlePrintThermal() {
     if (!detailPilih) return
-    setPesan('Memproses printer...')
     
-    const result = await cetakTiketThermal(detailPilih)
-    setPesan(result.message)
+    // 1. Deteksi apakah user pakai HP/Tablet atau Laptop/PC
+    const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)
+
+    if (isMobile) {
+      // --- JALUR HP: Pakai Web Bluetooth ---
+      setPesan('Menghubungkan ke printer Bluetooth...')
+      const result = await cetakTiketThermal(detailPilih)
+      setPesan(result.message)
+    } else {
+      // --- JALUR LAPTOP: Pakai Window Print (Driver Laptop) ---
+      setPesan('Menyiapkan format cetak thermal untuk Laptop...')
+      setTimeout(() => {
+        window.print()
+        setPesan('')
+      }, 500)
+    }
   }
 
   function handleKembali() {
@@ -146,10 +160,10 @@ function CetakUlangContent() {
     <div className="h-[100dvh] w-full bg-gray-50 flex flex-col overflow-hidden print:h-auto print:overflow-visible print:bg-white print:block">
       <style dangerouslySetInnerHTML={{__html: `
         @media print {
-          @page { size: 80mm auto; margin: 0; }
+          @page { size: 58mm auto; margin: 0; }
           body * { visibility: hidden; }
           #area-tiket-ulang, #area-tiket-ulang * { visibility: visible; }
-          #area-tiket-ulang { position: absolute; left: 0; top: 0; width: 100%; border: none !important; box-shadow: none !important; }
+          #area-tiket-ulang { position: absolute; left: 0; top: 0; width: 100%; border: none !important; box-shadow: none !important; padding: 5px !important; }
           .print-hidden { display: none !important; }
         }
       `}} />
