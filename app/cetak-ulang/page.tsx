@@ -122,17 +122,15 @@ function CetakUlangContent() {
   async function handlePrintThermal() {
     if (!detailPilih) return
     
-    // 1. Deteksi apakah user pakai HP/Tablet atau Laptop/PC
     const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)
 
     if (isMobile) {
-      // --- JALUR HP: Pakai Web Bluetooth ---
       setPesan('Menghubungkan ke printer Bluetooth...')
       const result = await cetakTiketThermal(detailPilih)
       setPesan(result.message)
     } else {
-      // --- JALUR LAPTOP: Pakai Window Print (Driver Laptop) ---
       setPesan('Menyiapkan format cetak thermal untuk Laptop...')
+      // Panggil dialog print bawaan browser
       setTimeout(() => {
         window.print()
         setPesan('')
@@ -161,10 +159,24 @@ function CetakUlangContent() {
       <style dangerouslySetInnerHTML={{__html: `
         @media print {
           @page { size: 58mm auto; margin: 0; }
+          body { margin: 0; padding: 0; background: white; -webkit-print-color-adjust: exact; }
+          .print-hidden { display: none !important; }
+          
+          /* Sembunyikan semua elemen web kecuali area yang mau dicetak */
           body * { visibility: hidden; }
           #area-tiket-ulang, #area-tiket-ulang * { visibility: visible; }
-          #area-tiket-ulang { position: absolute; left: 0; top: 0; width: 100%; border: none !important; box-shadow: none !important; padding: 5px !important; }
-          .print-hidden { display: none !important; }
+          
+          /* Posisikan elemen cetak ke pojok kiri atas */
+          #area-tiket-ulang { 
+            position: absolute; 
+            left: 0; 
+            top: 0; 
+            width: 100%; 
+            margin: 0;
+            padding: 5px; 
+            border: none !important; 
+            box-shadow: none !important; 
+          }
         }
       `}} />
 
