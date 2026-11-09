@@ -37,14 +37,6 @@ type TiketLengkap = {
   qrUrl: string
 }
 
-declare global {
-  interface Navigator {
-    serial: {
-      requestPort: (options?: any) => Promise<any>;
-    };
-  }
-}
-
 function EtiketContent() {
   const searchParams = useSearchParams()
   const router = useRouter()
@@ -238,7 +230,6 @@ function EtiketContent() {
     setPesanShare('Semua tiket berhasil diproses.')
   }
 
-  // === PERBAIKAN UTAMA: SHARE GAMBAR KE APLIKASI LAIN ===
   async function shareKe(pesananId: string, kodeTiket: string) {
     setShowShareMenu(null)
     setPesanShare('Menyiapkan gambar untuk dibagikan...')
@@ -250,14 +241,12 @@ function EtiketContent() {
     }
 
     try {
-      // Konversi dataUrl ke bentuk File (biar bisa dilampirkan di WA)
       const res = await fetch(dataUrl)
       const blob = await res.blob()
       const file = new File([blob], `E-Tiket-${kodeTiket}.png`, { type: 'image/png' })
 
       const teksPesan = `E-Tiket Kapal Anda (Kode: ${kodeTiket}). Perlihatkan gambar ini ke petugas saat boarding.`
 
-      // Cek apakah HP/Browser support Web Share API (Share gambar langsung)
       if (navigator.canShare && navigator.canShare({ files: [file] })) {
         await navigator.share({
           files: [file],
@@ -266,7 +255,6 @@ function EtiketContent() {
         })
         setPesanShare('Berhasil dibagikan!')
       } else {
-        // Fallback untuk Desktop / Browser Lama: Download otomatis
         const link = document.createElement('a')
         link.download = `E-Tiket-${kodeTiket}.png`
         link.href = dataUrl
@@ -281,109 +269,21 @@ function EtiketContent() {
     }
   }
 
-  async function handleCetakThermal(t: TiketLengkap) {
-    if (!('serial' in navigator)) {
-      alert('Browser Anda tidak mendukung Web Serial. Gunakan Chrome atau Edge terbaru.')
-      return
+  // === PERUBAHAN UTAMA: MENGGUNAKAN WINDOW.PRINT UNTUK RAWBT ===
+  function handleCetakThermal(t: TiketLengkap) {
+    setPesanShare('Menyiapkan format cetak thermal...')
+    
+    // Pastikan tiket yang dicetak adalah tiket yang sedang aktif dilihat
+    const index = tiketList.findIndex((item) => item.pesanan.id === t.pesanan.id)
+    if (index !== -1) {
+      setActiveTiketIndex(index)
     }
 
-    try {
-      setPesanShare('Menyiapkan QR Code...');
-      
-      const img = new Image();
-      img.src = t.qrUrl;
-      await new Promise((resolve) => { img.onload = resolve; });
-      
-      const canvas = document.createElement('canvas');
-      canvas.width = img.width;
-      canvas.height = img.height;
-      const ctx = canvas.getContext('2d');
-      if (!ctx) throw new Error('Gagal membuat canvas');
-      ctx.drawImage(img, 0, 0);
-      
-      const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-      
-      const widthBytes = Math.ceil(canvas.width / 8);
-      const height = canvas.height;
-      
-      let rasterData = `\x1D\x76\x30\x00${String.fromCharCode(widthBytes % 256, Math.floor(widthBytes / 256), height % 256, Math.floor(height / 256))}`;
-      
-      for (let y = 0; y < height; y++) {
-        for (let x = 0; x < widthBytes; x++) {
-          let byte = 0;
-          for (let bit = 0; bit < 8; bit++) {
-            const pixelX = x * 8 + bit;
-            if (pixelX < canvas.width) {
-              const idx = (y * canvas.width + pixelX) * 4;
-              const r = imgData.data[idx];
-              const g = imgData.data[idx + 1];
-              const b = imgData.data[idx + 2];
-              const isBlack = (r + g + b) / 3 < 128;
-              if (isBlack) {
-                byte |= (1 << (7 - bit));
-              }
-            }
-          }
-          rasterData += String.fromCharCode(byte);
-        }
-      }
-
-      setPesanShare('Menghubungkan ke printer...');
-      const port = await navigator.serial.requestPort();
-      await port.open({ baudRate: 9600 });
-      
-      setPesanShare('Mengirim data ke printer...');
-
-      const encoder = new TextEncoder();
-      const writer = port.writable.getWriter();
-
-      let textData = '';
-      textData += '\x1B\x40'; 
-      textData += '\x1B\x33\x05'; 
-      textData += '\x1B\x4A\x0A'; 
-      textData += '\x1B\x61\x01'; 
-      textData += `${t.pesanan.kode_tiket}\n`; 
-      textData += `${detail?.rute_asal} - ${detail?.rute_tujuan}\n`;
-      textData += '\x1B\x61\x00'; 
-      textData += '--------------------------------\n';
-      textData += `Nama / Kursi : ${t.pesanan.nama_penumpang} / ${t.nomor_kursi}\n`;
-      const nikRapi = t.pesanan.nik.replace(/\*/g, '');
-      textData += `NIK          : ${nikRapi}\n`;
-      textData += `Kapal        : ${detail?.nama_kapal}\n`;
-      const jamPotong = detail?.jam_berangkat.substring(0, 5); 
-      textData += `Tgl/Jam      : ${detail?.tanggal}/${jamPotong}\n`; 
-      textData += '--------------------------------\n';
-      
-      let metodePrint = 'Cash';
-      if (t.pesanan.metode_bayar === 'simulasi_online' || t.pesanan.kanal === 'online') metodePrint = 'Qris';
-      
-      textData += `${metodePrint} TOTAL: Rp ${detail?.harga.toLocaleString('id-ID')}\n`;
-      
-      textData += '--------------------------------\n';
-      textData += 'Perlihatkan e-tiket ke petugas\n';
-      textData += `Loket : ${t.pesanan.nama_penjual_asli}\n`;
-
-      await writer.write(encoder.encode(textData));
-      await writer.write(encoder.encode('\x1B\x61\x01'));
-
-      const imageBytes = new Uint8Array(rasterData.length);
-      for (let i = 0; i < rasterData.length; i++) {
-        imageBytes[i] = rasterData.charCodeAt(i);
-      }
-      await writer.write(imageBytes);
-      
-      const endData = '\x1B\x4A\x46\x1D\x56\x00'; 
-      await writer.write(encoder.encode(endData));
-
-      writer.releaseLock();
-      await port.close();
-      
-      setPesanShare('✅ Berhasil dikirim ke printer!');
-      
-    } catch (err: any) {
-      console.error(err);
-      setPesanShare('❌ Gagal mencetak: ' + (err.message || 'Pastikan printer menyala dan port dipilih dengan benar.'));
-    }
+    // Beri jeda sebentar agar tampilan selesai render, lalu panggil print browser
+    setTimeout(() => {
+      window.print()
+      setPesanShare('') // Bersihkan pesan setelah print dialog muncul
+    }, 500)
   }
 
   async function handleKembali() {
@@ -468,6 +368,43 @@ function EtiketContent() {
   return (
     <div className="h-[100dvh] w-full bg-gray-100 flex flex-col overflow-hidden">
       
+      {/* CSS KHUSUS UNTUK PRINT THERMAL 58mm */}
+      <style dangerouslySetInnerHTML={{__html: `
+        @media print {
+          @page { 
+            size: 58mm auto; 
+            margin: 0; 
+          }
+          body { 
+            margin: 0; 
+            padding: 0;
+            background: white;
+            -webkit-print-color-adjust: exact;
+          }
+          .print-hidden { display: none !important; }
+          
+          /* Sembunyikan semua elemen web kecuali area yang mau dicetak */
+          body * { visibility: hidden; }
+          .thermal-wrapper, .thermal-wrapper * { visibility: visible; }
+          
+          /* Posisikan elemen cetak ke pojok kiri atas */
+          .thermal-wrapper {
+            position: absolute;
+            left: 0;
+            top: 0;
+            width: 100%;
+            margin: 0;
+            padding: 5px; /* Margin tipis untuk kertas thermal */
+          }
+
+          .thermal-card {
+            box-shadow: none !important;
+            border: none !important;
+            padding: 0 !important;
+          }
+        }
+      `}} />
+
       {/* HEADER (Fixed) */}
       <div className="flex-shrink-0 bg-white shadow-sm z-10 px-3 py-2 md:px-6 md:py-4 print-hidden">
         <div className="max-w-md mx-auto flex justify-between items-center">
@@ -491,7 +428,7 @@ function EtiketContent() {
 
           {/* Navigasi Tab jika tiket lebih dari 1 */}
           {tiketList.length > 1 && (
-            <div className="flex overflow-x-auto gap-1 pb-1 mb-2">
+            <div className="flex overflow-x-auto gap-1 pb-1 mb-2 print-hidden">
               {tiketList.map((_, i) => (
                 <button
                   key={i}
@@ -508,7 +445,7 @@ function EtiketContent() {
             </div>
           )}
 
-          <div className="bg-white rounded-lg shadow-md overflow-hidden print:shadow-none print:border-none border border-gray-200 flex flex-col h-full">
+          <div className="bg-white rounded-lg shadow-md overflow-hidden print:shadow-none print:border-none border border-gray-200 flex flex-col h-full thermal-wrapper">
             <div className="bg-blue-600 text-white px-3 py-1.5 md:px-4 md:py-2 text-[10px] md:text-sm font-medium print-hidden text-center">
               Tiket #{activeTiketIndex + 1} dari {tiketList.length}
             </div>

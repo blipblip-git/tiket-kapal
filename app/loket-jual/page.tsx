@@ -63,6 +63,9 @@ function LoketJualContent() {
 
   useEffect(() => {
     async function init() {
+      // PASTIKAN STATE KURSI SELALU KOSONG SAAT PERTAMA KALI DIBUKA
+      setKursiDipilih([])
+      
       const sesi = localStorage.getItem('petugas_session')
       if (!sesi) {
         router.push('/login')
@@ -88,7 +91,7 @@ function LoketJualContent() {
         return
       }
 
-      // MURNI HANYA BACA DATA, TIDAK MEMBUAT JADWAL BARU
+      // MURNI HANYA BACA DATA
       const { data: j, error: errJ } = await supabase
         .from('jadwal')
         .select('id, rute_asal, rute_tujuan, tanggal, jam_berangkat, harga, kapal_id, status_jadwal')
@@ -151,6 +154,7 @@ function LoketJualContent() {
   }, [jadwalId, router])
 
   function toggleKursi(kursiId: string, status: string) {
+    // Hanya izinkan klik kalau statusnya 'kosong'
     if (status !== 'kosong') return
     setKursiDipilih((prev) =>
       prev.includes(kursiId)
@@ -351,14 +355,22 @@ function LoketJualContent() {
 
     const renderKotak = (k: KursiInfo) => {
       const dipilih = kursiDipilih.includes(k.id)
-      const terisi = k.status === 'terisi'
-      const hold = k.status === 'hold'
-      const disabled = terisi || hold
+      
+      // LOGIKA BARU: Kursi 'hold' atau 'terisi' dianggap tidak bisa dipilih. 
+      // Warna kuning HANYA muncul kalau statusnya 'hold' (di-hold sementara).
+      const isHold = k.status === 'hold'
+      const isTerisi = k.status === 'terisi'
+      const disabled = isHold || isTerisi
 
-      let bg = 'bg-green-100 text-green-800 border-green-300 hover:bg-green-200'
-      if (dipilih) bg = 'bg-blue-600 text-white border-blue-700 shadow-md'
-      else if (terisi) bg = 'bg-gray-200 text-gray-400 border-gray-300 cursor-not-allowed'
-      else if (hold) bg = 'bg-yellow-100 text-yellow-800 border-yellow-300 cursor-not-allowed'
+      let bg = 'bg-green-100 text-green-800 border-green-300 hover:bg-green-200' // Default Kosong
+      
+      if (dipilih) {
+        bg = 'bg-blue-600 text-white border-blue-700 shadow-md'
+      } else if (isTerisi) {
+        bg = 'bg-gray-200 text-gray-400 border-gray-300 cursor-not-allowed'
+      } else if (isHold) {
+        bg = 'bg-yellow-100 text-yellow-800 border-yellow-300 cursor-not-allowed'
+      }
 
       return (
         <button
@@ -430,17 +442,27 @@ function LoketJualContent() {
             </button>
           </div>
 
-          {/* Kartu Info Ringkas */}
+          {/* Kartu Info Ringkas (DENGAN EM0JI KAPAL & RUTE DI BAWAH JAM) */}
           <div className="bg-gray-50 border border-gray-200 p-2 md:p-3 rounded-lg">
-            <div className="flex justify-between items-center mb-0.5">
-              <span className="text-xs md:text-sm font-bold text-gray-900">{jadwal.rute_asal} - {jadwal.rute_tujuan}</span>
-              <span className="text-xs md:text-sm font-bold text-blue-600">Rp {jadwal.harga.toLocaleString('id-ID')} / tiket</span>
+            <div className="flex justify-between items-start">
+              
+              {/* SISI KIRI: IKON KAPAL & INFO */}
+              <div className="flex gap-2 md:gap-3">
+                <div className="text-2xl md:text-3xl flex items-center justify-center">🚢</div>
+                <div>
+                  <div className="text-sm md:text-base font-bold text-gray-900">{jamPotong}</div>
+                  <div className="text-[10px] md:text-xs font-bold text-blue-700">{jadwal.rute_asal} - {jadwal.rute_tujuan}</div>
+                  <div className="text-[10px] md:text-xs text-gray-800 font-medium mt-0.5">{jadwal.nama_kapal}</div>
+                  <div className="text-[9px] md:text-[10px] text-gray-600">Tgl {jadwal.tanggal}</div>
+                </div>
+              </div>
+
+              {/* SISI KANAN: HARGA */}
+              <div className="text-right">
+                <span className="text-xs md:text-sm font-bold text-blue-600">Rp {jadwal.harga.toLocaleString('id-ID')} / tiket</span>
+              </div>
+
             </div>
-            <div className="flex justify-between items-center mb-0.5">
-              <span className="text-[10px] md:text-xs text-gray-600">Jam {jamPotong}</span>
-              <span className="text-[10px] md:text-xs text-gray-600">Tgl {jadwal.tanggal}</span>
-            </div>
-            <p className="text-[10px] md:text-xs text-gray-800 font-medium">{jadwal.nama_kapal}</p>
           </div>
         </div>
       </div>

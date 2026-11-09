@@ -147,9 +147,10 @@ export default function LaporanAgenPage() {
 
   const dataTerpilih = laporan.find((l) => l.jam === jamTerpilih)
 
+  // FUNGSI POTONG KODE SUDAH BERSIH DARI TITIK-TITIK
   const potongKode = (kode: string) => {
     if (!kode) return '-'
-    return kode.length > 6 ? `...${kode.slice(-6)}` : kode
+    return kode.length > 6 ? kode.slice(-6) : kode
   }
 
   const formatTanggal = (tgl: string) => {
@@ -214,7 +215,6 @@ export default function LaporanAgenPage() {
                 <p className="p-4 text-center text-gray-600 text-xs md:text-base">Tidak ada penjualan di tanggal ini.</p>
               ) : (
                 <>
-                  {/* BARIS HEADER TABEL: Judul - Rute - Cetak */}
                   <div className="bg-blue-600 px-3 py-2 md:px-4 md:py-3 flex justify-between items-center flex-shrink-0">
                     <h2 className="text-white font-bold text-[10px] md:text-base">Rekapan Penjualan</h2>
                     <span className="text-white font-medium text-[9px] md:text-sm">{teksRute}</span>

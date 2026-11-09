@@ -18,7 +18,7 @@ type JadwalTampil = {
   menitTersisa: number
   status: 'open' | 'closed'
   isGenerated?: boolean
-  foto_url?: string | null // TAMBAHAN BARU
+  foto_url?: string | null
 }
 
 type PesananCash = {
@@ -117,7 +117,6 @@ export default function DashboardLoketPage() {
       .eq('aktif', true)
       .eq('rute_asal', lokasiOperator) 
 
-    // Ambil data kapal beserta foto_url
     const { data: kapalData } = await supabase.from('kapal').select('id, nama, kapasitas, foto_url')
     const kapalMap = new Map(kapalData?.map((k) => [k.id, k]) || [])
 
@@ -168,7 +167,7 @@ export default function DashboardLoketPage() {
             menitTersisa,
             status,
             isGenerated: false,
-            foto_url: kapal.foto_url // TAMBAHAN BARU
+            foto_url: kapal.foto_url
           })
         } else {
           finalList.push({
@@ -185,7 +184,7 @@ export default function DashboardLoketPage() {
             menitTersisa,
             status,
             isGenerated: true,
-            foto_url: kapal.foto_url // TAMBAHAN BARU
+            foto_url: kapal.foto_url
           })
         }
       }
@@ -521,39 +520,47 @@ export default function DashboardLoketPage() {
               {jadwalList.map((j, idx) => (
                 <div key={idx} className={`border rounded p-4 flex justify-between items-center ${j.status === 'closed' ? 'opacity-50 bg-gray-50' : ''}`}>
                   
-                  {/* TAMPILAN GAMBAR KAPAL */}
-                  <div className="w-20 h-14 bg-gray-100 rounded border overflow-hidden flex items-center justify-center mr-4 flex-shrink-0">
-                    {j.foto_url ? (
-                      <img src={j.foto_url} alt={j.nama_kapal} className="w-full h-full object-cover" />
-                    ) : (
-                      <span className="text-[10px] text-gray-400">No Foto</span>
-                    )}
+                  {/* SISI KIRI: IKON KAPAL & INFO */}
+                  <div className="flex items-center gap-3 md:gap-4 flex-1">
+                    
+                    {/* Emoji / Foto Kapal di Kiri */}
+                    <div className="flex-shrink-0 w-12 h-12 md:w-16 md:h-16 bg-gray-50 rounded border flex items-center justify-center overflow-hidden">
+                      {j.foto_url ? (
+                        <img src={j.foto_url} alt={j.nama_kapal} className="w-full h-full object-cover" />
+                      ) : (
+                        <span className="text-2xl md:text-3xl">🚢</span>
+                      )}
+                    </div>
+
+                    <div>
+                      <p className="font-bold text-sm md:text-base text-gray-900">{j.jam_berangkat}</p>
+                      <p className="text-xs md:text-sm font-bold text-blue-700">{j.rute_asal} - {j.rute_tujuan}</p>
+                      <p className="text-[10px] md:text-xs text-gray-700">{j.nama_kapal}</p>
+                      <p className="text-[10px] md:text-xs text-gray-700 mt-1">
+                        Sisa kursi: <span className="font-bold text-green-700">{j.kursi_kosong}</span> / {j.total_kursi}
+                      </p>
+                    </div>
                   </div>
 
-                  <div className="flex-1">
-                    <p className="font-bold text-lg text-gray-900">{j.rute_asal} → {j.rute_tujuan}</p>
-                    <p className="text-sm text-gray-700">{j.nama_kapal} • Jam {j.jam_berangkat}</p>
-                    <p className="text-sm text-gray-700 mt-1">
-                      Sisa kursi: <span className="font-bold text-green-700">{j.kursi_kosong}</span> / {j.total_kursi}
-                    </p>
-                  </div>
-                  <div className="text-right flex flex-col gap-2">
-                    <p className="font-bold text-blue-600">Rp {j.harga.toLocaleString('id-ID')}</p>
+                  {/* SISI KANAN: HARGA & AKSI */}
+                  <div className="text-right flex flex-col items-end gap-2 flex-shrink-0 ml-2">
+                    <p className="font-bold text-xs md:text-base text-blue-600">Rp {j.harga.toLocaleString('id-ID')}</p>
                     
-                    <div className="flex flex-col gap-1 mt-2">
+                    <div className="flex flex-col gap-1 mt-1 w-full items-end">
                       {j.status === 'open' && (
-                        <button onClick={() => handleJualTiket(j)} className="inline-block text-sm bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 font-medium">
-                          Jual Tiket →
+                        <button onClick={() => handleJualTiket(j)} className="text-[10px] md:text-sm bg-blue-600 text-white px-2 md:px-4 py-1.5 md:py-2 rounded hover:bg-blue-700 font-medium">
+                          Jual Tiket
                         </button>
                       )}
                       
                       {j.id && (
-                        <button onClick={() => router.push(`/daftar-penumpang?jadwal=${j.id}`)} className="text-xs bg-gray-600 text-white px-3 py-1 rounded hover:bg-gray-700">
+                        <button onClick={() => router.push(`/daftar-penumpang?jadwal=${j.id}`)} className="text-[9px] md:text-xs bg-gray-600 text-white px-2 md:px-3 py-1 rounded hover:bg-gray-700">
                           Lihat Penumpang
                         </button>
                       )}
                     </div>
                   </div>
+
                 </div>
               ))}
             </div>

@@ -132,14 +132,22 @@ function ManifestDetailContent() {
   const tanggalFormatHeader = new Date(tanggal).toLocaleDateString('id-ID', { day: '2-digit', month: 'long', year: 'numeric' })
 
   return (
-    <div className="h-[100dvh] w-full bg-gray-100 p-3 md:p-6 print:p-0 print:bg-white flex flex-col overflow-hidden">
+    <div className="h-[100dvh] w-full bg-gray-100 p-3 md:p-6 print:p-0 print:bg-white flex flex-col overflow-hidden print:h-auto print:overflow-visible print:block">
       <style dangerouslySetInnerHTML={{__html: `
         @media print {
-          @page { size: A4; margin: 15mm; }
+          @page { 
+            size: A4; 
+            margin: 0 !important;
+          }
           body { background: white; margin: 0; }
           .print-hidden { display: none !important; }
-          html, body { height: auto !important; overflow: hidden !important; }
-          .no-print { display: none !important; }
+          html, body { 
+            height: auto !important; 
+            overflow: visible !important; 
+            margin: 0 !important; 
+            padding: 0 !important;
+          }
+          .print-area { padding: 15mm !important; box-sizing: border-box; }
           tr { page-break-inside: avoid; }
           table { page-break-inside: auto; }
         }
@@ -283,7 +291,7 @@ function ManifestDetailContent() {
 
       {/* TAMPILAN PRINT MANIFEST (DILUAR KONTAINER MAX-W-MD BIAR LEBAR A4) */}
       {rincianAktif && (
-        <div className="hidden print:block w-full">
+        <div className="hidden print:block w-full print-area">
           <h1 className="text-xl font-bold text-center mb-6">LAPORAN MANIFEST PENUMPANG JAM {expandedJam}</h1>
           <div className="mb-4 text-sm grid grid-cols-[120px_10px_1fr] gap-y-1">
             <span>Tanggal</span><span>:</span><span>{tanggalFormatHeader}</span>

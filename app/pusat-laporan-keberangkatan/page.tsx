@@ -200,7 +200,7 @@ function PusatLaporanContent() {
                 onClick={() => router.push('/dashboard/keberangkatan')} 
                 className="text-xs bg-gray-50 text-blue-600 px-3 py-1.5 rounded hover:underline border border-gray-200 font-bold shadow-sm"
               >
-                Logout
+                &larr; Kembali
               </button>
             </div>
           </div>

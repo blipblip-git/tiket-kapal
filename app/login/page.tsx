@@ -71,7 +71,6 @@ function LoginContent() {
 
       // LOGIKA SESI TUNGGAL (BERLAKU UNTUK SEMUA ROLE)
       if (data.sesi_aktif) {
-        // AUTO-UNLOCK: Jika sesi aktif lebih dari 30 detik, paksa buka gembok
         const lastUpdate = data.updated_at ? new Date(data.updated_at).getTime() : 0;
         const now = new Date().getTime();
         const diffSeconds = (now - lastUpdate) / 1000;
@@ -81,7 +80,6 @@ function LoginContent() {
           setLoading(false);
           return;
         }
-        // Jika lebih dari 30 detik, biarkan lewat (gembok akan di-reset di bawah)
       }
       
       // Kunci sesi baru
