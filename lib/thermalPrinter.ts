@@ -112,8 +112,8 @@ export async function cetakTiketThermal(tiket: any) {
       }
       await sendData(imageBytes)
       
-      // PERBAIKAN: Kombinasi Feed 10 dots + 40 dots sebelum potong kertas
-      const endData = '\x1B\x4A\x0A\x1B\x4A\x28\x1D\x56\x00' 
+      // BALIK KE SETTINGAN 255 DOTS (0xFF)
+      const endData = '\x1B\x4A\xFF\x1D\x56\x00' 
       await sendData(encoder.encode(endData))
 
       device.gatt.disconnect()
@@ -127,7 +127,7 @@ export async function cetakTiketThermal(tiket: any) {
   }
 
   // =========================================================
-  // MODE LAPTOP: WEB SERIAL (KABEL) - UTUH SEPERTI ASLINYA
+  // MODE LAPTOP: WEB SERIAL (KABEL)
   // =========================================================
   try {
     const qrUrlForPrint = await QRCode.toDataURL(tiket.kode_tiket, { width: 200, margin: 1 })
@@ -204,8 +204,8 @@ export async function cetakTiketThermal(tiket: any) {
     }
     await writer.write(imageBytes)
     
-    // PERBAIKAN: Kombinasi Feed 10 dots + 40 dots sebelum potong kertas
-    const endData = '\x1B\x4A\x0A\x1B\x4A\x28\x1D\x56\x00' 
+    // BALIK KE SETTINGAN 255 DOTS (0xFF)
+    const endData = '\x1B\x4A\xFF\x1D\x56\x00' 
     await writer.write(encoder.encode(endData))
 
     writer.releaseLock()
