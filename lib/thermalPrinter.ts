@@ -73,7 +73,7 @@ function generateEscPosCommand(tiket: any, qrUrl: string): Promise<Uint8Array> {
         textData += 'Perlihatkan e-tiket ke petugas\n'
         textData += `Loket : ${namaLoket}\n`
         
-        // Jarak 1 enter sebelum gambar (seperti kode awal yang sukses)
+        // Jarak sedikit sebelum barcode
         textData += '\n'
         
         textData += '\x1B\x61\x01' // Center align (for QR)
@@ -85,8 +85,8 @@ function generateEscPosCommand(tiket: any, qrUrl: string): Promise<Uint8Array> {
           imageBytes[i] = rasterData.charCodeAt(i)
         }
         
-        // PERBAIKAN: Hapus feed (tarik kertas) berlebih, langsung potong
-        const endData = '\x1D\x56\x00' 
+        // PERBAIKAN FINAL: Tarik kertas 50 dots (sekitar 0.6cm), lalu potong penuh.
+        const endData = '\x1B\x4A\x32\x1D\x56\x00' 
         const endBytes = encoder.encode(endData)
 
         const totalLength = textBytes.length + imageBytes.length + endBytes.length
@@ -154,7 +154,6 @@ export async function cetakTiketThermal(tiket: any) {
 
     const printData = await generateEscPosCommand(tiket, qrUrl);
 
-    // Jeda 150ms per 128 byte 
     const chunkSize = 128;
     for (let i = 0; i < printData.length; i += chunkSize) {
       const chunk = printData.slice(i, i + chunkSize);
