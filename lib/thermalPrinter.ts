@@ -84,8 +84,8 @@ function generateEscPosCommand(tiket: any, qrUrl: string): Promise<Uint8Array> {
           imageBytes[i] = rasterData.charCodeAt(i)
         }
         
-        // Tarik kertas 50 dots, lalu potong penuh
-        const endData = '\x1B\x4A\x32\x1D\x56\x00' 
+        // PERBAIKAN: Tarik kertas 15 dots (0x0F), lalu potong penuh
+        const endData = '\x1B\x4A\x0F\x1D\x56\x00' 
         const endBytes = encoder.encode(endData)
 
         const totalLength = textBytes.length + imageBytes.length + endBytes.length
@@ -105,7 +105,7 @@ function generateEscPosCommand(tiket: any, qrUrl: string): Promise<Uint8Array> {
 
 export async function cetakTiketThermal(tiket: any) {
   try {
-    // PERBESAR QR DARI 160 MENJADI 200 PIXEL
+    // Ukuran QR 200px (Sesuai permintaan bray untuk memperbesar)
     const qrUrl = await QRCode.toDataURL(tiket.kode_tiket, { width: 200, margin: 1 })
     
     if (!navigator.bluetooth) {
