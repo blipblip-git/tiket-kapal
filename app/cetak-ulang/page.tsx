@@ -18,6 +18,7 @@ type HasilPencarian = {
   tanggal: string
   jam: string
   harga: number
+  is_balita: boolean
 }
 
 function CetakUlangContent() {
@@ -57,7 +58,7 @@ function CetakUlangContent() {
     const { data, error } = await supabase
       .from('pesanan')
       .select(`
-        id, nama_penumpang, kode_tiket, kanal,
+        id, nama_penumpang, kode_tiket, kanal, is_balita,
         jadwal:jadwal_id (rute_asal, rute_tujuan, tanggal, jam_berangkat, harga, kapal:kapal_id(nama)),
         kursi:kursi_id (nomor_kursi)
       `)
@@ -82,6 +83,7 @@ function CetakUlangContent() {
         tanggal: item.jadwal?.tanggal || '-',
         jam: item.jadwal?.jam_berangkat || '-',
         harga: item.jadwal?.harga || 0,
+        is_balita: item.is_balita || false,
       }))
       setHasil(mapped)
     } else {
@@ -118,20 +120,17 @@ function CetakUlangContent() {
 
   async function handlePrintThermal() {
     if (!detailPilih) return
-    
-    const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)
-
-    if (isMobile) {
-      setPesan('Menghubungkan ke printer Bluetooth...')
-      const result = await cetakTiketThermal(detailPilih)
-      setPesan(result.message)
-    } else {
-      setPesan('Menyiapkan format cetak thermal untuk Laptop...')
-      setTimeout(() => {
-        window.print()
-        setPesan('')
-      }, 500)
-    }
+    setPesan('Menghubungkan ke printer...')
+    const result = await cetakTiketThermal({
+      ...detailPilih,
+      jadwal: detailPilih.jadwal,
+      kapal: detailPilih.kapal,
+      jam: detailPilih.jam,
+      tanggal: detailPilih.tanggal,
+      harga: detailPilih.is_balita ? 0 : detailPilih.harga,
+      kursi: detailPilih.kursi,
+    })
+    setPesan(result.message)
   }
 
   function handleKembali() {
@@ -208,7 +207,10 @@ function CetakUlangContent() {
                 {hasil.map((h) => (
                   <div key={h.id} className="p-3 hover:bg-gray-50 transition flex justify-between items-center gap-3">
                     <div className="min-w-0">
-                      <p className="font-bold text-sm text-gray-900 truncate">{h.nama_penumpang}</p>
+                      <p className="font-bold text-sm text-gray-900 truncate">
+                        {h.nama_penumpang}
+                        {h.is_balita && <span className="text-[10px] text-orange-600 ml-1">(Balita)</span>}
+                      </p>
                       <p className="text-[10px] text-gray-600 font-mono truncate">{h.kode_tiket}</p>
                       <p className="text-[10px] text-gray-600 truncate">{h.jadwal}</p>
                     </div>
@@ -266,9 +268,11 @@ function CetakUlangContent() {
                 <div className="text-[11px] md:text-sm space-y-1.5">
                   <div className="flex justify-between">
                     <span className="text-gray-500">Nama</span>
-                    <span className="font-bold text-gray-900 text-right">{detailPilih.nama_penumpang}</span>
+                    <span className="font-bold text-gray-900 text-right">
+                      {detailPilih.nama_penumpang}
+                      {detailPilih.is_balita && <span className="text-[9px] text-orange-600 ml-1">(Balita)</span>}
+                    </span>
                   </div>
-                  {/* BARIS NIK DIHAPUS DI SINI */}
                   <div className="flex justify-between">
                     <span className="text-gray-500">Kapal</span>
                     <span className="font-medium text-gray-900 text-right">{detailPilih.kapal}</span>
@@ -291,7 +295,9 @@ function CetakUlangContent() {
                 
                 <div className="flex justify-between items-center">
                   <span className="font-bold text-gray-900 text-xs md:text-sm">Total Bayar</span>
-                  <span className="font-bold text-gray-900 text-sm md:text-lg">Rp {detailPilih.harga.toLocaleString('id-ID')}</span>
+                  <span className="font-bold text-gray-900 text-sm md:text-lg">
+                    {detailPilih.is_balita ? 'GRATIS (Balita)' : `Rp ${detailPilih.harga.toLocaleString('id-ID')}`}
+                  </span>
                 </div>
                 
                 <div className="mt-3 text-center text-[9px] md:text-xs text-gray-400 border-t pt-2">

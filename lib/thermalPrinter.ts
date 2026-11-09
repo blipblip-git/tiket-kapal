@@ -2,51 +2,61 @@ import QRCode from 'qrcode'
 
 export async function cetakTiketThermal(tiket: any) {
   const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)
-
+  
   // =========================================================
-  // MODE 1: HP/TABLET -> PAKAI WEB BLUETOOTH (MURNI)
+  // MODE HP: WEB BLUETOOTH (TANPA APLIKASI TAMBAHAN)
   // =========================================================
-  if (isMobile) {
-    if (!navigator.bluetooth) {
-      return { success: false, message: '❌ Browser ini tidak mendukung Web Bluetooth. Gunakan Chrome di Android.' }
+  if (isMobile || !('serial' in navigator)) {
+    if (!('bluetooth' in navigator)) {
+      alert('Browser Anda tidak mendukung Bluetooth. Gunakan Chrome terbaru.')
+      return { success: false, message: 'Browser tidak mendukung Web Bluetooth.' }
     }
 
     try {
-      const device = await navigator.bluetooth.requestDevice({
+      // 1. Minta izin dan sambungkan ke printer
+      const device = await (navigator as any).bluetooth.requestDevice({
         acceptAllDevices: true,
-        optionalServices: ['000018f0-0000-1000-8000-00805f9b34fb', 'e7810a71-73ae-499d-8c15-faa9aef0c3f2']
+        optionalServices: ['000018f0-0000-1000-8000-00805f9b34fb', 'e7810a71-73ae-499d-8c15-faa9aef0c3f2'] // UUID umum printer thermal
       })
 
-      if (!device.gatt) {
-        return { success: false, message: '❌ Gagal terhubung ke GATT printer.' }
-      }
-
+      if (!device.gatt) throw new Error('Gagal terhubung ke GATT server.')
+      
       const server = await device.gatt.connect()
+      
+      // 2. Cari layanan printer
       let service
       try {
         service = await server.getPrimaryService('000018f0-0000-1000-8000-00805f9b34fb')
-      } catch {
+      } catch (e) {
         service = await server.getPrimaryService('e7810a71-73ae-499d-8c15-faa9aef0c3f2')
       }
-      const characteristic = await service.getCharacteristic('00002af1-0000-1000-8000-00805f9b34fb')
 
-      const qrUrl = await QRCode.toDataURL(tiket.kode_tiket, { width: 200, margin: 1 })
+      const characteristics = await service.getCharacteristics()
+      // Biasanya characteristic pertama atau yang punya properti 'write' adalah tujuannya
+      const writeCharacteristic = characteristics.find((c: any) => c.properties.write || c.properties.writeWithoutResponse)
+      
+      if (!writeCharacteristic) throw new Error('Karakteristik printer tidak ditemukan.')
+
+      // 3. Siapkan Gambar QR Code (Ukuran 200x200)
+      const qrUrlForPrint = await QRCode.toDataURL(tiket.kode_tiket, { width: 200, margin: 1 })
       const img = new Image()
-      img.src = qrUrl
+      img.src = qrUrlForPrint
       await new Promise((resolve) => { img.onload = resolve })
-
+      
       const canvas = document.createElement('canvas')
       canvas.width = img.width
       canvas.height = img.height
       const ctx = canvas.getContext('2d')
       if (!ctx) throw new Error('Gagal membuat canvas')
       ctx.drawImage(img, 0, 0)
-
+      
       const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height)
       const widthBytes = Math.ceil(canvas.width / 8)
       const height = canvas.height
+      
+      // 4. Format Raster untuk ESC/POS
       let rasterData = `\x1D\x76\x30\x00${String.fromCharCode(widthBytes % 256, Math.floor(widthBytes / 256), height % 256, Math.floor(height / 256))}`
-
+      
       for (let y = 0; y < height; y++) {
         for (let x = 0; x < widthBytes; x++) {
           let byte = 0
@@ -58,73 +68,78 @@ export async function cetakTiketThermal(tiket: any) {
               const g = imgData.data[idx + 1]
               const b = imgData.data[idx + 2]
               const isBlack = (r + g + b) / 3 < 128
-              if (isBlack) byte |= (1 << (7 - bit))
+              if (isBlack) {
+                byte |= (1 << (7 - bit))
+              }
             }
           }
           rasterData += String.fromCharCode(byte)
         }
       }
 
+      // 5. Siapkan Teks
       let textData = ''
-      textData += '\x1B\x40'
-      textData += '\x1B\x33\x05'
-      textData += '\x1B\x4A\x0A'
-      textData += '\x1B\x61\x01'
-      textData += `${tiket.kode_tiket}\n`
+      textData += '\x1B\x40' 
+      textData += '\x1B\x33\x05' 
+      textData += '\x1B\x4A\x0A' 
+      textData += '\x1B\x61\x01' 
+      textData += `${tiket.kode_tiket}\n` 
       textData += `${tiket.jadwal}\n`
-      textData += '\x1B\x61\x00'
+      textData += '\x1B\x61\x00' 
       textData += '--------------------------------\n'
       textData += `Nama / Kursi : ${tiket.nama_penumpang} / ${tiket.kursi}\n`
+      const nikRapi = tiket.nik.replace(/\*/g, '')
+      textData += `NIK          : ${nikRapi}\n`
       textData += `Kapal        : ${tiket.kapal}\n`
-      const jamPotong = tiket.jam.substring(0, 5)
-      textData += `Tgl/Jam      : ${tiket.tanggal}/${jamPotong}\n`
+      const jamPotong = tiket.jam.substring(0, 5) 
+      textData += `Tgl/Jam      : ${tiket.tanggal}/${jamPotong}\n` 
       textData += '--------------------------------\n'
-      textData += '\x1B\x61\x01'
+      textData += '\x1B\x61\x01' 
       textData += `TOTAL: Rp ${tiket.harga.toLocaleString('id-ID')}\n`
-      textData += '\x1B\x61\x00'
+      textData += '\x1B\x61\x00' 
       textData += '--------------------------------\n'
       textData += 'Tunjukan e-tiket ini ke petugas saat boarding\n'
-      textData += '\x1B\x61\x01'
 
       const encoder = new TextEncoder()
-      const textBytes = encoder.encode(textData)
-
-      for (let i = 0; i < textBytes.length; i += 20) {
-        const chunk = textBytes.slice(i, i + 20)
-        await characteristic.writeValue(chunk)
-        await new Promise(resolve => setTimeout(resolve, 50))
+      
+      // Helper untuk ngirim data (karena BLE ada limit ukuran)
+      const sendData = async (data: Uint8Array) => {
+        const CHUNK_SIZE = 100; // Kirim per 100 byte biar gak error
+        for (let i = 0; i < data.length; i += CHUNK_SIZE) {
+          const chunk = data.slice(i, i + CHUNK_SIZE)
+          await writeCharacteristic.writeValue(chunk)
+          await new Promise(r => setTimeout(r, 10)) // Jeda sedikit
+        }
       }
 
+      // 6. Kirim Teks
+      await sendData(encoder.encode(textData))
+      await sendData(encoder.encode('\x1B\x61\x01'))
+
+      // 7. Kirim Gambar QR
       const imageBytes = new Uint8Array(rasterData.length)
       for (let i = 0; i < rasterData.length; i++) {
         imageBytes[i] = rasterData.charCodeAt(i)
       }
+      await sendData(imageBytes)
+      
+      // 8. Kirim Perintah Akhir (Potong Kertas)
+      const endData = '\x1B\x4A\x46\x1D\x56\x00' 
+      await sendData(encoder.encode(endData))
 
-      for (let i = 0; i < imageBytes.length; i += 20) {
-        const chunk = imageBytes.slice(i, i + 20)
-        await characteristic.writeValue(chunk)
-        await new Promise(resolve => setTimeout(resolve, 50))
-      }
-
-      const endData = encoder.encode('\x1B\x4A\x46\x1D\x56\x00')
-      await characteristic.writeValue(endData)
       device.gatt.disconnect()
-
-      return { success: true, message: '✅ Berhasil dicetak via Bluetooth!' }
-
+      
+      return { success: true, message: '✅ Berhasil dikirim ke printer Bluetooth!' }
+      
     } catch (err: any) {
       console.error(err)
-      return { success: false, message: '❌ Gagal cetak Bluetooth: ' + (err.message || 'Pastikan printer menyala & terdeteksi.') }
+      return { success: false, message: '❌ Gagal mencetak: ' + (err.message || 'Pastikan printer menyala dan izin Bluetooth diberikan.') }
     }
   }
 
   // =========================================================
-  // MODE 2: LAPTOP/PC -> PAKAI WEB SERIAL (KABEL)
+  // MODE LAPTOP: WEB SERIAL (KABEL)
   // =========================================================
-  if (!('serial' in navigator)) {
-    return { success: false, message: '❌ Browser tidak mendukung Web Serial. Gunakan Chrome/Edge terbaru.' }
-  }
-
   try {
     const qrUrlForPrint = await QRCode.toDataURL(tiket.kode_tiket, { width: 200, margin: 1 })
     
@@ -181,6 +196,8 @@ export async function cetakTiketThermal(tiket: any) {
     textData += '\x1B\x61\x00' 
     textData += '--------------------------------\n'
     textData += `Nama / Kursi : ${tiket.nama_penumpang} / ${tiket.kursi}\n`
+    const nikRapi = tiket.nik.replace(/\*/g, '')
+    textData += `NIK          : ${nikRapi}\n`
     textData += `Kapal        : ${tiket.kapal}\n`
     const jamPotong = tiket.jam.substring(0, 5) 
     textData += `Tgl/Jam      : ${tiket.tanggal}/${jamPotong}\n` 
@@ -206,7 +223,7 @@ export async function cetakTiketThermal(tiket: any) {
     writer.releaseLock()
     await port.close()
     
-    return { success: true, message: '✅ Berhasil dikirim ke printer via kabel!' }
+    return { success: true, message: '✅ Berhasil dikirim ke printer!' }
     
   } catch (err: any) {
     console.error(err)

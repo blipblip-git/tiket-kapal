@@ -65,6 +65,7 @@ function LoketJualContent() {
   useEffect(() => {
     async function init() {
       setKursiDipilih([])
+      setPenumpangList([])
       
       const sesi = localStorage.getItem('petugas_session')
       if (!sesi) {
@@ -264,6 +265,11 @@ function LoketJualContent() {
       return
     }
 
+    if (!noHp) {
+      setError('Nomor HP wajib diisi.')
+      return
+    }
+
     setLoadingSubmit(true)
 
     const waktuHold = new Date().toISOString()
@@ -296,7 +302,6 @@ function LoketJualContent() {
     if (profile.role === 'petugas_mobile') kanalPesanan = 'mobile'
     if (profile.role === 'terminal_keberangkatan') kanalPesanan = 'keberangkatan'
 
-    // Data Penumpang Dewasa
     const pesananData = penumpangList.map((p, idx) => {
       const namaRapi = toTitleCase(p.nama);
       return {
@@ -318,17 +323,16 @@ function LoketJualContent() {
       }
     })
 
-    // Data Balita (Kalau Ada)
     if (bawaBalita && namaBalita) {
       pesananData.push({
         jadwal_id: jadwal.id,
-        kursi_id: null as any, // Tanpa kursi
+        kursi_id: null as any,
         nama_penumpang: toTitleCase(namaBalita),
         nik: '-',
         nomor_hp: noHp,
         kanal: kanalPesanan, 
         status: 'paid',
-        kode_tiket: 'BALITA-' + Date.now(), // Kode khusus balita
+        kode_tiket: 'BALITA-' + Date.now(),
         waktu_bayar: waktuKonfirmasi,
         petugas_konfirmasi: profile.email,
         waktu_konfirmasi: waktuKonfirmasi,
@@ -355,7 +359,6 @@ function LoketJualContent() {
       .update({ status: 'terisi', waktu_hold: null })
       .in('id', kursiDipilih)
 
-    // Pembayaran cuma buat kursi dewasa (balita Rp 0)
     const insertedDewasa = inserted.filter((p) => !p.is_balita)
     const pembayaranData = insertedDewasa.map((p) => ({
       pesanan_id: p.id,
@@ -387,7 +390,8 @@ function LoketJualContent() {
       })),
     })
 
-    const ids = inserted.filter(p => !p.is_balita).map((p) => p.id).join(',')
+    // KIRIM SEMUA ID (DEWASA + BALITA) KE E-TIKET
+    const ids = inserted.map((p) => p.id).join(',')
     router.push(`/etiket?pesanan=${ids}`)
   }
 
@@ -559,42 +563,41 @@ function LoketJualContent() {
                     </div>
                     <label className="block mb-1 text-[10px] md:text-xs font-medium text-gray-700">Nama Lengkap</label>
                     <input type="text" value={p.nama} onChange={(e) => updatePenumpang(idx, 'nama', e.target.value)} className="w-full border border-gray-300 rounded px-3 py-1.5 md:py-2 text-xs md:text-sm text-gray-900" required />
+
+                    <div className="mt-3 bg-orange-50 p-2 rounded border border-orange-200">
+                      <div className="flex items-center gap-2">
+                        <input 
+                          type="checkbox" 
+                          id={`bawaBalita-${idx}`}
+                          checked={bawaBalita} 
+                          onChange={(e) => setBawaBalita(e.target.checked)} 
+                          className="w-4 h-4 text-orange-600 rounded focus:ring-orange-500"
+                        />
+                        <label htmlFor={`bawaBalita-${idx}`} className="text-[10px] md:text-xs font-bold text-orange-900 cursor-pointer">
+                          Bawa Balita di bawah 4 tahun? (Gratis)
+                        </label>
+                      </div>
+                      {bawaBalita && (
+                        <div className="mt-2">
+                          <label className="block mb-1 text-[10px] md:text-xs font-medium text-orange-900">Nama Balita</label>
+                          <input 
+                            type="text" 
+                            value={namaBalita} 
+                            onChange={(e) => setNamaBalita(e.target.value)} 
+                            className="w-full border border-orange-300 rounded px-3 py-1.5 md:py-2 text-xs md:text-sm text-gray-900" 
+                            placeholder="Nama anak" 
+                          />
+                          <p className="text-[10px] text-orange-700 mt-1 italic">*Balita tidak memerlukan kursi dan tidak dikenakan biaya.</p>
+                        </div>
+                      )}
+                    </div>
                   </div>
                 )
               })}
 
               <div className="bg-white p-3 md:p-4 rounded-lg shadow-sm border border-gray-200">
-                <label className="block mb-1 text-[10px] md:text-xs font-medium text-gray-700">Nomor HP (opsional)</label>
-                <input type="tel" value={noHp} onChange={(e) => setNoHp(e.target.value)} className="w-full border border-gray-300 rounded px-3 py-1.5 md:py-2 text-xs md:text-sm text-gray-900" placeholder="08xxxxxxxxxx" />
-              </div>
-
-              {/* OPSI BALITA */}
-              <div className="bg-orange-50 p-3 md:p-4 rounded-lg shadow-sm border border-orange-200">
-                <div className="flex items-center gap-2 mb-2">
-                  <input 
-                    type="checkbox" 
-                    id="bawaBalita"
-                    checked={bawaBalita} 
-                    onChange={(e) => setBawaBalita(e.target.checked)} 
-                    className="w-4 h-4 text-orange-600 rounded focus:ring-orange-500"
-                  />
-                  <label htmlFor="bawaBalita" className="text-xs md:text-sm font-bold text-orange-900 cursor-pointer">
-                    Bawa Balita di bawah 4 tahun? (Gratis)
-                  </label>
-                </div>
-                {bawaBalita && (
-                  <div>
-                    <label className="block mb-1 text-[10px] md:text-xs font-medium text-orange-900">Nama Balita</label>
-                    <input 
-                      type="text" 
-                      value={namaBalita} 
-                      onChange={(e) => setNamaBalita(e.target.value)} 
-                      className="w-full border border-orange-300 rounded px-3 py-1.5 md:py-2 text-xs md:text-sm text-gray-900" 
-                      placeholder="Nama anak" 
-                    />
-                    <p className="text-[10px] text-orange-700 mt-1 italic">*Balita tidak memerlukan kursi dan tidak dikenakan biaya.</p>
-                  </div>
-                )}
+                <label className="block mb-1 text-[10px] md:text-xs font-medium text-gray-700">Nomor HP</label>
+                <input type="tel" value={noHp} onChange={(e) => setNoHp(e.target.value)} className="w-full border border-gray-300 rounded px-3 py-1.5 md:py-2 text-xs md:text-sm text-gray-900" placeholder="08xxxxxxxxxx" required />
               </div>
 
               {error && <p className="text-red-600 text-xs md:text-sm font-bold bg-red-50 p-2 rounded">{error}</p>}
