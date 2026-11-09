@@ -1,6 +1,5 @@
 import QRCode from 'qrcode'
 
-// Fungsi untuk menghasilkan perintah ESC/POS berupa byte
 function generateEscPosCommand(tiket: any, qrUrl: string): Promise<Uint8Array> {
   return new Promise((resolve, reject) => {
     const img = new Image()
@@ -46,13 +45,13 @@ function generateEscPosCommand(tiket: any, qrUrl: string): Promise<Uint8Array> {
         let textData = ''
         textData += '\x1B\x40' // Initialize
         textData += '\x1B\x33\x05' // Line spacing
-        textData += '\x1B\x4A\x0A' // Feed
+        textData += '\x1B\x4A\x0A' // Feed awal
         textData += '\x1B\x61\x01' // Center align
         textData += `${tiket.kode_tiket}\n` 
         textData += `${tiket.jadwal}\n`
         textData += '\x1B\x61\x00' // Left align
         
-        // Garis putus-putus diperpendek agar tidak turun baris di kertas 58mm
+        // Garis putus-putus (30 karakter)
         textData += '------------------------------\n'
         textData += `Nama / Kursi : ${tiket.nama_penumpang} / ${tiket.kursi}\n`
         const nikRapi = tiket.nik.replace(/\*/g, '')
@@ -66,6 +65,9 @@ function generateEscPosCommand(tiket: any, qrUrl: string): Promise<Uint8Array> {
         textData += '\x1B\x61\x00' // Left align
         textData += '------------------------------\n'
         textData += 'Tunjukan e-tiket ini ke petugas\n'
+        
+        // Jarak sebelum QR (Feed 10 dots)
+        textData += '\x1B\x64\x0A' 
         textData += '\x1B\x61\x01' // Center align (for QR)
 
         const textBytes = encoder.encode(textData)
@@ -75,10 +77,10 @@ function generateEscPosCommand(tiket: any, qrUrl: string): Promise<Uint8Array> {
           imageBytes[i] = rasterData.charCodeAt(i)
         }
         
-        const endData = '\x1B\x4A\x46\x1D\x56\x00' // Cut/feed
+        // Jarak sesudah QR (Feed 70 dots) + Potong kertas
+        const endData = '\x1B\x64\x46\x1D\x56\x00' 
         const endBytes = encoder.encode(endData)
 
-        // Gabungkan semua byte
         const totalLength = textBytes.length + imageBytes.length + endBytes.length
         const finalBuffer = new Uint8Array(totalLength)
         finalBuffer.set(textBytes, 0)
@@ -99,15 +101,10 @@ export async function cetakTiketThermal(tiket: any) {
     // Ukuran QR 160px
     const qrUrl = await QRCode.toDataURL(tiket.kode_tiket, { width: 160, margin: 1 })
     
-    // Cek Web Bluetooth
     if (!navigator.bluetooth) {
-      return { 
-        success: false, 
-        message: '❌ Browser Anda tidak mendukung Web Bluetooth.' 
-      }
+      return { success: false, message: '❌ Browser Anda tidak mendukung Web Bluetooth.' }
     }
 
-    // Pilih Perangkat
     const device = await navigator.bluetooth.requestDevice({
       filters: [
         { services: ['000018f0-0000-1000-8000-00805f9b34fb'] },
@@ -116,19 +113,14 @@ export async function cetakTiketThermal(tiket: any) {
       ],
       optionalServices: ['generic_access', 'generic_attribute', 'device_information', 'battery_service']
     }).catch((err: any) => {
-      if (err.name === 'NotFoundError') {
-        throw new Error('Tidak ada printer yang dipilih.')
-      }
+      if (err.name === 'NotFoundError') throw new Error('Tidak ada printer yang dipilih.')
       throw err;
     });
 
-    if (!device.gatt) {
-      throw new Error('Gagal terhubung ke printer.')
-    }
+    if (!device.gatt) throw new Error('Gagal terhubung ke printer.')
 
     const server = await device.gatt.connect();
     
-    // Cari Service
     let service;
     const serviceUUIDs = ['000018f0-0000-1000-8000-00805f9b34fb', '0000ff00-0000-1000-8000-00805f9b34fb', 'e7810a71-73ae-499d-8c15-faa9aef0c3f2'];
     
@@ -136,14 +128,11 @@ export async function cetakTiketThermal(tiket: any) {
       try {
         service = await server.getPrimaryService(uuid);
         if (service) break;
-      } catch (e) {
-        // Lanjut cari service lain
-      }
+      } catch (e) {}
     }
 
-    if (!service) throw new Error('Layanan printer tidak ditemukan.');
+    if (!service) throw new Error('Layanan printer tidak ditemukan.')
 
-    // Cari Characteristic
     const characteristics = await service.getCharacteristics();
     let writeChar = null;
     
@@ -154,12 +143,10 @@ export async function cetakTiketThermal(tiket: any) {
       }
     }
 
-    if (!writeChar) throw new Error('Karakteristik printer tidak ditemukan.');
+    if (!writeChar) throw new Error('Karakteristik printer tidak ditemukan.')
 
-    // Dapatkan Data ESC/POS
     const printData = await generateEscPosCommand(tiket, qrUrl);
 
-    // Kirim Data
     const chunkSize = 256;
     for (let i = 0; i < printData.length; i += chunkSize) {
       const chunk = printData.slice(i, i + chunkSize);
