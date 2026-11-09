@@ -63,7 +63,7 @@ function generateEscPosCommand(tiket: any, qrUrl: string): Promise<Uint8Array> {
         textData += `TOTAL: Rp ${tiket.harga.toLocaleString('id-ID')}\n`
         textData += '\x1B\x61\x00' // Left align
         textData += '--------------------------------\n'
-        textData += 'Tunjukan e-tiket ini ke petugas\n'
+        textData += 'Tunjukan e-tiket ini ke petugas\n\n'
         textData += '\x1B\x61\x01' // Center align (for QR)
 
         const textBytes = encoder.encode(textData)
@@ -94,7 +94,8 @@ function generateEscPosCommand(tiket: any, qrUrl: string): Promise<Uint8Array> {
 
 export async function cetakTiketThermal(tiket: any) {
   try {
-    const qrUrl = await QRCode.toDataURL(tiket.kode_tiket, { width: 200, margin: 1 })
+    // PERKECIL QR JADI 120x120
+    const qrUrl = await QRCode.toDataURL(tiket.kode_tiket, { width: 120, margin: 1 })
     
     // Cek apakah browser mendukung Web Bluetooth
     if (!navigator.bluetooth) {
@@ -104,10 +105,10 @@ export async function cetakTiketThermal(tiket: any) {
       }
     }
 
-    // Minta user memilih perangkat Bluetooth (hanya yang mendukung service printer)
+    // Minta user memilih perangkat Bluetooth
     const device = await navigator.bluetooth.requestDevice({
       filters: [
-        { services: ['000018f0-0000-1000-8000-00805f9b34fb'] },
+        { services: ['000018f0-0000-1000-8000-00805f9b34fb'] }, // Printer Service
         { services: ['0000ff00-0000-1000-8000-00805f9b34fb'] },
         { services: ['e7810a71-73ae-499d-8c15-faa9aef0c3f2'] }
       ],
@@ -160,8 +161,8 @@ export async function cetakTiketThermal(tiket: any) {
     // Generate perintah cetak
     const printData = await generateEscPosCommand(tiket, qrUrl);
 
-    // Kirim data (dipecah per 512 byte agar tidak error)
-    const chunkSize = 512;
+    // Kirim data (dipecah per 256 byte agar tidak error) & Jeda 100ms agar printer tidak kewalahan
+    const chunkSize = 256;
     for (let i = 0; i < printData.length; i += chunkSize) {
       const chunk = printData.slice(i, i + chunkSize);
       if (writeChar.properties.writeWithoutResponse) {
@@ -169,8 +170,8 @@ export async function cetakTiketThermal(tiket: any) {
       } else {
         await writeChar.writeValue(chunk);
       }
-      // Jeda sedikit antar chunk agar printer tidak overload
-      await new Promise(r => setTimeout(r, 50));
+      // Jeda diperlama jadi 100ms
+      await new Promise(r => setTimeout(r, 100));
     }
 
     return { success: true, message: '✅ Berhasil dicetak via Bluetooth!' }
