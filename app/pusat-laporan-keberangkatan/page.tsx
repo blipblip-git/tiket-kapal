@@ -35,10 +35,8 @@ function PusatLaporanContent() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   
-  // State untuk berpindah antara menu dan tampilan manifest
   const [mode, setMode] = useState<'menu' | 'manifest'>('menu')
 
-  // State khusus manifest
   const [laporan, setLaporan] = useState<LaporanPerJam[]>([])
   const [tanggal, setTanggal] = useState('')
   const [expandedJam, setExpandedJam] = useState<string | null>(null)
@@ -169,232 +167,251 @@ function PusatLaporanContent() {
     });
   }
 
-  const potongKode = (kode: string) => kode.length > 6 ? `...${kode.slice(-6)}` : kode
+  const potongKode = (kode: string) => kode.length > 6 ? kode.slice(-6) : kode
 
   return (
-    <div className="h-[100dvh] w-full bg-gray-50 flex flex-col overflow-hidden">
+    <>
       <style dangerouslySetInnerHTML={{__html: `
         @media print {
+          @page { size: A4; margin: 0 !important; }
+          html, body {
+            margin: 0 !important;
+            padding: 0 !important;
+            background: white !important;
+            height: auto !important;
+            overflow: visible !important;
+          }
+          /* Sembunyikan semua elemen */
           body * { visibility: hidden; }
-          .print-section, .print-section * { visibility: visible; }
-          .print-section { position: absolute; left: 0; top: 0; width: 100%; }
-          @page { size: A4; margin: 15mm; }
-          body { background: white; margin: 0; padding: 0; }
+          
+          /* Tampilkan HANYA print container */
+          .print-container, .print-container * { visibility: visible; }
+          
+          /* Posisi print container nempel atas kiri */
+          .print-container {
+            position: absolute;
+            left: 0;
+            top: 0;
+            width: 100%;
+            padding: 15mm !important;
+            box-sizing: border-box;
+            background: white;
+          }
+          .screen-only { display: none !important; }
         }
       `}} />
 
-      {/* ================= TAMPILAN MENU UTAMA ================= */}
-      {mode === 'menu' && (
-        <div className="max-w-md w-full mx-auto p-4 flex-1 flex flex-col">
-          <div className="bg-white p-4 rounded-xl shadow-md border border-gray-100 mb-4 flex-shrink-0">
-            <div className="flex justify-between items-start">
-              <div>
-                <h1 className="text-lg md:text-xl font-bold text-gray-900 leading-tight">
-                  Pusat Laporan Petugas
-                </h1>
-                <p className="text-sm text-gray-600 mt-1 font-medium">
-                  {profile.lokasi} - {profile.nama}
-                </p>
+      {/* ================= TAMPILAN UTAMA (SCREEN ONLY) ================= */}
+      <div className="screen-only h-[100dvh] w-full bg-gray-50 flex flex-col overflow-hidden">
+        
+        {mode === 'menu' && (
+          <div className="max-w-md w-full mx-auto p-4 flex-1 flex flex-col">
+            <div className="bg-white p-4 rounded-xl shadow-md border border-gray-100 mb-4 flex-shrink-0">
+              <div className="flex justify-between items-start">
+                <div>
+                  <h1 className="text-lg md:text-xl font-bold text-gray-900 leading-tight">
+                    Pusat Laporan Petugas
+                  </h1>
+                  <p className="text-sm text-gray-600 mt-1 font-medium">
+                    {profile.lokasi} - {profile.nama}
+                  </p>
+                </div>
+                <button 
+                  onClick={() => router.push('/dashboard/keberangkatan')} 
+                  className="text-xs bg-gray-50 text-blue-600 px-3 py-1.5 rounded hover:underline border border-gray-200 font-bold shadow-sm"
+                >
+                  &larr; Kembali
+                </button>
               </div>
+            </div>
+
+            <div className="flex-1 flex flex-col gap-3 justify-center pb-4">
               <button 
-                onClick={() => router.push('/dashboard/keberangkatan')} 
-                className="text-xs bg-gray-50 text-blue-600 px-3 py-1.5 rounded hover:underline border border-gray-200 font-bold shadow-sm"
+                onClick={() => router.push('/laporan-penjualan-keberangkatan')} 
+                className="bg-white p-4 rounded-xl shadow-sm hover:shadow-md transition border border-gray-200 text-left flex items-center gap-4"
               >
-                &larr; Kembali
+                <div className="text-3xl bg-blue-50 w-14 h-14 flex items-center justify-center rounded-lg">💰</div>
+                <div>
+                  <h2 className="text-base font-bold text-gray-900">Laporan Penjualan</h2>
+                  <p className="text-xs text-gray-500 mt-0.5">Rekap uang tunai & QRIS yang Anda jual.</p>
+                </div>
+              </button>
+
+              <button 
+                onClick={() => setMode('manifest')} 
+                className="bg-white p-4 rounded-xl shadow-sm hover:shadow-md transition border border-gray-200 text-left flex items-center gap-4"
+              >
+                <div className="text-3xl bg-orange-50 w-14 h-14 flex items-center justify-center rounded-lg">📋</div>
+                <div>
+                  <h2 className="text-base font-bold text-gray-900">Laporan Manifest</h2>
+                  <p className="text-xs text-gray-500 mt-0.5">Cetak daftar penumpang untuk Syahbandar.</p>
+                </div>
               </button>
             </div>
           </div>
+        )}
 
-          <div className="flex-1 flex flex-col gap-3 justify-center pb-4">
-            
-            <button 
-              onClick={() => router.push('/laporan-penjualan-keberangkatan')} 
-              className="bg-white p-4 rounded-xl shadow-sm hover:shadow-md transition border border-gray-200 text-left flex items-center gap-4"
-            >
-              <div className="text-3xl bg-blue-50 w-14 h-14 flex items-center justify-center rounded-lg">💰</div>
-              <div>
-                <h2 className="text-base font-bold text-gray-900">Laporan Penjualan</h2>
-                <p className="text-xs text-gray-500 mt-0.5">Rekap uang tunai & QRIS yang Anda jual.</p>
-              </div>
-            </button>
-
-            <button 
-              onClick={() => setMode('manifest')} 
-              className="bg-white p-4 rounded-xl shadow-sm hover:shadow-md transition border border-gray-200 text-left flex items-center gap-4"
-            >
-              <div className="text-3xl bg-orange-50 w-14 h-14 flex items-center justify-center rounded-lg">📋</div>
-              <div>
-                <h2 className="text-base font-bold text-gray-900">Laporan Manifest</h2>
-                <p className="text-xs text-gray-500 mt-0.5">Cetak daftar penumpang untuk Syahbandar.</p>
-              </div>
-            </button>
-
-          </div>
-        </div>
-      )}
-
-      {/* ================= TAMPILAN MANIFEST ================= */}
-      {mode === 'manifest' && (
-        <>
-          {!expandedJam ? (
-            <>
-              {/* HEADER LIST MANIFEST */}
-              <div className="flex-shrink-0 bg-white shadow-sm z-10 px-4 py-3 md:py-4 print:hidden">
-                <div className="max-w-md mx-auto">
-                  <div className="flex justify-between items-start mb-3">
-                    <div>
-                      <h1 className="text-xl font-bold text-gray-900 leading-tight">Laporan Manifest</h1>
-                      <p className="text-sm text-gray-600 mt-0.5">Petugas {profile.lokasi} - {profile.nama}</p>
+        {mode === 'manifest' && (
+          <>
+            {!expandedJam ? (
+              <>
+                <div className="flex-shrink-0 bg-white shadow-sm z-10 px-4 py-3 md:py-4">
+                  <div className="max-w-md mx-auto">
+                    <div className="flex justify-between items-start mb-3">
+                      <div>
+                        <h1 className="text-xl font-bold text-gray-900 leading-tight">Laporan Manifest</h1>
+                        <p className="text-sm text-gray-600 mt-0.5">Petugas {profile.lokasi} - {profile.nama}</p>
+                      </div>
+                      <button onClick={() => setMode('menu')} className="text-xs text-blue-600 hover:underline bg-gray-50 px-2 py-1.5 rounded border border-gray-200 mt-1">
+                        &larr; Kembali
+                      </button>
                     </div>
-                    <button onClick={() => setMode('menu')} className="text-xs text-blue-600 hover:underline bg-gray-50 px-2 py-1.5 rounded border border-gray-200 mt-1">
-                      &larr; Kembali
+                    <div>
+                      <label className="block text-xs font-bold text-gray-700 mb-1">Pilih Tanggal</label>
+                      <input type="date" value={tanggal} onChange={(e) => setTanggal(e.target.value)} className="w-full border rounded-md px-3 py-2 text-sm text-gray-900 shadow-sm focus:ring-blue-500 focus:border-blue-500" />
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex-1 overflow-y-auto w-full p-4">
+                  <div className="max-w-md mx-auto space-y-6">
+                    <div>
+                      <h2 className="text-sm font-bold text-gray-800 mb-2 border-b border-gray-300 pb-1">Jadwal Belum Closing</h2>
+                      {laporanBelumClosed.length === 0 ? (
+                        <div className="bg-white p-4 rounded-lg border border-gray-200 text-center shadow-sm">
+                          <p className="text-gray-500 text-xs">Belum ada jadwal.</p>
+                        </div>
+                      ) : (
+                        <div className="space-y-2">
+                          {laporanBelumClosed.map((l) => (
+                            <div key={l.jam} className="bg-white rounded-lg border border-gray-200 overflow-hidden shadow-sm">
+                              <div className="bg-blue-50 px-3 py-2 flex justify-between items-center">
+                                <span className="font-bold text-xs text-gray-900">🕒 Jam {l.jam}</span>
+                                <span className="text-xs font-bold text-blue-600">{l.total_terjual} Penumpang</span>
+                              </div>
+                              <div className="p-2">
+                                {l.rincian.length === 0 ? (
+                                  <p className="text-[10px] text-gray-400 italic text-center py-1">Belum ada penumpang.</p>
+                                ) : (
+                                  l.rincian.map((p, idx) => (
+                                    <div key={p.id} className="text-[11px] p-1 text-gray-800 border-b border-gray-100 last:border-0">
+                                      {idx + 1}. {p.nama} / {p.kursi} <span className="text-gray-500">({potongKode(p.kode_tiket)})</span>
+                                    </div>
+                                  ))
+                                )}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+
+                    <div>
+                      <h2 className="text-sm font-bold text-gray-800 mb-2 border-b border-gray-300 pb-1">Jadwal Sudah Closing</h2>
+                      {laporanSudahClosed.length === 0 ? (
+                        <div className="bg-white p-4 rounded-lg border border-gray-200 text-center shadow-sm">
+                          <p className="text-gray-500 text-xs">Belum ada jadwal.</p>
+                        </div>
+                      ) : (
+                        <div className="space-y-2">
+                          {laporanSudahClosed.map((l) => (
+                            <div key={l.jam} className="bg-white rounded-lg border border-gray-200 shadow-sm">
+                              <button 
+                                onClick={() => setExpandedJam(l.jam)} 
+                                className="w-full px-3 py-2.5 flex justify-between items-center hover:bg-gray-50 transition"
+                              >
+                                <div className="flex items-center gap-2">
+                                  <span className="text-sm">📋</span>
+                                  <span className="font-bold text-xs text-gray-900">Manifest Jam {l.jam}</span>
+                                </div>
+                                <div className="flex items-center gap-3">
+                                  <span className="text-[10px] font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full">{l.total_terjual} Penumpang</span>
+                                  <span className="text-[10px] text-blue-600">▼</span>
+                                </div>
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="flex-shrink-0 bg-white shadow-sm z-10 px-4 py-3">
+                  <div className="max-w-md mx-auto flex justify-between items-center">
+                    <div>
+                      <h1 className="text-xl font-bold text-gray-900 leading-tight">Rincian Manifest</h1>
+                      <p className="text-sm text-gray-600 mt-0.5">Jam {expandedJam}</p>
+                    </div>
+                    <button onClick={() => setExpandedJam(null)} className="text-xs bg-red-50 text-red-600 hover:bg-red-100 px-3 py-1.5 rounded border border-red-200 font-bold">
+                      Tutup
                     </button>
                   </div>
+                </div>
 
-                  <div>
-                    <label className="block text-xs font-bold text-gray-700 mb-1">Pilih Tanggal</label>
-                    <input type="date" value={tanggal} onChange={(e) => setTanggal(e.target.value)} className="w-full border rounded-md px-3 py-2 text-sm text-gray-900 shadow-sm focus:ring-blue-500 focus:border-blue-500" />
+                <div className="flex-shrink-0 bg-blue-50 p-4 border-b border-blue-200">
+                  <div className="max-w-md mx-auto text-[11px] grid grid-cols-[80px_10px_1fr] gap-y-1 text-gray-700">
+                    <span>Tanggal</span><span>:</span><span>{tanggal}</span>
+                    <span>Rute</span><span>:</span><span>{ruteLengkap}</span>
+                    <span>Kapal</span><span>:</span><span className="font-medium text-gray-900">{rincianAktif?.nama_kapal}</span>
+                    <span>Kapten</span><span>:</span><span className="font-medium text-gray-900">{rincianAktif?.nama_kapten}</span>
                   </div>
                 </div>
-              </div>
 
-              {/* AREA SCROLLABLE LIST MANIFEST */}
-              <div className="flex-1 overflow-y-auto w-full p-4 print:hidden">
-                <div className="max-w-md mx-auto space-y-6">
-                  {/* BELUM CLOSING */}
-                  <div>
-                    <h2 className="text-sm font-bold text-gray-800 mb-2 border-b border-gray-300 pb-1">Jadwal Belum Closing</h2>
-                    {laporanBelumClosed.length === 0 ? (
-                      <div className="bg-white p-4 rounded-lg border border-gray-200 text-center shadow-sm">
-                        <p className="text-gray-500 text-xs">Belum ada jadwal.</p>
-                      </div>
-                    ) : (
-                      <div className="space-y-2">
-                        {laporanBelumClosed.map((l) => (
-                          <div key={l.jam} className="bg-white rounded-lg border border-gray-200 overflow-hidden shadow-sm">
-                            <div className="bg-blue-50 px-3 py-2 flex justify-between items-center">
-                              <span className="font-bold text-xs text-gray-900">🕒 Jam {l.jam}</span>
-                              <span className="text-xs font-bold text-blue-600">{l.total_terjual} Penumpang</span>
-                            </div>
-                            <div className="p-2">
-                              {l.rincian.length === 0 ? (
-                                <p className="text-[10px] text-gray-400 italic text-center py-1">Belum ada penumpang.</p>
-                              ) : (
-                                l.rincian.map((p, idx) => (
-                                  <div key={p.id} className="text-[11px] p-1 text-gray-800 border-b border-gray-100 last:border-0">
-                                    {idx + 1}. {p.nama} / {p.kursi} <span className="text-gray-500">({potongKode(p.kode_tiket)})</span>
-                                  </div>
-                                ))
-                              )}
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-
-                  {/* SUDAH CLOSING */}
-                  <div>
-                    <h2 className="text-sm font-bold text-gray-800 mb-2 border-b border-gray-300 pb-1">Jadwal Sudah Closing</h2>
-                    {laporanSudahClosed.length === 0 ? (
-                      <div className="bg-white p-4 rounded-lg border border-gray-200 text-center shadow-sm">
-                        <p className="text-gray-500 text-xs">Belum ada jadwal.</p>
-                      </div>
-                    ) : (
-                      <div className="space-y-2">
-                        {laporanSudahClosed.map((l) => (
-                          <div key={l.jam} className="bg-white rounded-lg border border-gray-200 shadow-sm">
-                            <button 
-                              onClick={() => setExpandedJam(l.jam)} 
-                              className="w-full px-3 py-2.5 flex justify-between items-center hover:bg-gray-50 transition"
-                            >
-                              <div className="flex items-center gap-2">
-                                <span className="text-sm">📋</span>
-                                <span className="font-bold text-xs text-gray-900">Manifest Jam {l.jam}</span>
-                              </div>
-                              <div className="flex items-center gap-3">
-                                <span className="text-[10px] font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full">{l.total_terjual} Penumpang</span>
-                                <span className="text-[10px] text-blue-600">▼</span>
-                              </div>
-                            </button>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </div>
-            </>
-          ) : (
-            // TAMPILAN RINCIAN FULL SCREEN
-            <>
-              <div className="flex-shrink-0 bg-white shadow-sm z-10 px-4 py-3 print:hidden">
-                <div className="max-w-md mx-auto flex justify-between items-center">
-                  <div>
-                    <h1 className="text-xl font-bold text-gray-900 leading-tight">Rincian Manifest</h1>
-                    <p className="text-sm text-gray-600 mt-0.5">Jam {expandedJam}</p>
-                  </div>
-                  <button onClick={() => setExpandedJam(null)} className="text-xs bg-red-50 text-red-600 hover:bg-red-100 px-3 py-1.5 rounded border border-red-200 font-bold">
-                    Tutup
-                  </button>
-                </div>
-              </div>
-
-              <div className="flex-shrink-0 bg-blue-50 p-4 border-b border-blue-200 print:hidden">
-                <div className="max-w-md mx-auto text-[11px] grid grid-cols-[80px_10px_1fr] gap-y-1 text-gray-700">
-                  <span>Tanggal</span><span>:</span><span>{tanggal}</span>
-                  <span>Rute</span><span>:</span><span>{ruteLengkap}</span>
-                  <span>Kapal</span><span>:</span><span className="font-medium text-gray-900">{rincianAktif?.nama_kapal}</span>
-                  <span>Kapten</span><span>:</span><span className="font-medium text-gray-900">{rincianAktif?.nama_kapten}</span>
-                </div>
-              </div>
-
-              <div className="flex-1 overflow-y-auto w-full print:hidden">
-                <div className="max-w-md mx-auto">
-                  <table className="min-w-full divide-y divide-gray-200">
-                    <thead className="bg-gray-100 border-b text-center text-gray-700 sticky top-0 z-10">
-                      <tr>
-                        <th className="px-2 py-3 text-[10px] font-bold">No</th>
-                        <th className="px-2 py-3 text-[10px] font-bold">Nama / Kursi</th>
-                        <th className="px-2 py-3 text-[10px] font-bold">Scan</th>
-                      </tr>
-                    </thead>
-                    <tbody className="bg-white divide-y divide-gray-100">
-                      {rincianAktif?.rincian.length === 0 ? (
+                <div className="flex-1 overflow-y-auto w-full">
+                  <div className="max-w-md mx-auto">
+                    <table className="min-w-full divide-y divide-gray-200">
+                      <thead className="bg-gray-100 border-b text-center text-gray-700 sticky top-0 z-10">
                         <tr>
-                          <td colSpan={3} className="px-4 py-6 text-center text-gray-400 italic text-xs">Belum ada penumpang.</td>
+                          <th className="px-2 py-3 text-[10px] font-bold">No</th>
+                          <th className="px-2 py-3 text-[10px] font-bold">Nama / Kursi</th>
+                          <th className="px-2 py-3 text-[10px] font-bold">Scan</th>
                         </tr>
-                      ) : (
-                        rincianAktif && urutkanBerdasarkanScan(rincianAktif.rincian).map((p, idx) => (
-                          <tr key={p.id} className="hover:bg-gray-50 text-center text-gray-900">
-                            <td className="px-2 py-3 text-[11px]">{idx + 1}</td>
-                            <td className="px-2 py-3 text-[11px] font-bold text-left">{p.nama} / {p.kursi}</td>
-                            <td className="px-2 py-3 text-[10px]">
-                              {p.waktu_boarding ? new Date(p.waktu_boarding).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) : '-'}
-                            </td>
+                      </thead>
+                      <tbody className="bg-white divide-y divide-gray-100">
+                        {rincianAktif?.rincian.length === 0 ? (
+                          <tr>
+                            <td colSpan={3} className="px-4 py-6 text-center text-gray-400 italic text-xs">Belum ada penumpang.</td>
                           </tr>
-                        ))
-                      )}
-                    </tbody>
-                  </table>
+                        ) : (
+                          rincianAktif && urutkanBerdasarkanScan(rincianAktif.rincian).map((p, idx) => (
+                            <tr key={p.id} className="hover:bg-gray-50 text-center text-gray-900">
+                              <td className="px-2 py-3 text-[11px]">{idx + 1}</td>
+                              <td className="px-2 py-3 text-[11px] font-bold text-left">{p.nama} / {p.kursi}</td>
+                              <td className="px-2 py-3 text-[10px]">
+                                {p.waktu_boarding ? new Date(p.waktu_boarding).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) : '-'}
+                              </td>
+                            </tr>
+                          ))
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
                 </div>
-              </div>
 
-              <div className="flex-shrink-0 bg-white border-t border-gray-200 p-3 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)] z-10 print:hidden">
-                <div className="max-w-md mx-auto">
-                  <button onClick={handlePrint} className="w-full bg-green-600 text-white py-2.5 rounded-lg text-sm font-bold hover:bg-green-700 shadow-sm transition-colors">
-                    📋 Cetak Manifest (PDF)
-                  </button>
+                <div className="flex-shrink-0 bg-white border-t border-gray-200 p-3 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)] z-10">
+                  <div className="max-w-md mx-auto">
+                    <button onClick={handlePrint} className="w-full bg-green-600 text-white py-2.5 rounded-lg text-sm font-bold hover:bg-green-700 shadow-sm transition-colors">
+                      📋 Cetak Manifest (PDF)
+                    </button>
+                  </div>
                 </div>
-              </div>
-            </>
-          )}
-        </>
-      )}
+              </>
+            )}
+          </>
+        )}
+      </div>
 
-      {/* AREA KHUSUS PRINT (Hanya muncul di kertas) */}
+      {/* ================= AREA KHUSUS PRINT (TERPISAH TOTAL DARI SCREEN) ================= */}
       {rincianAktif && (
-        <div className="hidden print:block print-section p-0 m-0">
+        <div className="print-container" style={{ display: 'none' }}>
+          <style>{`
+            @media print {
+              .print-container { display: block !important; }
+            }
+          `}</style>
           <h1 className="text-lg font-bold text-center mb-4">LAPORAN MANIFEST PENUMPANG JAM {rincianAktif.jam}</h1>
           
           <div className="mb-4 text-xs grid grid-cols-[120px_10px_1fr] gap-y-1">
@@ -431,7 +448,7 @@ function PusatLaporanContent() {
           </table>
         </div>
       )}
-    </div>
+    </>
   )
 }
 

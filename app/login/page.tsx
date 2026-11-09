@@ -69,7 +69,6 @@ function LoginContent() {
         return 
       }
 
-      // LOGIKA SESI TUNGGAL (BERLAKU UNTUK SEMUA ROLE)
       if (data.sesi_aktif) {
         const lastUpdate = data.updated_at ? new Date(data.updated_at).getTime() : 0;
         const now = new Date().getTime();
@@ -82,10 +81,8 @@ function LoginContent() {
         }
       }
       
-      // Kunci sesi baru
       await supabase.from('profiles').update({ sesi_aktif: true, updated_at: new Date().toISOString() }).eq('id', data.id);
 
-      // Simpan Sesi
       localStorage.setItem('petugas_session', JSON.stringify({
         id: data.id, nama: data.nama, role: data.role, lokasi: data.lokasi, unit: data.unit, email: data.email
       }))
@@ -109,7 +106,6 @@ function LoginContent() {
     }
   }
 
-  // LOGIKA SYAHBANDAR
   useEffect(() => {
     if (tab !== 'syahbandar') return
     async function fetchData() {
@@ -178,7 +174,85 @@ function LoginContent() {
     fetchData()
   }, [tab, sbTanggal, sbLokasi])
 
-  const handlePrintSyahbandar = () => { setTimeout(() => window.print(), 100) }
+  const handlePrintSyahbandar = () => {
+    if (!sbRincianAktif) return
+
+    const printContent = `
+      <html>
+        <head>
+          <title>Cetak Manifest</title>
+          <style>
+            body { font-family: sans-serif; padding: 15mm; margin: 0; }
+            h1 { font-size: 18px; text-align: center; margin-bottom: 20px; }
+            .info { font-size: 12px; margin-bottom: 20px; }
+            table { width: 100%; border-collapse: collapse; font-size: 12px; }
+            th, td { border: 1px solid #000; padding: 4px 8px; }
+            th { background: #eee; text-align: center; }
+            .text-left { text-align: left; }
+            .text-center { text-align: center; }
+            .font-bold { font-weight: bold; }
+          </style>
+        </head>
+        <body>
+          <h1>LAPORAN MANIFEST PENUMPANG JAM ${sbExpandedJam}</h1>
+          <div class="info">
+            <table style="border: none;">
+              <tr><td style="border: none; width: 120px;">Tanggal</td><td style="border: none; width: 10px;">:</td><td style="border: none;">${sbTanggal}</td></tr>
+              <tr><td style="border: none;">Rute</td><td style="border: none;">:</td><td style="border: none;">${sbLokasi} - ${sbLokasi === 'Tarakan' ? 'Tanjung Selor' : 'Tarakan'}</td></tr>
+              <tr><td style="border: none;">Kapal</td><td style="border: none;">:</td><td style="border: none;">${sbRincianAktif.nama_kapal}</td></tr>
+              <tr><td style="border: none;">Kapten</td><td style="border: none;">:</td><td style="border: none;">${sbRincianAktif.nama_kapten}</td></tr>
+              <tr><td style="border: none;">Total</td><td style="border: none;">:</td><td style="border: none;">${sbRincianAktif.total_terjual} Orang</td></tr>
+            </table>
+          </div>
+          <table>
+            <thead>
+              <tr>
+                <th style="width: 40px;">NO</th>
+                <th>NAMA / KURSI</th>
+                <th style="width: 100px;">SCAN</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${urutkanBerdasarkanScan(sbRincianAktif.rincian).map((p, idx) => `
+                <tr>
+                  <td class="text-center">${idx + 1}</td>
+                  <td class="font-bold text-left">${p.nama} / ${p.kursi}</td>
+                  <td class="text-center">${p.waktu_boarding ? new Date(p.waktu_boarding).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) : '-'}</td>
+                </tr>
+              `).join('')}
+              <tr class="font-bold">
+                <td colspan="2" class="text-center">TOTAL PENUMPANG</td>
+                <td class="text-center">${sbRincianAktif.total_terjual}</td>
+              </tr>
+            </tbody>
+          </table>
+        </body>
+      </html>
+    `
+
+    const iframe = document.createElement('iframe')
+    iframe.style.position = 'absolute'
+    iframe.style.width = '0'
+    iframe.style.height = '0'
+    iframe.style.border = 'none'
+    document.body.appendChild(iframe)
+
+    const doc = iframe.contentWindow?.document
+    if (doc) {
+      doc.open()
+      doc.write(printContent)
+      doc.close()
+      
+      setTimeout(() => {
+        iframe.contentWindow?.focus()
+        iframe.contentWindow?.print()
+        
+        setTimeout(() => {
+          document.body.removeChild(iframe)
+        }, 1000)
+      }, 500)
+    }
+  }
   
   const urutkanBerdasarkanScan = (rincian: RincianPenumpang[]) => {
     return [...rincian].sort((a, b) => {
@@ -233,7 +307,6 @@ function LoginContent() {
             </form>
           )}
 
-          {/* KONTEN SYAHBANDAR */}
           {tab === 'syahbandar' && (
             <div className="p-3 md:p-6 bg-gray-50 min-h-[500px]">
               <div className="flex justify-between items-center mb-4 md:mb-6 bg-blue-800 text-white p-4 rounded print-hidden">
@@ -326,46 +399,6 @@ function LoginContent() {
                       </table>
                     </div>
                   </div>
-                </div>
-              )}
-
-              {/* TAMPILAN PRINT: MANIFEST */}
-              {sbExpandedJam && sbRincianAktif && (
-                <div className="hidden print:block mt-8">
-                  <h1 className="text-xl font-bold text-center mb-6">LAPORAN MANIFEST PENUMPANG JAM {sbRincianAktif.jam}</h1>
-                  
-                  <div className="mb-4 text-sm grid grid-cols-[150px_10px_1fr] gap-y-1">
-                    <span>Tanggal</span><span>:</span><span>{sbTanggal}</span>
-                    <span>Rute</span><span>:</span><span>{sbLokasi} - {sbLokasi === 'Tarakan' ? 'Tanjung Selor' : 'Tarakan'}</span>
-                    <span>Kapal</span><span>:</span><span>{sbRincianAktif.nama_kapal}</span>
-                    <span>Kapten</span><span>:</span><span>{sbRincianAktif.nama_kapten}</span>
-                    <span className="whitespace-nowrap">Total Penumpang</span><span>:</span><span className="font-bold">{sbRincianAktif.total_terjual} Orang</span>
-                  </div>
-                  
-                  <table className="w-full text-sm border-collapse border border-gray-400">
-                    <thead>
-                      <tr>
-                        <th className="border border-gray-400 px-2 py-1 w-8">NO</th>
-                        <th className="border border-gray-400 px-2 py-1">NAMA / KURSI</th>
-                        <th className="border border-gray-400 px-2 py-1">SCAN</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {urutkanBerdasarkanScan(sbRincianAktif.rincian).map((p, idx) => (
-                        <tr key={p.id}>
-                          <td className="border border-gray-400 px-2 py-1 text-center">{idx + 1}</td>
-                          <td className="border border-gray-400 px-2 py-1 font-bold">{p.nama} / {p.kursi}</td>
-                          <td className="border border-gray-400 px-2 py-1 text-center">
-                            {p.waktu_boarding ? new Date(p.waktu_boarding).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) : '-'}
-                          </td>
-                        </tr>
-                      ))}
-                      <tr className="font-bold bg-gray-100">
-                        <td colSpan={2} className="border border-gray-400 px-2 py-1 text-center">TOTAL PENUMPANG</td>
-                        <td className="border border-gray-400 px-2 py-1 text-center">{sbRincianAktif.total_terjual}</td>
-                      </tr>
-                    </tbody>
-                  </table>
                 </div>
               )}
             </div>

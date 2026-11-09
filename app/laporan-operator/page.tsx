@@ -137,34 +137,57 @@ function LaporanOperatorContent() {
   const potongKode = (kode: string) => kode.length > 6 ? `...${kode.slice(-6)}` : kode
 
   return (
-    <div className="min-h-screen bg-gray-100 p-6 print:p-0 print:bg-white">
+    <>
       <style dangerouslySetInnerHTML={{__html: `
         @media print {
-          @page { size: A4; margin: 0; }
-          body { background: white; margin: 15mm; }
-          .print-hidden { display: none !important; }
+          @page { size: A4; margin: 0 !important; }
+          html, body {
+            margin: 0 !important;
+            padding: 0 !important;
+            background: white !important;
+            height: auto !important;
+            overflow: visible !important;
+          }
+          /* Sembunyikan semua elemen */
+          body * { visibility: hidden; }
+          
+          /* Tampilkan HANYA print container */
+          .print-container, .print-container * { visibility: visible; }
+          
+          /* Posisi print container nempel atas kiri */
+          .print-container {
+            position: absolute;
+            left: 0;
+            top: 0;
+            width: 100%;
+            padding: 15mm !important;
+            box-sizing: border-box;
+            background: white;
+          }
+          .screen-only { display: none !important; }
         }
       `}} />
 
-      <div className="max-w-5xl mx-auto">
-        <div className="flex justify-between items-center mb-6 bg-white p-4 rounded shadow-sm border border-gray-200 print-hidden">
-          <h1 className="text-xl font-bold text-gray-900">Laporan {labelRole} {profile.lokasi} - {profile.nama}</h1>
-          <button onClick={() => router.push('/dashboard/keberangkatan')} className="text-sm text-blue-600 hover:underline">&larr; Kembali</button>
-        </div>
+      {/* ================= TAMPILAN UTAMA (SCREEN ONLY) ================= */}
+      <div className="screen-only min-h-screen bg-gray-100 p-6">
+        <div className="max-w-5xl mx-auto">
+          <div className="flex justify-between items-center mb-6 bg-white p-4 rounded shadow-sm border border-gray-200">
+            <h1 className="text-xl font-bold text-gray-900">Laporan {labelRole} {profile.lokasi} - {profile.nama}</h1>
+            <button onClick={() => router.push('/dashboard/keberangkatan')} className="text-sm text-blue-600 hover:underline">&larr; Kembali</button>
+          </div>
 
-        <div className="bg-white p-4 rounded shadow mb-6 flex items-center gap-4 print-hidden">
-          <label className="text-sm font-medium text-gray-700">Pilih Tanggal:</label>
-          <input type="date" value={tanggal} onChange={(e) => setTanggal(e.target.value)} className="border rounded px-3 py-1 text-gray-900" />
-        </div>
+          <div className="bg-white p-4 rounded shadow mb-6 flex items-center gap-4">
+            <label className="text-sm font-medium text-gray-700">Pilih Tanggal:</label>
+            <input type="date" value={tanggal} onChange={(e) => setTanggal(e.target.value)} className="border rounded px-3 py-1 text-gray-900" />
+          </div>
 
-        {/* MANIFEST */}
-        <>
+          {/* MANIFEST */}
           <div className="mb-8">
-            <h2 className="text-lg font-bold text-gray-800 mb-3 border-b pb-2 print-hidden">Jadwal Belum Closing</h2>
+            <h2 className="text-lg font-bold text-gray-800 mb-3 border-b pb-2">Jadwal Belum Closing</h2>
             {laporanBelumClosed.length === 0 ? (
-              <p className="text-gray-500 bg-white p-4 rounded shadow text-sm print-hidden">Belum ada jadwal.</p>
+              <p className="text-gray-500 bg-white p-4 rounded shadow text-sm">Belum ada jadwal.</p>
             ) : (
-              <div className="space-y-4 print-hidden">
+              <div className="space-y-4">
                 {laporanBelumClosed.map((l) => (
                   <div key={l.jam} className="bg-white rounded shadow border border-gray-200 overflow-hidden">
                     <div className="bg-blue-50 px-4 py-3 border-b flex justify-between items-center">
@@ -185,11 +208,11 @@ function LaporanOperatorContent() {
           </div>
 
           <div>
-            <h2 className="text-lg font-bold text-gray-800 mb-3 border-b pb-2 print-hidden">Jadwal Sudah Closing</h2>
+            <h2 className="text-lg font-bold text-gray-800 mb-3 border-b pb-2">Jadwal Sudah Closing</h2>
             {laporanSudahClosed.length === 0 ? (
-              <p className="text-gray-500 bg-white p-4 rounded shadow text-sm print-hidden">Belum ada jadwal.</p>
+              <p className="text-gray-500 bg-white p-4 rounded shadow text-sm">Belum ada jadwal.</p>
             ) : (
-              <div className="space-y-2 print-hidden">
+              <div className="space-y-2">
                 {laporanSudahClosed.map((l) => (
                   <div key={l.jam} className="bg-white rounded shadow border border-gray-200 overflow-hidden">
                     <button onClick={() => setExpandedJam(expandedJam === l.jam ? null : l.jam)} className="w-full px-4 py-3 flex justify-between items-center hover:bg-gray-50 transition">
@@ -205,47 +228,9 @@ function LaporanOperatorContent() {
             )}
           </div>
 
-          {/* PRINT: MANIFEST */}
-          {rincianAktif && (
-            <div className="hidden print:block mt-8">
-              <h1 className="text-xl font-bold text-center mb-6">LAPORAN MANIFEST PENUMPANG JAM {rincianAktif.jam}</h1>
-              
-              <div className="mb-4 text-sm grid grid-cols-[200px_10px_1fr] gap-y-1">
-                <span>Tanggal</span><span>:</span><span>{tanggal}</span>
-                <span>Rute</span><span>:</span><span>{ruteLengkap}</span>
-                <span>Kapal</span><span>:</span><span>{rincianAktif.nama_kapal}</span>
-                <span>Kapten</span><span>:</span><span>{rincianAktif.nama_kapten}</span>
-                <span className="whitespace-nowrap">Jumlah Penumpang</span><span>:</span><span className="font-bold">{rincianAktif.total_terjual} Orang</span>
-              </div>
-              
-              <table className="w-full text-sm border-collapse border border-gray-400">
-                <thead>
-                  <tr>
-                    <th className="border border-gray-400 px-2 py-1 w-8">NO</th>
-                    <th className="border border-gray-400 px-2 py-1">NAMA / KURSI</th>
-                    <th className="border border-gray-400 px-2 py-1">KODE</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {rincianAktif.rincian.map((p, idx) => (
-                    <tr key={p.id}>
-                      <td className="border border-gray-400 px-2 py-1 text-center">{idx + 1}</td>
-                      <td className="border border-gray-400 px-2 py-1 font-bold">{p.nama} / {p.kursi}</td>
-                      <td className="border border-gray-400 px-2 py-1 font-mono text-xs">{potongKode(p.kode_tiket)}</td>
-                    </tr>
-                  ))}
-                  <tr className="font-bold bg-gray-100">
-                    <td colSpan={2} className="border border-gray-400 px-2 py-1 text-center">TOTAL PENUMPANG</td>
-                    <td className="border border-gray-400 px-2 py-1 text-center">{rincianAktif.total_terjual}</td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-          )}
-
           {/* LAYAR: MANIFEST RINCIAN */}
           {expandedJam && rincianAktif && (
-            <div className="mt-8 print-hidden">
+            <div className="mt-8">
               <div className="bg-white rounded shadow border-2 border-blue-400 overflow-hidden">
                 <div className="bg-blue-600 text-white p-4 flex justify-between items-center">
                   <h3 className="font-bold text-lg">Rincian Manifest Jam {expandedJam}</h3>
@@ -294,9 +279,52 @@ function LaporanOperatorContent() {
               </div>
             </div>
           )}
-        </>
+        </div>
       </div>
-    </div>
+
+      {/* ================= AREA KHUSUS PRINT (TERPISAH TOTAL DARI SCREEN) ================= */}
+      {rincianAktif && (
+        <div className="print-container" style={{ display: 'none' }}>
+          <style>{`
+            @media print {
+              .print-container { display: block !important; }
+            }
+          `}</style>
+          <h1 className="text-xl font-bold text-center mb-6">LAPORAN MANIFEST PENUMPANG JAM {rincianAktif.jam}</h1>
+          
+          <div className="mb-4 text-sm grid grid-cols-[200px_10px_1fr] gap-y-1">
+            <span>Tanggal</span><span>:</span><span>{tanggal}</span>
+            <span>Rute</span><span>:</span><span>{ruteLengkap}</span>
+            <span>Kapal</span><span>:</span><span>{rincianAktif.nama_kapal}</span>
+            <span>Kapten</span><span>:</span><span>{rincianAktif.nama_kapten}</span>
+            <span className="whitespace-nowrap">Jumlah Penumpang</span><span>:</span><span className="font-bold">{rincianAktif.total_terjual} Orang</span>
+          </div>
+          
+          <table className="w-full text-sm border-collapse border border-gray-400">
+            <thead>
+              <tr>
+                <th className="border border-gray-400 px-2 py-1 w-8">NO</th>
+                <th className="border border-gray-400 px-2 py-1">NAMA / KURSI</th>
+                <th className="border border-gray-400 px-2 py-1">KODE</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rincianAktif.rincian.map((p, idx) => (
+                <tr key={p.id}>
+                  <td className="border border-gray-400 px-2 py-1 text-center">{idx + 1}</td>
+                  <td className="border border-gray-400 px-2 py-1 font-bold">{p.nama} / {p.kursi}</td>
+                  <td className="border border-gray-400 px-2 py-1 font-mono text-xs">{potongKode(p.kode_tiket)}</td>
+                </tr>
+              ))}
+              <tr className="font-bold bg-gray-100">
+                <td colSpan={2} className="border border-gray-400 px-2 py-1 text-center">TOTAL PENUMPANG</td>
+                <td className="border border-gray-400 px-2 py-1 text-center">{rincianAktif.total_terjual}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      )}
+    </>
   )
 }
 
