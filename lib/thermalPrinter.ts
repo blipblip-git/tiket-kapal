@@ -44,6 +44,9 @@ function generateEscPosCommand(tiket: any, qrUrl: string): Promise<Uint8Array> {
         
         let metodePrint = 'Cash';
         if (tiket.metode_bayar === 'simulasi_online' || tiket.kanal === 'online') metodePrint = 'Qris';
+        
+        let namaLoket = tiket.nama_penjual_asli || 'Online';
+        if (namaLoket === '-') namaLoket = 'Loket';
 
         let textData = ''
         textData += '\x1B\x40' // Initialize
@@ -54,7 +57,7 @@ function generateEscPosCommand(tiket: any, qrUrl: string): Promise<Uint8Array> {
         textData += `${tiket.jadwal}\n`
         
         textData += '\x1B\x61\x00' // Left align
-        // Garis dipendekkan jadi 28 karakter agar aman
+        // Garis dipendekkan jadi 28 karakter
         textData += '----------------------------\n'
         textData += `Nama / Kursi : ${tiket.nama_penumpang} / ${tiket.kursi}\n`
         const nikRapi = tiket.nik.replace(/\*/g, '')
@@ -65,13 +68,14 @@ function generateEscPosCommand(tiket: any, qrUrl: string): Promise<Uint8Array> {
         textData += '----------------------------\n'
         
         textData += '\x1B\x61\x01' // Center align
-        textData += `${metodePrint} TOTAL: Rp ${tiket.harga.toLocaleString('id-ID')}\n`
+        // DIPISAH 2 BARIS AGAR TIDAK TERPOTONG
+        textData += `${metodePrint} TOTAL:\n`
+        textData += `Rp ${tiket.harga.toLocaleString('id-ID')}\n`
         textData += '----------------------------\n'
-        textData += 'Perlihatkan e-tiket ke petugas\n'
-        textData += `Loket : ${tiket.nama_penjual_asli || 'Online'}\n`
         
-        // Beri jarak 1 enter sebelum QR
-        textData += '\n'
+        textData += 'Perlihatkan e-tiket ke petugas\n'
+        textData += `Loket : ${namaLoket}\n\n`
+        
         textData += '\x1B\x61\x01' // Center align (for QR)
 
         const textBytes = encoder.encode(textData)
@@ -81,8 +85,8 @@ function generateEscPosCommand(tiket: any, qrUrl: string): Promise<Uint8Array> {
           imageBytes[i] = rasterData.charCodeAt(i)
         }
         
-        // Perintah Cut / Feed bawaan printer
-        const endData = '\x1B\x4A\x46\x1D\x56\x00' 
+        // Tambahan 3 baris kosong (feed) SEBELUM potong kertas agar QR utuh
+        const endData = '\x1B\x64\x03\x1B\x4A\x46\x1D\x56\x42\x00' 
         const endBytes = encoder.encode(endData)
 
         const totalLength = textBytes.length + imageBytes.length + endBytes.length
@@ -102,7 +106,6 @@ function generateEscPosCommand(tiket: any, qrUrl: string): Promise<Uint8Array> {
 
 export async function cetakTiketThermal(tiket: any) {
   try {
-    // Ukuran QR 160px
     const qrUrl = await QRCode.toDataURL(tiket.kode_tiket, { width: 160, margin: 1 })
     
     if (!navigator.bluetooth) {
