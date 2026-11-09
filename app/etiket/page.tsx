@@ -269,9 +269,9 @@ function EtiketContent() {
     }
   }
 
-  // === FUNGSI BARU: MENGIRIM PERINTAH ESC/POS KE RAWBT ===
-  function handleCetakThermal(t: TiketLengkap) {
-    setPesanShare('Menyiapkan perintah RawBT...')
+  // === FUNGSI FINAL: KIRIM PERINTAH HEX ESC/POS (RAWBT) ===
+  async function handleCetakThermal(t: TiketLengkap) {
+    setPesanShare('Menyiapkan perintah cetak...')
     
     let metodePrint = 'Cash';
     if (t.pesanan.metode_bayar === 'simulasi_online' || t.pesanan.kanal === 'online') metodePrint = 'Qris';
@@ -279,39 +279,36 @@ function EtiketContent() {
     const nikRapi = t.pesanan.nik.replace(/\*/g, '');
     const jamPotong = detail?.jam_berangkat.substring(0, 5); 
 
-    // Format teks mentah (ESC/POS) yang akan dibaca RawBT
-    const teksRaw = 
-      `\x1B\x40` + // Init printer
-      `\x1B\x61\x01` + // Rata Tengah
-      `${t.pesanan.kode_tiket}\n` + 
-      `${detail?.rute_asal} - ${detail?.rute_tujuan}\n` +
-      `--------------------------------\n` +
-      `\x1B\x61\x00` + // Rata Kiri
-      `Nama / Kursi : ${t.pesanan.nama_penumpang} / ${t.nomor_kursi}\n` +
-      `NIK          : ${nikRapi}\n` +
-      `Kapal        : ${detail?.nama_kapal}\n` +
-      `Tgl/Jam      : ${detail?.tanggal}/${jamPotong}\n` + 
-      `--------------------------------\n` +
-      `\x1B\x61\x01` + // Rata Tengah
-      `${metodePrint} TOTAL: Rp ${detail?.harga.toLocaleString('id-ID')}\n` +
-      `--------------------------------\n` +
-      `Perlihatkan e-tiket ke petugas\n` +
-      `Loket : ${t.pesanan.nama_penjual_asli}\n\n\n` // Jarak sebelum QR
+    // Teks dengan format ASCII murni
+    let teksMurni = '';
+    teksMurni += `\x1B\x40`; // Reset printer
+    teksMurni += `\x1B\x61\x01`; // Center align
+    teksMurni += `${t.pesanan.kode_tiket}\n`; 
+    teksMurni += `${detail?.rute_asal} - ${detail?.rute_tujuan}\n`;
+    teksMurni += `--------------------------------\n`;
+    teksMurni += `\x1B\x61\x00`; // Left align
+    teksMurni += `Nama / Kursi : ${t.pesanan.nama_penumpang} / ${t.nomor_kursi}\n`;
+    teksMurni += `NIK          : ${nikRapi}\n`;
+    teksMurni += `Kapal        : ${detail?.nama_kapal}\n`;
+    teksMurni += `Tgl/Jam      : ${detail?.tanggal}/${jamPotong}\n`; 
+    teksMurni += `--------------------------------\n`;
+    teksMurni += `\x1B\x61\x01`; // Center align
+    teksMurni += `${metodePrint} TOTAL: Rp ${detail?.harga.toLocaleString('id-ID')}\n`;
+    teksMurni += `--------------------------------\n`;
+    teksMurni += `Perlihatkan e-tiket ke petugas\n`;
+    teksMurni += `Loket : ${t.pesanan.nama_penjual_asli}\n\n`;
 
-    // Mengirim data ke RawBT via scheme URL (Intent)
-    const rawbtUrl = `rawbt:data:text/plain;charset=utf-8,${encodeURIComponent(teksRaw)}`
+    // Convert teks menjadi format URL encoded (UTF-8)
+    const payload = encodeURIComponent(teksMurni);
+    const rawbtUrl = `rawbt:data:text/plain;charset=utf-8,${payload}`;
     
-    // Buka RawBT
-    window.location.href = rawbtUrl
-    
-    setTimeout(() => {
-      setPesanShare('✅ Perintah dikirim ke RawBT.')
-    }, 1000)
+    // Redirect to RawBT
+    window.location.href = rawbtUrl;
+    setPesanShare('✅ Dikirim ke RawBT.');
   }
 
   async function handleKembali() {
     const sesi = getOperatorSession()
-    
     if (sesi) {
       if (sesi.role === 'terminal_keberangkatan') {
         router.push('/dashboard/keberangkatan')
@@ -324,7 +321,6 @@ function EtiketContent() {
       }
       return
     }
-
     router.push('/')
   }
 
@@ -412,7 +408,6 @@ function EtiketContent() {
             <p className="text-[10px] md:text-sm text-center text-gray-900 mb-2 bg-yellow-100 p-2 rounded print-hidden">{pesanShare}</p>
           )}
 
-          {/* Navigasi Tab jika tiket lebih dari 1 */}
           {tiketList.length > 1 && (
             <div className="flex overflow-x-auto gap-1 pb-1 mb-2 print-hidden">
               {tiketList.map((_, i) => (
