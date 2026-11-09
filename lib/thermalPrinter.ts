@@ -57,8 +57,6 @@ function generateEscPosCommand(tiket: any, qrUrl: string): Promise<Uint8Array> {
         textData += `${tiket.jadwal}\n`
         
         textData += '\x1B\x61\x00' // Left align
-        
-        // Garis 1 (31 strip)
         textData += '-------------------------------\n'
         textData += `Nama / Kursi : ${tiket.nama_penumpang} / ${tiket.kursi}\n`
         const nikRapi = tiket.nik.replace(/\*/g, '')
@@ -66,20 +64,16 @@ function generateEscPosCommand(tiket: any, qrUrl: string): Promise<Uint8Array> {
         textData += `Kapal        : ${tiket.kapal}\n`
         const jamPotong = tiket.jam.substring(0, 5) 
         textData += `Tgl/Jam      : ${tiket.tanggal}/${jamPotong}\n` 
-        
-        // Garis 2 (31 strip)
         textData += '-------------------------------\n'
         
         textData += '\x1B\x61\x01' // Center align
         textData += `${metodePrint} TOTAL: Rp ${tiket.harga.toLocaleString('id-ID')}\n`
-        
-        // Garis 3 (31 strip)
         textData += '-------------------------------\n'
         
         textData += 'Perlihatkan e-tiket ke petugas\n'
         textData += `Loket : ${namaLoket}\n`
         
-        // Jarak 1 enter sebelum gambar
+        // Jarak 1 enter sebelum gambar (seperti kode awal yang sukses)
         textData += '\n'
         
         textData += '\x1B\x61\x01' // Center align (for QR)
@@ -91,8 +85,8 @@ function generateEscPosCommand(tiket: any, qrUrl: string): Promise<Uint8Array> {
           imageBytes[i] = rasterData.charCodeAt(i)
         }
         
-        // Tarik kertas 3 baris, Lalu POTONG PENUH (\x00)
-        const endData = '\x1B\x64\x03\x1D\x56\x00' 
+        // PERBAIKAN: Hapus feed (tarik kertas) berlebih, langsung potong
+        const endData = '\x1D\x56\x00' 
         const endBytes = encoder.encode(endData)
 
         const totalLength = textBytes.length + imageBytes.length + endBytes.length
