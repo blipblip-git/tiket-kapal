@@ -127,7 +127,7 @@ export async function cetakTiketThermal(tiket: any) {
   }
 
   // =========================================================
-  // MODE LAPTOP: WEB SERIAL (KABEL)
+  // MODE LAPTOP: WEB SERIAL (KABEL) - UTUH SEPERTI ASLINYA
   // =========================================================
   try {
     const qrUrlForPrint = await QRCode.toDataURL(tiket.kode_tiket, { width: 200, margin: 1 })
