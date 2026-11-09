@@ -112,8 +112,8 @@ export async function cetakTiketThermal(tiket: any) {
       }
       await sendData(imageBytes)
       
-      // PERBAIKAN: Kombinasi Feed 10 dots + 30 dots sebelum potong kertas
-      const endData = '\x1B\x4A\x0A\x1B\x4A\x1E\x1D\x56\x00' 
+      // PERBAIKAN: Kombinasi Feed 10 dots + 15 dots sebelum potong kertas
+      const endData = '\x1B\x4A\x0A\x1B\x4A\x0F\x1D\x56\x00' 
       await sendData(encoder.encode(endData))
 
       device.gatt.disconnect()
@@ -204,8 +204,8 @@ export async function cetakTiketThermal(tiket: any) {
     }
     await writer.write(imageBytes)
     
-    // PERBAIKAN: Kombinasi Feed 10 dots + 30 dots sebelum potong kertas
-    const endData = '\x1B\x4A\x0A\x1B\x4A\x1E\x1D\x56\x00' 
+    // PERBAIKAN: Kombinasi Feed 10 dots + 15 dots sebelum potong kertas
+    const endData = '\x1B\x4A\x0A\x1B\x4A\x0F\x1D\x56\x00' 
     await writer.write(encoder.encode(endData))
 
     writer.releaseLock()
