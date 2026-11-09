@@ -102,6 +102,34 @@ function ScanContent() {
         () => {}
       )
       setScannerAktif(true)
+
+      // === TRIK ZOOM OUT OTOMATIS UNTUK KAMERA HP ===
+      // Memberi jeda sebentar agar kamera menyala sempurna, lalu paksa zoom out
+      setTimeout(async () => {
+        try {
+          const videoElement = document.querySelector('#qr-reader video') as HTMLVideoElement;
+          if (videoElement && videoElement.srcObject) {
+            const stream = videoElement.srcObject as MediaStream;
+            const track = stream.getVideoTracks()[0];
+            
+            // Cek apakah HP mendukung fitur zoom
+            if (track && track.getCapabilities) {
+              const capabilities = track.getCapabilities() as any;
+              if (capabilities.zoom) {
+                // Memaksa zoom ke batas paling minimum (Zoom Out maksimal)
+                await track.applyConstraints({
+                  advanced: [{ zoom: capabilities.zoom.min } as any]
+                });
+                console.log("Berhasil melakukan paksa Zoom Out");
+              }
+            }
+          }
+        } catch (e) {
+          console.warn("HP ini tidak mendukung fitur paksa zoom, abaikan.", e);
+        }
+      }, 1500); // Jeda 1.5 detik setelah kamera nyala
+      // ===============================================
+
     } catch (err: any) {
       console.error('Camera error:', err)
       let pesanError = 'Gagal membuka kamera.'
@@ -341,7 +369,7 @@ function ScanContent() {
 
 export default function ScanPage() {
   return (
-    <Suspense fallback={<p className="p-6 text-gray-900">Memuat...</p>}>
+    <Suspense fallback={<p className="p-6 text-center text-gray-900 mt-10">Memuat...</p>}>
       <ScanContent />
     </Suspense>
   )
