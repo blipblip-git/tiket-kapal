@@ -13,17 +13,15 @@ export async function cetakTiketThermal(tiket: any) {
     }
 
     try {
-      // 1. Minta izin dan sambungkan ke printer
       const device = await (navigator as any).bluetooth.requestDevice({
         acceptAllDevices: true,
-        optionalServices: ['000018f0-0000-1000-8000-00805f9b34fb', 'e7810a71-73ae-499d-8c15-faa9aef0c3f2'] // UUID umum printer thermal
+        optionalServices: ['000018f0-0000-1000-8000-00805f9b34fb', 'e7810a71-73ae-499d-8c15-faa9aef0c3f2']
       })
 
       if (!device.gatt) throw new Error('Gagal terhubung ke GATT server.')
       
       const server = await device.gatt.connect()
       
-      // 2. Cari layanan printer
       let service
       try {
         service = await server.getPrimaryService('000018f0-0000-1000-8000-00805f9b34fb')
@@ -32,12 +30,10 @@ export async function cetakTiketThermal(tiket: any) {
       }
 
       const characteristics = await service.getCharacteristics()
-      // Biasanya characteristic pertama atau yang punya properti 'write' adalah tujuannya
       const writeCharacteristic = characteristics.find((c: any) => c.properties.write || c.properties.writeWithoutResponse)
       
       if (!writeCharacteristic) throw new Error('Karakteristik printer tidak ditemukan.')
 
-      // 3. Siapkan Gambar QR Code (Ukuran 200x200)
       const qrUrlForPrint = await QRCode.toDataURL(tiket.kode_tiket, { width: 200, margin: 1 })
       const img = new Image()
       img.src = qrUrlForPrint
@@ -54,7 +50,6 @@ export async function cetakTiketThermal(tiket: any) {
       const widthBytes = Math.ceil(canvas.width / 8)
       const height = canvas.height
       
-      // 4. Format Raster untuk ESC/POS
       let rasterData = `\x1D\x76\x30\x00${String.fromCharCode(widthBytes % 256, Math.floor(widthBytes / 256), height % 256, Math.floor(height / 256))}`
       
       for (let y = 0; y < height; y++) {
@@ -77,7 +72,6 @@ export async function cetakTiketThermal(tiket: any) {
         }
       }
 
-      // 5. Siapkan Teks
       let textData = ''
       textData += '\x1B\x40' 
       textData += '\x1B\x33\x05' 
@@ -88,7 +82,8 @@ export async function cetakTiketThermal(tiket: any) {
       textData += '\x1B\x61\x00' 
       textData += '--------------------------------\n'
       textData += `Nama / Kursi : ${tiket.nama_penumpang} / ${tiket.kursi}\n`
-      const nikRapi = tiket.nik.replace(/\*/g, '')
+      // PERBAIKAN: Cek jika NIK undefined atau kosong
+      const nikRapi = tiket.nik ? tiket.nik.replace(/\*/g, '') : '-'
       textData += `NIK          : ${nikRapi}\n`
       textData += `Kapal        : ${tiket.kapal}\n`
       const jamPotong = tiket.jam.substring(0, 5) 
@@ -102,29 +97,25 @@ export async function cetakTiketThermal(tiket: any) {
 
       const encoder = new TextEncoder()
       
-      // Helper untuk ngirim data (karena BLE ada limit ukuran)
       const sendData = async (data: Uint8Array) => {
-        const CHUNK_SIZE = 100; // Kirim per 100 byte biar gak error
+        const CHUNK_SIZE = 100
         for (let i = 0; i < data.length; i += CHUNK_SIZE) {
           const chunk = data.slice(i, i + CHUNK_SIZE)
           await writeCharacteristic.writeValue(chunk)
-          await new Promise(r => setTimeout(r, 10)) // Jeda sedikit
+          await new Promise(r => setTimeout(r, 10))
         }
       }
 
-      // 6. Kirim Teks
       await sendData(encoder.encode(textData))
       await sendData(encoder.encode('\x1B\x61\x01'))
 
-      // 7. Kirim Gambar QR
       const imageBytes = new Uint8Array(rasterData.length)
       for (let i = 0; i < rasterData.length; i++) {
         imageBytes[i] = rasterData.charCodeAt(i)
       }
       await sendData(imageBytes)
       
-      // 8. Kirim Perintah Akhir (Potong Kertas)
-      const endData = '\x1B\x4A\x46\x1D\x56\x00' 
+      const endData = '\x1B\x4A\x96\x1D\x56\x00' 
       await sendData(encoder.encode(endData))
 
       device.gatt.disconnect()
@@ -196,7 +187,8 @@ export async function cetakTiketThermal(tiket: any) {
     textData += '\x1B\x61\x00' 
     textData += '--------------------------------\n'
     textData += `Nama / Kursi : ${tiket.nama_penumpang} / ${tiket.kursi}\n`
-    const nikRapi = tiket.nik.replace(/\*/g, '')
+    // PERBAIKAN: Cek jika NIK undefined atau kosong
+    const nikRapi = tiket.nik ? tiket.nik.replace(/\*/g, '') : '-'
     textData += `NIK          : ${nikRapi}\n`
     textData += `Kapal        : ${tiket.kapal}\n`
     const jamPotong = tiket.jam.substring(0, 5) 
@@ -217,7 +209,7 @@ export async function cetakTiketThermal(tiket: any) {
     }
     await writer.write(imageBytes)
     
-    const endData = '\x1B\x4A\x46\x1D\x56\x00' 
+    const endData = '\x1B\x4A\x96\x1D\x56\x00' 
     await writer.write(encoder.encode(endData))
 
     writer.releaseLock()
