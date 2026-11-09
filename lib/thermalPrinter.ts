@@ -17,7 +17,7 @@ function generateEscPosCommand(tiket: any, qrUrl: string): Promise<Uint8Array> {
         const widthBytes = Math.ceil(canvas.width / 8)
         const height = canvas.height
         
-        // KEMBALI KE RASTER BIT IMAGE (Terbukti berhasil)
+        // Perintah cetak gambar (Raster Bit Image)
         let rasterData = `\x1D\x76\x30\x00${String.fromCharCode(widthBytes % 256, Math.floor(widthBytes / 256), height % 256, Math.floor(height / 256))}`
         
         for (let y = 0; y < height; y++) {
@@ -58,8 +58,8 @@ function generateEscPosCommand(tiket: any, qrUrl: string): Promise<Uint8Array> {
         
         textData += '\x1B\x61\x00' // Left align
         
-        // Garis 1 (29 strip)
-        textData += '-----------------------------\n'
+        // Garis 1 (31 strip)
+        textData += '-------------------------------\n'
         textData += `Nama / Kursi : ${tiket.nama_penumpang} / ${tiket.kursi}\n`
         const nikRapi = tiket.nik.replace(/\*/g, '')
         textData += `NIK          : ${nikRapi}\n`
@@ -67,14 +67,14 @@ function generateEscPosCommand(tiket: any, qrUrl: string): Promise<Uint8Array> {
         const jamPotong = tiket.jam.substring(0, 5) 
         textData += `Tgl/Jam      : ${tiket.tanggal}/${jamPotong}\n` 
         
-        // Garis 2 (29 strip)
-        textData += '-----------------------------\n'
+        // Garis 2 (31 strip)
+        textData += '-------------------------------\n'
         
         textData += '\x1B\x61\x01' // Center align
         textData += `${metodePrint} TOTAL: Rp ${tiket.harga.toLocaleString('id-ID')}\n`
         
-        // Garis 3 (29 strip)
-        textData += '-----------------------------\n'
+        // Garis 3 (31 strip)
+        textData += '-------------------------------\n'
         
         textData += 'Perlihatkan e-tiket ke petugas\n'
         textData += `Loket : ${namaLoket}\n`
@@ -160,7 +160,7 @@ export async function cetakTiketThermal(tiket: any) {
 
     const printData = await generateEscPosCommand(tiket, qrUrl);
 
-    // Jeda 150ms per 128 byte (terbukti menyelamatkan teks)
+    // Jeda 150ms per 128 byte 
     const chunkSize = 128;
     for (let i = 0; i < printData.length; i += chunkSize) {
       const chunk = printData.slice(i, i + chunkSize);
