@@ -10,6 +10,7 @@ type RincianPenumpang = {
   kursi: string
   status_boarding: string
   waktu_boarding: string | null
+  is_balita: boolean
 }
 
 type LaporanPerJam = {
@@ -65,7 +66,7 @@ function ManifestDetailContent() {
       }
 
       const { data: pesananData } = await supabase.from('pesanan').select(`
-          id, nama_penumpang, status_boarding, waktu_boarding,
+          id, nama_penumpang, status_boarding, waktu_boarding, is_balita,
           jadwal:jadwal_id (jam_berangkat, rute_asal, kapal_id),
           kursi:kursi_id (nomor_kursi)
         `).eq('status', 'paid').eq('jadwal.tanggal', tanggal).eq('jadwal.rute_asal', lokasi)
@@ -96,7 +97,8 @@ function ManifestDetailContent() {
           nama: item.nama_penumpang, 
           kursi: item.kursi?.nomor_kursi || '-', 
           status_boarding: item.status_boarding || 'belum',
-          waktu_boarding: item.waktu_boarding || null
+          waktu_boarding: item.waktu_boarding || null,
+          is_balita: item.is_balita || false
         })
       })
 
@@ -131,6 +133,9 @@ function ManifestDetailContent() {
 
   const tanggalFormatHeader = new Date(tanggal).toLocaleDateString('id-ID', { day: '2-digit', month: 'long', year: 'numeric' })
 
+  const totalDewasa = rincianAktif ? rincianAktif.rincian.filter(p => !p.is_balita).length : 0;
+  const totalBalita = rincianAktif ? rincianAktif.rincian.filter(p => p.is_balita).length : 0;
+
   return (
     <div className="h-[100dvh] w-full bg-gray-100 p-3 md:p-6 print:p-0 print:bg-white flex flex-col overflow-hidden print:h-auto print:overflow-visible print:block">
       <style dangerouslySetInnerHTML={{__html: `
@@ -153,12 +158,10 @@ function ManifestDetailContent() {
         }
       `}} />
 
-      {/* KONTAINER UTAMA UNTUK TAMPILAN HP (MAX-W-MD) */}
       <div className="max-w-md w-full mx-auto flex flex-col h-full print:hidden">
         
         {!expandedJam ? (
           <>
-            {/* ================= TAMPILAN 1: DAFTAR JAM ================= */}
             <div className="flex justify-between items-start mb-3 bg-white p-3 rounded shadow-sm border border-gray-200 flex-shrink-0">
               <div>
                 <h1 className="text-lg md:text-xl font-bold text-gray-900 leading-tight">Manifest {lokasi}</h1>
@@ -175,7 +178,6 @@ function ManifestDetailContent() {
             </div>
 
             <div className="flex-1 overflow-y-auto space-y-4 pb-8">
-              {/* OPEN SCHEDULE */}
               <div>
                 <h2 className="text-xs md:text-sm font-bold text-gray-800 mb-2 border-b pb-1">OPEN SCHEDULE</h2>
                 {laporanBelumClosed.length === 0 ? (
@@ -203,7 +205,6 @@ function ManifestDetailContent() {
                 )}
               </div>
 
-              {/* CLOSING SCHEDULE */}
               <div>
                 <h2 className="text-xs md:text-sm font-bold text-gray-800 mb-2 border-b pb-1">CLOSING SCHEDULE</h2>
                 {laporanSudahClosed.length === 0 ? (
@@ -234,7 +235,6 @@ function ManifestDetailContent() {
           </>
         ) : (
           <>
-            {/* ================= TAMPILAN 2: RINCIAN (GANTI TOTAL) ================= */}
             <div className="flex justify-between items-start mb-3 bg-white p-3 rounded shadow-sm border border-gray-200 flex-shrink-0">
               <div>
                 <h1 className="text-lg md:text-xl font-bold text-gray-900 leading-tight">Rincian Manifest</h1>
@@ -245,14 +245,16 @@ function ManifestDetailContent() {
               </button>
             </div>
 
-            {/* KOTAK INFO KAPAL & KAPTEN */}
             <div className="flex-shrink-0 bg-blue-50 border-b border-blue-200 p-3">
               <div className="max-w-md mx-auto text-[10px] grid grid-cols-[70px_10px_1fr] gap-y-1.5 text-gray-700">
                 <span>Tanggal</span><span>:</span><span>{tanggalFormatHeader}</span>
                 <span>Rute</span><span>:</span><span>{lokasi} - {lokasi === 'Tarakan' ? 'Tanjung Selor' : 'Tarakan'}</span>
                 <span>Kapal</span><span>:</span><span className="font-medium text-gray-900">{rincianAktif?.nama_kapal}</span>
                 <span>Kapten</span><span>:</span><span className="font-medium text-gray-900">{rincianAktif?.nama_kapten}</span>
-                <span>Total</span><span>:</span><span className="font-bold text-blue-700">{rincianAktif?.total_terjual} Orang</span>
+                <span className="col-span-3 mt-1 pt-1 border-t border-blue-200">
+                  Total Penumpang: <br/>
+                  <span className="font-medium">Dewasa {totalDewasa} orang</span> &nbsp;|&nbsp; <span className="font-medium text-orange-600">Balita {totalBalita} orang</span>
+                </span>
               </div>
             </div>
 
@@ -270,7 +272,10 @@ function ManifestDetailContent() {
                     {rincianAktif && urutkanBerdasarkanScan(rincianAktif.rincian).map((p, idx) => (
                       <tr key={p.id} className="hover:bg-gray-50 text-center">
                         <td className="border p-1 text-[9px] md:text-xs">{idx + 1}</td>
-                        <td className="border p-1 text-[9px] md:text-xs font-bold text-left">{p.nama} / {p.kursi}</td>
+                        <td className="border p-1 text-[9px] md:text-xs font-bold text-left">
+                          {p.nama} / {p.kursi}
+                          {p.is_balita && <span className="text-[8px] md:text-[10px] text-orange-600 ml-1">(Balita)</span>}
+                        </td>
                         <td className="border p-1 text-[9px] md:text-xs">
                           {p.waktu_boarding ? new Date(p.waktu_boarding).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) : '-'}
                         </td>
@@ -289,7 +294,6 @@ function ManifestDetailContent() {
         )}
       </div>
 
-      {/* TAMPILAN PRINT MANIFEST (DILUAR KONTAINER MAX-W-MD BIAR LEBAR A4) */}
       {rincianAktif && (
         <div className="hidden print:block w-full print-area">
           <h1 className="text-xl font-bold text-center mb-6">LAPORAN MANIFEST PENUMPANG JAM {expandedJam}</h1>
@@ -299,6 +303,7 @@ function ManifestDetailContent() {
             <span>Kapal</span><span>:</span><span>{rincianAktif.nama_kapal}</span>
             <span>Kapten</span><span>:</span><span>{rincianAktif.nama_kapten}</span>
             <span>Total</span><span>:</span><span>{rincianAktif.total_terjual} Orang</span>
+            <span></span><span></span><span>Dewasa: {totalDewasa} org | Balita: {totalBalita} org</span>
           </div>
           <table className="w-full text-sm border-collapse border border-gray-400">
             <thead>
@@ -312,7 +317,10 @@ function ManifestDetailContent() {
               {urutkanBerdasarkanScan(rincianAktif.rincian).map((p, idx) => (
                 <tr key={p.id} className="text-gray-900 text-center">
                   <td className="border border-gray-400 px-2 py-1">{idx + 1}</td>
-                  <td className="border border-gray-400 px-2 py-1 font-bold text-left">{p.nama} / {p.kursi}</td>
+                  <td className="border border-gray-400 px-2 py-1 font-bold text-left">
+                    {p.nama} / {p.kursi}
+                    {p.is_balita && <span className="text-xs text-orange-600 ml-1">(Balita)</span>}
+                  </td>
                   <td className="border border-gray-400 px-2 py-1">
                     {p.waktu_boarding ? new Date(p.waktu_boarding).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) : '-'}
                   </td>

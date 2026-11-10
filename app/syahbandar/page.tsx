@@ -111,6 +111,9 @@ function ManifestDetailContent() {
   const handlePrint = () => {
     if (!rincianAktif) return
 
+    const dewasaCount = rincianAktif.rincian.filter(p => !p.is_balita).length
+    const balitaCount = rincianAktif.rincian.filter(p => p.is_balita).length
+
     const printContent = `
       <html>
         <head>
@@ -136,6 +139,7 @@ function ManifestDetailContent() {
               <tr><td style="border: none;">Kapal</td><td style="border: none;">:</td><td style="border: none;">${rincianAktif.nama_kapal}</td></tr>
               <tr><td style="border: none;">Kapten</td><td style="border: none;">:</td><td style="border: none;">${rincianAktif.nama_kapten}</td></tr>
               <tr><td style="border: none;">Total</td><td style="border: none;">:</td><td style="border: none;">${rincianAktif.total_terjual} Orang</td></tr>
+              <tr><td style="border: none;"></td><td style="border: none;"></td><td style="border: none;">Dewasa: ${dewasaCount} org | Balita: ${balitaCount} org</td></tr>
             </table>
           </div>
           <table>
@@ -210,6 +214,9 @@ function ManifestDetailContent() {
   const rincianAktif = expandedJam ? laporan.find(l => l.jam === expandedJam) : null
 
   const tanggalFormatHeader = new Date(tanggal).toLocaleDateString('id-ID', { day: '2-digit', month: 'long', year: 'numeric' })
+
+  const totalDewasa = rincianAktif ? rincianAktif.rincian.filter(p => !p.is_balita).length : 0;
+  const totalBalita = rincianAktif ? rincianAktif.rincian.filter(p => p.is_balita).length : 0;
 
   return (
     <div className="h-[100dvh] w-full bg-gray-100 p-3 md:p-6 flex flex-col overflow-hidden">
@@ -306,7 +313,10 @@ function ManifestDetailContent() {
                 <span>Rute</span><span>:</span><span>{lokasi} - {lokasi === 'Tarakan' ? 'Tanjung Selor' : 'Tarakan'}</span>
                 <span>Kapal</span><span>:</span><span className="font-medium text-gray-900">{rincianAktif?.nama_kapal}</span>
                 <span>Kapten</span><span>:</span><span className="font-medium text-gray-900">{rincianAktif?.nama_kapten}</span>
-                <span>Total</span><span>:</span><span className="font-bold text-blue-700">{rincianAktif?.total_terjual} Orang</span>
+                <span className="col-span-3 mt-1 pt-1 border-t border-blue-200">
+                  Total Penumpang: <br/>
+                  <span className="font-medium">Dewasa {totalDewasa} orang</span> &nbsp;|&nbsp; <span className="font-medium text-orange-600">Balita {totalBalita} orang</span>
+                </span>
               </div>
             </div>
 

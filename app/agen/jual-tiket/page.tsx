@@ -29,6 +29,22 @@ function JualTiketAgenContent() {
   const [tanggal, setTanggal] = useState('')
   const [isRefreshing, setIsRefreshing] = useState(false)
 
+  // STATE UNTUK TEKS DINAMIS
+  const [teks, setTeks] = useState({
+    judul_jual_tiket: 'Jual Tiket',
+  })
+
+  useEffect(() => {
+    // FETCH TEKS DARI DATABASE
+    async function fetchTeks() {
+      const { data } = await supabase.from('pengaturan_teks').select('data_teks').eq('role', 'agen').single()
+      if (data && data.data_teks) {
+        setTeks(data.data_teks as any)
+      }
+    }
+    fetchTeks()
+  }, [])
+
   useEffect(() => {
     // JIKA MODE PREVIEW DARI SUPERADMIN, BUAT PROFIL PALSU
     if (isPreview) {
@@ -214,7 +230,8 @@ function JualTiketAgenContent() {
         <div className="max-w-md mx-auto">
           <div className="flex justify-between items-start mb-3">
             <div>
-              <h1 className="text-xl font-bold text-gray-900 leading-tight">Jual Tiket</h1>
+              {/* TEKS DINAMIS DARI DATABASE */}
+              <h1 className="text-xl font-bold text-gray-900 leading-tight">{teks.judul_jual_tiket}</h1>
               <p className="text-sm text-gray-600 mt-0.5">Agen : {profile.lokasi}</p>
             </div>
             <button onClick={() => router.push(isPreview ? '/superadmin/pusat-kontrol/agen' : '/dashboard/agen')} className="text-xs text-blue-600 hover:underline bg-gray-50 px-2 py-1.5 rounded border border-gray-200 mt-1">

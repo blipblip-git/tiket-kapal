@@ -57,6 +57,13 @@ function PembayaranContent() {
           return
         }
 
+        // PENGAMAN: Jika pesanan sudah dibayar, tendang ke e-tiket atau beranda
+        const sudahDibayar = p.every(item => item.status === 'paid')
+        if (sudahDibayar) {
+          router.replace(`/etiket?pesanan=${pesananIds.join(',')}`)
+          return
+        }
+
         const sorted = pesananIds
           .map((id) => p.find((x) => x.id === id))
           .filter((x): x is PesananItem => !!x)
@@ -82,7 +89,7 @@ function PembayaranContent() {
     }
 
     fetchData()
-  }, [])
+  }, [pesananIds.join(',')]) // eslint-disable-line react-hooks/exhaustive-deps
 
   async function handleBatal() {
     if (pesananList.length === 0) return
@@ -104,7 +111,7 @@ function PembayaranContent() {
   }
 
   async function handleBayarOnline() {
-    if (pesananList.length === 0 || !detail) return
+    if (pesananList.length === 0 || !detail || sedangBayar) return
     setSedangBayar(true)
     setError('')
 
@@ -151,7 +158,8 @@ function PembayaranContent() {
       }
       console.log('6. Selesai insert pembayaran')
 
-      router.push(`/etiket?pesanan=${ids.join(',')}`)
+      // Gunakan router.replace agar halaman pembayaran tidak masuk history browser
+      router.replace(`/etiket?pesanan=${ids.join(',')}`)
     } catch (err: any) {
       console.error('Error di handleBayarOnline:', err)
       setError(err.message || 'Terjadi kesalahan saat memproses pembayaran.')
