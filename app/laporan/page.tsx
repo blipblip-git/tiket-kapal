@@ -103,6 +103,11 @@ function LaporanContent() {
         query = query.eq('jadwal.rute_asal', lokasiParam)
       }
 
+      // FILTER PENJUALAN: Jika Agen atau Petugas Keberangkatan, HANYA ambil jualan milik mereka sendiri
+      if (profile.role === 'agen' || profile.role === 'terminal_keberangkatan') {
+        query = query.eq('petugas_jual', profile.email)
+      }
+
       const { data, error } = await query
       if (error) { setError('Gagal memuat laporan: ' + error.message); return }
 
@@ -178,13 +183,16 @@ function LaporanContent() {
 
           const group = groupedByJam[jam]
           group.total_terjual += 1
-          group.total_pendapatan += item.jadwal.harga || 0
+
+          // FIX BALITA: Jika balita, harga dianggap 0 (tidak masuk pendapatan)
+          const hargaAktual = item.is_balita ? 0 : (item.jadwal.harga || 0)
+          group.total_pendapatan += hargaAktual
           
           const metode = metodeMap.get(item.id) || '-'
           const labelMetode = metode === 'cash_loket' ? 'Cash' : (metode === 'simulasi_online' ? 'QRIS' : metode)
 
-          if (labelMetode === 'Cash') group.total_cash += item.jadwal.harga || 0
-          else if (labelMetode === 'QRIS') group.total_qris += item.jadwal.harga || 0
+          if (labelMetode === 'Cash') group.total_cash += hargaAktual
+          else if (labelMetode === 'QRIS') group.total_qris += hargaAktual
 
           const dataKapal = kapalMap.get(item.jadwal.kapal_id)
           const namaPetugas = item.petugas_jual ? (petugasMap.get(item.petugas_jual) || item.petugas_jual.split('@')[0]) : 'ONLINE'
@@ -195,7 +203,7 @@ function LaporanContent() {
             kursi: item.kursi?.nomor_kursi || '-',
             kanal: item.kanal || 'loket',
             kode_tiket: item.kode_tiket,
-            harga: item.jadwal.harga || 0,
+            harga: hargaAktual, // Pakai harga aktual (0 jika balita)
             tanggal: item.jadwal.tanggal,
             rute: `${item.jadwal.rute_asal} - ${item.jadwal.rute_tujuan}`,
             nama_kapal: dataKapal?.nama || '-',
@@ -506,9 +514,9 @@ function LaporanContent() {
                                 {p.is_balita && <span className="text-[8px] md:text-[10px] text-orange-600 ml-1">(Balita)</span>}
                               </td>
                               <td className="border p-1 text-[9px] md:text-xs font-mono">{potongKode(p.kode_tiket)}</td>
-                              <td className="border p-1 text-[9px] md:text-xs font-bold">{isCash ? `Rp ${p.harga.toLocaleString('id-ID')}` : '-'}</td>
-                              <td className="border p-1 text-[9px] md:text-xs font-bold">{!isCash ? `Rp ${p.harga.toLocaleString('id-ID')}` : '-'}</td>
-                              <td className="border p-1 text-[9px] md:text-xs font-bold">Rp {p.harga.toLocaleString('id-ID')}</td>
+                              <td className="border p-1 text-[9px] md:text-xs font-bold">{isCash && p.harga > 0 ? `Rp ${p.harga.toLocaleString('id-ID')}` : '-'}</td>
+                              <td className="border p-1 text-[9px] md:text-xs font-bold">{!isCash && p.harga > 0 ? `Rp ${p.harga.toLocaleString('id-ID')}` : '-'}</td>
+                              <td className="border p-1 text-[9px] md:text-xs font-bold">{p.harga > 0 ? `Rp ${p.harga.toLocaleString('id-ID')}` : '-'}</td>
                             </tr>
                           )
                         })}
@@ -808,9 +816,9 @@ function LaporanContent() {
                         {d.is_balita && <span className="text-xs text-orange-600 ml-1">(Balita)</span>}
                       </td>
                       <td className="border border-gray-400 px-2 py-1 font-mono text-xs">{potongKode(d.kode_tiket)}</td>
-                      <td className="border border-gray-400 px-2 py-1 text-right">{isCash ? `Rp ${d.harga.toLocaleString('id-ID')}` : '-'}</td>
-                      <td className="border border-gray-400 px-2 py-1 text-right">{!isCash ? `Rp ${d.harga.toLocaleString('id-ID')}` : '-'}</td>
-                      <td className="border border-gray-400 px-2 py-1 text-right font-bold">Rp {d.harga.toLocaleString('id-ID')}</td>
+                      <td className="border border-gray-400 px-2 py-1 text-right">{isCash && d.harga > 0 ? `Rp ${d.harga.toLocaleString('id-ID')}` : '-'}</td>
+                      <td className="border border-gray-400 px-2 py-1 text-right">{!isCash && d.harga > 0 ? `Rp ${d.harga.toLocaleString('id-ID')}` : '-'}</td>
+                      <td className="border border-gray-400 px-2 py-1 text-right font-bold">{d.harga > 0 ? `Rp ${d.harga.toLocaleString('id-ID')}` : '-'}</td>
                     </tr>
                   )
                 })}

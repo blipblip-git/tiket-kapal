@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState, Suspense } from 'react'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { supabase, getOperatorSession, type Profile } from '@/lib/supabase'
 
 type JadwalTampil = {
@@ -19,6 +19,9 @@ type JadwalTampil = {
 
 function JualTiketAgenContent() {
   const router = useRouter()
+  const searchParams = useSearchParams()
+  const isPreview = searchParams.get('preview') === 'true'
+
   const [profile, setProfile] = useState<Profile | null>(null)
   const [loading, setLoading] = useState(true)
   const [jadwalList, setJadwalList] = useState<JadwalTampil[]>([])
@@ -27,6 +30,23 @@ function JualTiketAgenContent() {
   const [isRefreshing, setIsRefreshing] = useState(false)
 
   useEffect(() => {
+    // JIKA MODE PREVIEW DARI SUPERADMIN, BUAT PROFIL PALSU
+    if (isPreview) {
+      setProfile({ 
+        id: 'preview', 
+        nama: 'Mode Pratinjau', 
+        role: 'agen', 
+        lokasi: 'Tarakan', 
+        email: 'preview@superadmin.com' 
+      } as Profile)
+      
+      const now = new Date()
+      const witaTime = new Date(now.getTime() + (8 * 60 * 60 * 1000))
+      setTanggal(witaTime.toISOString().split('T')[0])
+      setLoading(false)
+      return
+    }
+
     const sesi = getOperatorSession()
     if (!sesi || sesi.role !== 'agen') {
       router.push('/login')
@@ -39,7 +59,7 @@ function JualTiketAgenContent() {
     setTanggal(witaTime.toISOString().split('T')[0])
     
     setLoading(false)
-  }, [router])
+  }, [router, isPreview])
 
   useEffect(() => {
     if (tanggal && profile) {
@@ -50,14 +70,12 @@ function JualTiketAgenContent() {
   async function loadJadwal(tgl: string, lokasiAgen: string) {
     setIsRefreshing(true)
     
-    // 1. Ambil Template Jadwal SESUAI LOKASI AGEN SAJA
     const { data: templates } = await supabase
       .from('template_jadwal')
       .select(`*, kapal:kapal_id(kapasitas)`)
       .eq('aktif', true)
       .eq('rute_asal', lokasiAgen)
 
-    // 2. Ambil Jadwal yang sudah ada di tanggal tersebut
     let { data: jadwalData } = await supabase
       .from('jadwal')
       .select('id, rute_asal, rute_tujuan, jam_berangkat, harga, kapal_id, status_jadwal')
@@ -65,7 +83,6 @@ function JualTiketAgenContent() {
       .eq('status', 'aktif')
       .eq('rute_asal', lokasiAgen)
 
-    // 3. SINKRONISASI
     if (templates && templates.length > 0) {
       const newJadwalPayload: any[] = []
       
@@ -123,7 +140,6 @@ function JualTiketAgenContent() {
       }
     }
 
-    // 4. Tampilkan Data
     const { data: kapalData } = await supabase.from('kapal').select('id, nama, kapasitas')
     const kapalMap = new Map(kapalData?.map((k) => [k.id, k]) || [])
 
@@ -181,6 +197,10 @@ function JualTiketAgenContent() {
   }
 
   function handleJualTiket(jadwalId: string) {
+    if (isPreview) {
+      alert('Ini mode pratinjau. Di aplikasi asli, ini akan membuka halaman pilih kursi.')
+      return
+    }
     router.push(`/agen/loket-jual?jadwal=${jadwalId}`)
   }
 
@@ -190,16 +210,14 @@ function JualTiketAgenContent() {
   return (
     <div className="h-[100dvh] bg-gray-50 flex flex-col overflow-hidden">
       
-      {/* HEADER & FILTER TANGGAL */}
       <div className="flex-shrink-0 bg-white shadow-sm z-10 p-4">
         <div className="max-w-md mx-auto">
           <div className="flex justify-between items-start mb-3">
             <div>
               <h1 className="text-xl font-bold text-gray-900 leading-tight">Jual Tiket</h1>
-              {/* Judul sudah diperbaiki, tidak dobel lagi */}
               <p className="text-sm text-gray-600 mt-0.5">Agen : {profile.lokasi}</p>
             </div>
-            <button onClick={() => router.push('/dashboard/agen')} className="text-xs text-blue-600 hover:underline bg-gray-50 px-2 py-1.5 rounded border border-gray-200 mt-1">
+            <button onClick={() => router.push(isPreview ? '/superadmin/pusat-kontrol/agen' : '/dashboard/agen')} className="text-xs text-blue-600 hover:underline bg-gray-50 px-2 py-1.5 rounded border border-gray-200 mt-1">
               &larr; Kembali
             </button>
           </div>
@@ -216,7 +234,6 @@ function JualTiketAgenContent() {
         </div>
       </div>
 
-      {/* DAFTAR JADWAL */}
       <div className="flex-1 overflow-y-auto w-full p-4">
         <div className="max-w-md mx-auto space-y-3">
           
@@ -239,9 +256,7 @@ function JualTiketAgenContent() {
                   isLewat ? 'border-gray-200 opacity-60' : 'border-gray-200'
                 }`}
               >
-                {/* Info Kiri */}
                 <div className="flex-1 min-w-0 flex flex-col justify-center">
-                  {/* Baris Atas: Jam & Rute */}
                   <div className="flex justify-between items-center mb-0.5">
                     <div className="flex items-center gap-2">
                       <span className={`font-bold text-sm ${isLewat ? 'text-gray-500' : 'text-gray-900'} leading-tight`}>
@@ -256,7 +271,6 @@ function JualTiketAgenContent() {
                     </div>
                   </div>
                   
-                  {/* Baris Bawah: Nama Kapal & Sisa Kursi */}
                   <div className="flex justify-between items-end mt-1">
                     <div className="min-w-0 pr-2">
                       <p className={`font-bold text-xs truncate leading-tight ${isLewat ? 'text-gray-500' : 'text-gray-900'}`}>
@@ -269,7 +283,6 @@ function JualTiketAgenContent() {
                   </div>
                 </div>
 
-                {/* Tombol Aksi Kanan */}
                 <div className="w-[70px] flex-shrink-0 flex items-stretch">
                   {isLewat ? (
                     <button disabled className="w-full flex items-center justify-center rounded-md bg-gray-200 text-gray-500 text-[10px] font-medium cursor-not-allowed text-center px-1">

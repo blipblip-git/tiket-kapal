@@ -11,6 +11,7 @@ type LaporanDetail = {
   kode_tiket: string
   metode: string
   harga: number
+  is_balita: boolean
 }
 
 type LaporanJam = {
@@ -57,15 +58,17 @@ export default function LaporanAgenPage() {
     if (!profile) return
     setLoading(true)
 
+    // FIX FILTER: Tambahkan filter petugas_jual agar Agen hanya lihat jualannya sendiri
     const { data, error } = await supabase
       .from('pesanan')
       .select(`
-        id, nama_penumpang, kode_tiket,
+        id, nama_penumpang, kode_tiket, is_balita, petugas_jual,
         jadwal:jadwal_id (harga, rute_asal, rute_tujuan, jam_berangkat, tanggal),
         kursi:kursi_id (nomor_kursi),
         pembayaran:pembayaran (metode)
       `)
       .eq('status', 'paid')
+      .eq('petugas_jual', profile.email) // <-- FILTER AGEN DISINI
 
     if (error) {
       console.error('Gagal load laporan:', error)
@@ -85,7 +88,9 @@ export default function LaporanAgenPage() {
       const jamKapal = item.jadwal?.jam_berangkat
       const jamStr = jamKapal ? jamKapal.slice(0, 5) : '00:00'
       
-      const harga = item.jadwal?.harga || 0
+      // FIX BALITA: Jika balita, harga aktual jadi 0
+      const hargaAsli = item.jadwal?.harga || 0
+      const harga = item.is_balita ? 0 : hargaAsli
       const kursi = item.kursi?.nomor_kursi || '-'
       
       let metode = 'cash'
@@ -121,7 +126,8 @@ export default function LaporanAgenPage() {
         kursi,
         kode_tiket: item.kode_tiket,
         metode,
-        harga,
+        harga: harga, // Simpan harga yang sudah dikondisikan (0 jika balita)
+        is_balita: item.is_balita || false,
       })
     })
 
@@ -295,11 +301,14 @@ export default function LaporanAgenPage() {
                       return (
                         <tr key={d.id} className="border-b last:border-0 hover:bg-gray-50 text-center">
                           <td className="px-1 py-1 md:px-4 md:py-2 text-gray-900 font-bold border border-gray-300">{idx + 1}</td>
-                          <td className="px-1 py-1 md:px-4 md:py-2 font-bold text-gray-900 text-center border border-gray-300">{d.nama_penumpang} / {d.kursi}</td>
+                          <td className="px-1 py-1 md:px-4 md:py-2 font-bold text-gray-900 text-center border border-gray-300">
+                            {d.nama_penumpang} / {d.kursi}
+                            {d.is_balita && <span className="text-[8px] md:text-[10px] text-orange-600 ml-1">(Balita)</span>}
+                          </td>
                           <td className="px-1 py-1 md:px-4 md:py-2 font-mono text-gray-800 border border-gray-300">{potongKode(d.kode_tiket)}</td>
-                          <td className="px-1 py-1 md:px-4 md:py-2 text-gray-900 border border-gray-300">{isCash ? `Rp ${d.harga.toLocaleString('id-ID')}` : '-'}</td>
-                          <td className="px-1 py-1 md:px-4 md:py-2 text-gray-900 border border-gray-300">{!isCash ? `Rp ${d.harga.toLocaleString('id-ID')}` : '-'}</td>
-                          <td className="px-1 py-1 md:px-4 md:py-2 font-bold text-gray-900 border border-gray-300">Rp {d.harga.toLocaleString('id-ID')}</td>
+                          <td className="px-1 py-1 md:px-4 md:py-2 text-gray-900 border border-gray-300">{isCash && d.harga > 0 ? `Rp ${d.harga.toLocaleString('id-ID')}` : '-'}</td>
+                          <td className="px-1 py-1 md:px-4 md:py-2 text-gray-900 border border-gray-300">{!isCash && d.harga > 0 ? `Rp ${d.harga.toLocaleString('id-ID')}` : '-'}</td>
+                          <td className="px-1 py-1 md:px-4 md:py-2 font-bold text-gray-900 border border-gray-300">{d.harga > 0 ? `Rp ${d.harga.toLocaleString('id-ID')}` : '-'}</td>
                         </tr>
                       )
                     })}
@@ -394,11 +403,14 @@ export default function LaporanAgenPage() {
                 return (
                   <tr key={d.id} className="text-center text-gray-900">
                     <td className="border border-gray-400 px-2 py-1">{idx + 1}</td>
-                    <td className="border border-gray-400 px-2 py-1 text-center font-bold">{d.nama_penumpang} / {d.kursi}</td>
+                    <td className="border border-gray-400 px-2 py-1 text-center font-bold">
+                      {d.nama_penumpang} / {d.kursi}
+                      {d.is_balita && <span className="text-xs text-orange-600 ml-1">(Balita)</span>}
+                    </td>
                     <td className="border border-gray-400 px-2 py-1 font-mono text-xs">{potongKode(d.kode_tiket)}</td>
-                    <td className="border border-gray-400 px-2 py-1 text-right">{isCash ? `Rp ${d.harga.toLocaleString('id-ID')}` : '-'}</td>
-                    <td className="border border-gray-400 px-2 py-1 text-right">{!isCash ? `Rp ${d.harga.toLocaleString('id-ID')}` : '-'}</td>
-                    <td className="border border-gray-400 px-2 py-1 text-right font-bold">Rp {d.harga.toLocaleString('id-ID')}</td>
+                    <td className="border border-gray-400 px-2 py-1 text-right">{isCash && d.harga > 0 ? `Rp ${d.harga.toLocaleString('id-ID')}` : '-'}</td>
+                    <td className="border border-gray-400 px-2 py-1 text-right">{!isCash && d.harga > 0 ? `Rp ${d.harga.toLocaleString('id-ID')}` : '-'}</td>
+                    <td className="border border-gray-400 px-2 py-1 text-right font-bold">{d.harga > 0 ? `Rp ${d.harga.toLocaleString('id-ID')}` : '-'}</td>
                   </tr>
                 )
               })}

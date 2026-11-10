@@ -33,6 +33,7 @@ type JadwalInfo = {
 
 type Penumpang = {
   nama: string
+  is_balita: boolean
 }
 
 const toTitleCase = (str: string) => {
@@ -57,10 +58,6 @@ function LoketJualContent() {
   const [step, setStep] = useState<'pilih-kursi' | 'form' | 'qris'>('pilih-kursi')
   
   const [waktuSisa, setWaktuSisa] = useState(300)
-
-  // State Balita
-  const [bawaBalita, setBawaBalita] = useState(false)
-  const [namaBalita, setNamaBalita] = useState('')
 
   useEffect(() => {
     async function init() {
@@ -207,7 +204,7 @@ function LoketJualContent() {
       alert('Pilih minimal 1 kursi dulu bray.')
       return
     }
-    setPenumpangList(kursiDipilih.map(() => ({ nama: '' })))
+    setPenumpangList(kursiDipilih.map(() => ({ nama: '', is_balita: false })))
     setStep('form')
   }
 
@@ -216,18 +213,17 @@ function LoketJualContent() {
     setPenumpangList([])
     setError('')
     setWaktuSisa(300)
-    setBawaBalita(false)
-    setNamaBalita('')
   }
 
-  function updatePenumpang(idx: number, field: keyof Penumpang, value: string) {
+  function updatePenumpang(idx: number, field: keyof Penumpang, value: any) {
     const baru = [...penumpangList]
     baru[idx] = { ...baru[idx], [field]: value }
     setPenumpangList(baru)
   }
 
-  function generateKodeTiket(idx: number) {
-    return 'TKT-' + Date.now() + '-L' + idx + '-' + Math.floor(Math.random() * 1000)
+  function generateKodeTiket(idx: number, isBalita: boolean) {
+    const prefix = isBalita ? 'BALITA-' : 'TKT-'
+    return prefix + Date.now() + '-L' + idx + '-' + Math.floor(Math.random() * 1000)
   }
 
   function generateGrupId() {
@@ -258,11 +254,6 @@ function LoketJualContent() {
         setError(`Nama penumpang ${i + 1} wajib diisi`)
         return
       }
-    }
-
-    if (bawaBalita && !namaBalita) {
-      setError('Nama balita wajib diisi kalau bawa balita.')
-      return
     }
 
     if (!noHp) {
@@ -308,40 +299,20 @@ function LoketJualContent() {
         jadwal_id: jadwal.id,
         kursi_id: kursiDipilih[idx],
         nama_penumpang: namaRapi,
-        nik: '-',
+        // NIK SUDAH DIHAPUS TOTAL
         nomor_hp: noHp,
         kanal: kanalPesanan, 
         status: 'paid',
-        kode_tiket: generateKodeTiket(idx),
+        kode_tiket: generateKodeTiket(idx, p.is_balita),
         waktu_bayar: waktuKonfirmasi,
         petugas_konfirmasi: profile.email,
         waktu_konfirmasi: waktuKonfirmasi,
         grup_transaksi_id: grupId,
         jam_transaksi: jamTransaksi,
         petugas_jual: profile.email,
-        is_balita: false,
+        is_balita: p.is_balita,
       }
     })
-
-    if (bawaBalita && namaBalita) {
-      pesananData.push({
-        jadwal_id: jadwal.id,
-        kursi_id: null as any,
-        nama_penumpang: toTitleCase(namaBalita),
-        nik: '-',
-        nomor_hp: noHp,
-        kanal: kanalPesanan, 
-        status: 'paid',
-        kode_tiket: 'BALITA-' + Date.now(),
-        waktu_bayar: waktuKonfirmasi,
-        petugas_konfirmasi: profile.email,
-        waktu_konfirmasi: waktuKonfirmasi,
-        grup_transaksi_id: grupId,
-        jam_transaksi: jamTransaksi,
-        petugas_jual: profile.email,
-        is_balita: true,
-      })
-    }
 
     const { data: inserted, error: errInsert } = await supabase
       .from('pesanan')
@@ -359,11 +330,10 @@ function LoketJualContent() {
       .update({ status: 'terisi', waktu_hold: null })
       .in('id', kursiDipilih)
 
-    const insertedDewasa = inserted.filter((p) => !p.is_balita)
-    const pembayaranData = insertedDewasa.map((p) => ({
+    const pembayaranData = inserted.map((p, idx) => ({
       pesanan_id: p.id,
       metode: 'simulasi_online',
-      jumlah: jadwal.harga,
+      jumlah: penumpangList[idx].is_balita ? 0 : jadwal.harga,
       status: 'sukses',
       waktu_bayar: waktuKonfirmasi,
     }))
@@ -376,21 +346,20 @@ function LoketJualContent() {
       metode_bayar: 'simulasi_online',
       grup_transaksi_id: grupId,
       jam_transaksi: jamTransaksi,
-      jumlah_tiket: insertedDewasa.length,
-      total_bayar: jadwal.harga * insertedDewasa.length,
+      jumlah_tiket: inserted.length,
+      total_bayar: inserted.reduce((sum, p, idx) => sum + (penumpangList[idx].is_balita ? 0 : jadwal.harga), 0),
       rute: `${jadwal.rute_asal} → ${jadwal.rute_tujuan}`,
       jam_berangkat: jadwal.jam_berangkat,
       nomor_hp: noHp,
-      daftar_penumpang: inserted.map((p) => ({
+      daftar_penumpang: inserted.map((p, idx) => ({
         nama: p.nama_penumpang,
         kode_tiket: p.kode_tiket,
         kursi_id: p.kursi_id,
-        jumlah: p.is_balita ? 0 : jadwal.harga,
-        is_balita: p.is_balita,
+        jumlah: penumpangList[idx].is_balita ? 0 : jadwal.harga,
+        is_balita: penumpangList[idx].is_balita,
       })),
     })
 
-    // KIRIM SEMUA ID (DEWASA + BALITA) KE E-TIKET
     const ids = inserted.map((p) => p.id).join(',')
     router.push(`/etiket?pesanan=${ids}`)
   }
@@ -472,7 +441,7 @@ function LoketJualContent() {
   if (error && !jadwal) return <p className="p-6 text-center text-red-600 mt-10">Error: {error}</p>
   if (!jadwal) return <p className="p-6 text-center text-gray-900 mt-10">Data tidak lengkap</p>
 
-  const totalHarga = jadwal.harga * kursiDipilih.length
+  const totalHarga = penumpangList.reduce((sum, p) => sum + (p.is_balita ? 0 : jadwal.harga), 0)
   const jamPotong = jadwal.jam_berangkat.substring(0, 5)
 
   return (
@@ -529,7 +498,7 @@ function LoketJualContent() {
               <div className="flex justify-between items-center mb-2">
                 <p className="text-xs md:text-sm text-gray-800">Kursi dipilih: <b className="text-blue-600">{kursiDipilih.length}</b></p>
                 {kursiDipilih.length > 0 && (
-                  <p className="text-xs md:text-sm font-bold text-gray-900">Total: Rp {totalHarga.toLocaleString('id-ID')}</p>
+                  <p className="text-xs md:text-sm font-bold text-gray-900">Total: Rp {(jadwal.harga * kursiDipilih.length).toLocaleString('id-ID')}</p>
                 )}
               </div>
               <button
@@ -561,35 +530,18 @@ function LoketJualContent() {
                     <div className="flex justify-between items-center mb-2">
                       <p className="text-xs md:text-sm font-bold text-gray-900">Penumpang #{idx + 1} — Kursi {kursi?.nomor_kursi || '?'}</p>
                     </div>
-                    <label className="block mb-1 text-[10px] md:text-xs font-medium text-gray-700">Nama Lengkap</label>
-                    <input type="text" value={p.nama} onChange={(e) => updatePenumpang(idx, 'nama', e.target.value)} className="w-full border border-gray-300 rounded px-3 py-1.5 md:py-2 text-xs md:text-sm text-gray-900" required />
-
-                    <div className="mt-3 bg-orange-50 p-2 rounded border border-orange-200">
-                      <div className="flex items-center gap-2">
-                        <input 
-                          type="checkbox" 
-                          id={`bawaBalita-${idx}`}
-                          checked={bawaBalita} 
-                          onChange={(e) => setBawaBalita(e.target.checked)} 
-                          className="w-4 h-4 text-orange-600 rounded focus:ring-orange-500"
-                        />
-                        <label htmlFor={`bawaBalita-${idx}`} className="text-[10px] md:text-xs font-bold text-orange-900 cursor-pointer">
-                          Bawa Balita di bawah 4 tahun? (Gratis)
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                      <div>
+                        <label className="block mb-1 text-[10px] md:text-xs font-medium text-gray-700">Nama Lengkap</label>
+                        <input type="text" value={p.nama} onChange={(e) => updatePenumpang(idx, 'nama', e.target.value)} className="w-full border border-gray-300 rounded px-3 py-1.5 md:py-2 text-xs md:text-sm text-gray-900" required />
+                      </div>
+                      <div>
+                        <label className="block mb-1 text-[10px] md:text-xs font-medium text-gray-700">Status</label>
+                        <label className="flex items-center gap-1.5 cursor-pointer mt-2">
+                          <input type="checkbox" checked={p.is_balita} onChange={(e) => updatePenumpang(idx, 'is_balita', e.target.checked)} className="w-4 h-4 text-orange-600 rounded focus:ring-orange-500" />
+                          <span className="text-[10px] md:text-xs font-bold text-orange-900">Balita (Tanpa NIK)</span>
                         </label>
                       </div>
-                      {bawaBalita && (
-                        <div className="mt-2">
-                          <label className="block mb-1 text-[10px] md:text-xs font-medium text-orange-900">Nama Balita</label>
-                          <input 
-                            type="text" 
-                            value={namaBalita} 
-                            onChange={(e) => setNamaBalita(e.target.value)} 
-                            className="w-full border border-orange-300 rounded px-3 py-1.5 md:py-2 text-xs md:text-sm text-gray-900" 
-                            placeholder="Nama anak" 
-                          />
-                          <p className="text-[10px] text-orange-700 mt-1 italic">*Balita tidak memerlukan kursi dan tidak dikenakan biaya.</p>
-                        </div>
-                      )}
                     </div>
                   </div>
                 )

@@ -12,6 +12,8 @@ type Kursi = {
 
 type Penumpang = {
   nama: string
+  is_balita: boolean
+  nama_balita: string
 }
 
 const toTitleCase = (str: string) => {
@@ -33,10 +35,6 @@ function FormContent() {
 
   const [penumpangList, setPenumpangList] = useState<Penumpang[]>([])
   const [noHp, setNoHp] = useState('')
-
-  // State Balita
-  const [bawaBalita, setBawaBalita] = useState(false)
-  const [namaBalita, setNamaBalita] = useState('')
 
   const kursiIds = kursiIdStr ? kursiIdStr.split(',') : []
 
@@ -60,7 +58,7 @@ function FormContent() {
 
       if (jData && kData) {
         setJadwal(jData)
-        setPenumpangList(kursiIds.map(() => ({ nama: '' })))
+        setPenumpangList(kursiIds.map(() => ({ nama: '', is_balita: false, nama_balita: '' })))
         setKursiList(kData)
       }
       setLoading(false)
@@ -69,9 +67,19 @@ function FormContent() {
     fetchData()
   }, [jadwalId, kursiIdStr, router])
 
-  const updatePenumpang = (idx: number, field: keyof Penumpang, value: string) => {
+  const updatePenumpang = (idx: number, field: keyof Penumpang, value: any) => {
     const baru = [...penumpangList]
     baru[idx] = { ...baru[idx], [field]: value }
+    setPenumpangList(baru)
+  }
+
+  const toggleBalita = (idx: number) => {
+    const baru = [...penumpangList]
+    baru[idx] = { 
+      ...baru[idx], 
+      is_balita: !baru[idx].is_balita,
+      nama_balita: !baru[idx].is_balita ? baru[idx].nama_balita : '' // Reset nama jika di-uncheck
+    }
     setPenumpangList(baru)
   }
 
@@ -84,11 +92,10 @@ function FormContent() {
         setError(`Nama penumpang #${i + 1} wajib diisi.`)
         return
       }
-    }
-
-    if (bawaBalita && !namaBalita) {
-      setError('Nama balita wajib diisi.')
-      return
+      if (penumpangList[i].is_balita && !penumpangList[i].nama_balita) {
+        setError(`Nama balita untuk penumpang #${i + 1} wajib diisi.`)
+        return
+      }
     }
     
     setProses(true)
@@ -99,15 +106,13 @@ function FormContent() {
       const waktuSekarang = new Date().toISOString()
       const waktuExpired = new Date(Date.now() + 10 * 60 * 1000).toISOString()
 
-      // Data Penumpang Dewasa
-      const pesananPayload = penumpangList.map((p, idx) => {
-        const namaRapi = toTitleCase(p.nama)
+      const pesananPayload: any[] = []
 
-        return {
+      penumpangList.forEach((p, idx) => {
+        pesananPayload.push({
           jadwal_id: jadwalId,
-          kursi_id: kursiList[idx].id,
-          nama_penumpang: namaRapi,
-          nik: '-',
+          kursi_id: kursiList[idx].id, 
+          nama_penumpang: toTitleCase(p.nama),
           nomor_hp: noHp,
           kanal: 'online',
           status: 'pending',
@@ -116,26 +121,24 @@ function FormContent() {
           waktu_pesan: waktuSekarang,
           waktu_expired: waktuExpired,
           is_balita: false,
+        })
+
+        if (p.is_balita && p.nama_balita) {
+          pesananPayload.push({
+            jadwal_id: jadwalId,
+            kursi_id: null,
+            nama_penumpang: toTitleCase(p.nama_balita),
+            nomor_hp: noHp,
+            kanal: 'online',
+            status: 'pending',
+            kode_tiket: 'BALITA-' + Math.random().toString(36).substring(2, 8).toUpperCase(),
+            grup_transaksi_id: grupTransaksiId,
+            waktu_pesan: waktuSekarang,
+            waktu_expired: waktuExpired,
+            is_balita: true,
+          })
         }
       })
-
-      // Data Balita
-      if (bawaBalita && namaBalita) {
-        pesananPayload.push({
-          jadwal_id: jadwalId,
-          kursi_id: null as any, // Tanpa kursi
-          nama_penumpang: toTitleCase(namaBalita),
-          nik: '-',
-          nomor_hp: noHp,
-          kanal: 'online',
-          status: 'pending',
-          kode_tiket: 'BALITA-' + Math.random().toString(36).substring(2, 8).toUpperCase(),
-          grup_transaksi_id: grupTransaksiId,
-          waktu_pesan: waktuSekarang,
-          waktu_expired: waktuExpired,
-          is_balita: true,
-        })
-      }
 
       const { data: insertedPesanan, error: errPesanan } = await supabase
         .from('pesanan')
@@ -180,49 +183,57 @@ function FormContent() {
               </div>
 
               <div className="space-y-3">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">Nama Lengkap</label>
-                  <input
-                    type="text"
-                    required
-                    className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm text-gray-900 focus:ring-blue-500 focus:border-blue-500"
-                    value={p.nama}
-                    onChange={(e) => updatePenumpang(idx, 'nama', e.target.value)}
-                    placeholder="Sesuai KTP"
-                  />
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700">Nama Lengkap</label>
+                    <input
+                      type="text"
+                      required
+                      className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm text-gray-900 focus:ring-blue-500 focus:border-blue-500 text-sm"
+                      value={p.nama}
+                      onChange={(e) => updatePenumpang(idx, 'nama', e.target.value)}
+                      placeholder="Sesuai KTP"
+                    />
+                  </div>
+                  
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700">Status</label>
+                    {/* TOMBOL TOGGLE PENGGANTI CHECKBOX */}
+                    <button
+                      type="button"
+                      onClick={() => toggleBalita(idx)}
+                      className={`mt-1 flex items-start gap-2 w-full text-left p-1.5 rounded transition-colors ${p.is_balita ? 'bg-orange-50' : 'hover:bg-gray-50'}`}
+                    >
+                      <div className={`w-4 h-4 mt-0.5 rounded border flex items-center justify-center flex-shrink-0 ${p.is_balita ? 'bg-orange-600 border-orange-600' : 'bg-white border-gray-300'}`}>
+                        {p.is_balita && (
+                          <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                          </svg>
+                        )}
+                      </div>
+                      <div className="flex flex-col">
+                        <span className="text-xs font-bold text-orange-900 leading-tight">Bawa Balita</span>
+                        <span className="text-[10px] text-orange-800 leading-tight">(Free dibawah 4 th dipangku)</span>
+                      </div>
+                    </button>
+                  </div>
                 </div>
+
+                {/* KOLOM NAMA BALITA */}
+                {p.is_balita && (
+                  <div className="bg-orange-50 p-3 rounded-md border border-orange-200 mt-2">
+                    <input
+                      type="text"
+                      className="block w-full px-3 py-2 border border-orange-300 rounded-md shadow-sm text-gray-900 focus:ring-orange-500 focus:border-orange-500 text-sm"
+                      value={p.nama_balita}
+                      onChange={(e) => updatePenumpang(idx, 'nama_balita', e.target.value)}
+                      placeholder="Nama Balita"
+                    />
+                  </div>
+                )}
               </div>
             </div>
           ))}
-
-          {/* OPSI BALITA */}
-          <div className="bg-orange-50 p-3 rounded-md border border-orange-200">
-            <div className="flex items-center gap-2 mb-2">
-              <input 
-                type="checkbox" 
-                id="bawaBalita"
-                checked={bawaBalita} 
-                onChange={(e) => setBawaBalita(e.target.checked)} 
-                className="w-4 h-4 text-orange-600 rounded focus:ring-orange-500"
-              />
-              <label htmlFor="bawaBalita" className="text-sm font-bold text-orange-900 cursor-pointer">
-                Bawa Balita di bawah 4 tahun? (Gratis)
-              </label>
-            </div>
-            {bawaBalita && (
-              <div>
-                <label className="block mb-1 text-xs font-medium text-orange-900">Nama Balita</label>
-                <input 
-                  type="text" 
-                  value={namaBalita} 
-                  onChange={(e) => setNamaBalita(e.target.value)} 
-                  className="w-full border border-orange-300 rounded px-3 py-1.5 text-sm text-gray-900" 
-                  placeholder="Nama anak" 
-                />
-                <p className="text-xs text-orange-700 mt-1 italic">*Balita tidak memerlukan kursi dan tidak dikenakan biaya.</p>
-              </div>
-            )}
-          </div>
 
           <div className="border-t pt-4">
             <label className="block text-sm font-medium text-gray-700">Nomor HP (Aktif)</label>

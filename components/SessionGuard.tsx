@@ -1,15 +1,23 @@
 'use client'
 
 import { useEffect } from 'react'
-import { usePathname, useRouter } from 'next/navigation'
+import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { cekValidasiSesi } from '@/lib/supabase'
 
 export default function SessionGuard() {
   const pathname = usePathname()
   const router = useRouter()
+  const searchParams = useSearchParams()
 
   useEffect(() => {
-    // Halaman publik yang tidak perlu dicek login
+    // 1. CEK MODE PREVIEW DARI SUPERADMIN
+    // Jika ada ?preview=true, jangan lakukan pengecekan sesi apapun.
+    const isPreview = searchParams.get('preview') === 'true'
+    if (isPreview) {
+      return
+    }
+
+    // 2. Halaman publik yang tidak perlu dicek login
     const halamanPublik = [
       '/', 
       '/login', 
@@ -22,12 +30,11 @@ export default function SessionGuard() {
       '/pembayaran'
     ]
     
-    // Jika sedang di halaman publik, lewati pengecekan
     if (halamanPublik.some(path => pathname === path || pathname.startsWith(path))) {
       return
     }
 
-    // Cek apakah ada sesi yang tersimpan di localStorage
+    // 3. Cek apakah ada sesi yang tersimpan di localStorage
     const sesi = typeof window !== 'undefined' ? localStorage.getItem('petugas_session') : null
 
     if (sesi) {
@@ -41,7 +48,7 @@ export default function SessionGuard() {
       }
     })
 
-  }, [pathname, router])
+  }, [pathname, router, searchParams])
 
   return null
 }

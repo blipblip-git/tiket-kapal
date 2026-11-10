@@ -67,46 +67,37 @@ export default function DashboardSuperadminPage() {
           </button>
         </div>
 
-        {/* MENU KHUSUS SUPERADMIN */}
+        {/* MENU KHUSUS SUPERADMIN (FOKUS SISTEM, BUKAN JUALAN) */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           
-          {/* 1. REKAP FEE PLATFORM */}
-          <button 
-            onClick={() => router.push('/rekap-bagi-hasil')} 
-            className="bg-gray-800 p-8 rounded-xl shadow-lg hover:bg-gray-700 transition border border-gray-700 text-left flex flex-col items-start h-48 justify-center group"
-          >
-            <div className="text-5xl mb-4 group-hover:scale-110 transition">💰</div>
-            <h2 className="text-xl font-bold text-white mb-2">Rekap Fee Platform</h2>
-            <p className="text-sm text-gray-400">Lihat laporan pendapatan fee sistem per jam.</p>
-          </button>
-
-          {/* 2. MANAJEMEN TENANT */}
+          {/* 1. MANAJEMEN TENANT (PEMILIK KAPAL) */}
           <button 
             onClick={() => router.push('/dashboard-superadmin/tenant')} 
             className="bg-gray-800 p-8 rounded-xl shadow-lg hover:bg-gray-700 transition border border-gray-700 text-left flex flex-col items-start h-48 justify-center group"
           >
             <div className="text-5xl mb-4 group-hover:scale-110 transition">🏢</div>
             <h2 className="text-xl font-bold text-white mb-2">Manajemen Pemilik Kapal</h2>
-            <p className="text-sm text-gray-400">Lihat daftar, reset password, dan kelola tenant (Pemilik Kapal).</p>
+            <p className="text-sm text-gray-400">Daftarkan Admin Utama, reset password, dan kelola tenant.</p>
           </button>
 
-          {/* 3. MANAJEMEN AGEN (KARTU BARU) */}
+          {/* 2. MANAJEMEN AGEN (GLOBAL) */}
           <button 
             onClick={() => router.push('/dashboard-superadmin/agen')} 
             className="bg-gray-800 p-8 rounded-xl shadow-lg hover:bg-gray-700 transition border border-gray-700 text-left flex flex-col items-start h-48 justify-center group"
           >
             <div className="text-5xl mb-4 group-hover:scale-110 transition">🤝</div>
             <h2 className="text-xl font-bold text-white mb-2">Manajemen Agen</h2>
-            <p className="text-sm text-gray-400">Buat akun agen khusus untuk menjual tiket semua kapal.</p>
+            <p className="text-sm text-gray-400">Buat akun agen khusus untuk semua pemilik kapal.</p>
           </button>
 
-          {/* 4. MONITORING GLOBAL (COMING SOON) */}
+          {/* 3. PUSAT KONTROL WEBSITE */}
           <button 
-            className="bg-gray-800 p-8 rounded-xl shadow-lg border border-gray-700 text-left flex flex-col items-start h-48 justify-center opacity-60 cursor-not-allowed"
+            onClick={() => router.push('/superadmin/pusat-kontrol')}
+            className="bg-gray-800 p-8 rounded-xl shadow-lg hover:bg-gray-700 transition border border-gray-700 text-left flex flex-col items-start h-48 justify-center group"
           >
-            <div className="text-5xl mb-4">🌍</div>
-            <h2 className="text-xl font-bold text-white mb-2">Monitoring Global</h2>
-            <p className="text-sm text-gray-400">Pantau penjualan seluruh kapal. (Segera Hadir)</p>
+            <div className="text-5xl mb-4 group-hover:scale-110 transition">🎛️</div>
+            <h2 className="text-xl font-bold text-white mb-2">Pusat Kontrol Website</h2>
+            <p className="text-sm text-gray-400">Atur teks & tampilan dashboard Admin, Petugas, dan Agen.</p>
           </button>
 
         </div>

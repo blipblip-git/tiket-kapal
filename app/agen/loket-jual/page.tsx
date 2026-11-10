@@ -34,7 +34,7 @@ type JadwalInfo = {
 
 type Penumpang = {
   nama: string
-  nik: string
+  is_balita: boolean
 }
 
 const toTitleCase = (str: string) => {
@@ -61,7 +61,6 @@ function LoketJualAgenContent() {
   const [showScannerIndex, setShowScannerIndex] = useState<number | null>(null)
   const [metodeBayar, setMetodeBayar] = useState<'cash' | 'qris'>('cash')
   
-  // State untuk Pop-up QRIS
   const [showQrisModal, setShowQrisModal] = useState(false)
 
   useEffect(() => {
@@ -163,7 +162,7 @@ function LoketJualAgenContent() {
       alert('Pilih minimal 1 kursi dulu bray.')
       return
     }
-    setPenumpangList(kursiDipilih.map(() => ({ nama: '', nik: '' })))
+    setPenumpangList(kursiDipilih.map(() => ({ nama: '', is_balita: false })))
     setStep('form')
   }
 
@@ -174,7 +173,7 @@ function LoketJualAgenContent() {
     setShowScannerIndex(null)
   }
 
-  function updatePenumpang(idx: number, field: keyof Penumpang, value: string) {
+  function updatePenumpang(idx: number, field: keyof Penumpang, value: any) {
     const baru = [...penumpangList]
     baru[idx] = { ...baru[idx], [field]: value }
     setPenumpangList(baru)
@@ -184,19 +183,15 @@ function LoketJualAgenContent() {
     if (showScannerIndex !== null) {
       const baru = [...penumpangList]
       if (nama) baru[showScannerIndex].nama = nama
-      if (nik) baru[showScannerIndex].nik = nik
+      // NIK diabaikan total
       setPenumpangList(baru)
       setShowScannerIndex(null)
     }
   }
 
-  function maskNik(nik: string) {
-    if (nik.length !== 16) return nik
-    return nik.slice(0, 6) + '**********'
-  }
-
-  function generateKodeTiket(idx: number) {
-    return 'TKT-' + Date.now() + '-A' + idx + '-' + Math.floor(Math.random() * 1000)
+  function generateKodeTiket(idx: number, isBalita: boolean) {
+    const prefix = isBalita ? 'BALITA-' : 'TKT-'
+    return prefix + Date.now() + '-A' + idx + '-' + Math.floor(Math.random() * 1000)
   }
 
   function generateGrupId() {
@@ -217,18 +212,12 @@ function LoketJualAgenContent() {
     return `${hh}:${mm}:${ss}`
   }
 
-  // Fungsi saat klik tombol "Bayar" di form
   function handleTombolBayar(e: React.FormEvent) {
     e.preventDefault()
     
-    // Validasi input dulu sebelum buka popup
     for (let i = 0; i < penumpangList.length; i++) {
       if (!penumpangList[i].nama) {
         setError(`Nama penumpang ${i + 1} wajib diisi`)
-        return
-      }
-      if (penumpangList[i].nik.length !== 16) {
-        setError(`NIK penumpang ${i + 1} harus 16 digit`)
         return
       }
     }
@@ -241,17 +230,17 @@ function LoketJualAgenContent() {
     }
   }
 
-  // Fungsi utama untuk simpan ke database
   async function prosesPesanan() {
     if (!profile || !jadwal) return
     setError('')
     setShowQrisModal(false)
 
+    const totalHarga = penumpangList.reduce((sum, p) => sum + (p.is_balita ? 0 : jadwal.harga), 0)
     const teksMetode = metodeBayar === 'cash' ? 'CASH (Tunai)' : 'QRIS (Simulasi)'
     const konfirmasi = confirm(
       `Konfirmasi pembayaran ${teksMetode} untuk ${kursiDipilih.length} tiket:\n\n` +
-      penumpangList.map((p, i) => `${i + 1}. ${p.nama}`).join('\n') +
-      `\n\nTotal: Rp ${(jadwal.harga * kursiDipilih.length).toLocaleString('id-ID')}\n\n` +
+      penumpangList.map((p, i) => `${i + 1}. ${p.nama} ${p.is_balita ? '(Balita)' : ''}`).join('\n') +
+      `\n\nTotal: Rp ${totalHarga.toLocaleString('id-ID')}\n\n` +
       (metodeBayar === 'cash' ? `⚠️ Pastikan uang tunai sudah diterima utuh!\n\n` : `Pastikan QRIS sudah di-scan & sukses!\n\n`) +
       `Lanjutkan?`
     )
@@ -274,17 +263,17 @@ function LoketJualAgenContent() {
           jadwal_id: jadwal.id,
           kursi_id: kursiDipilih[idx],
           nama_penumpang: namaRapi,
-          nik: maskNik(p.nik),
           nomor_hp: noHp,
           kanal: 'agen', 
           status: 'paid',
-          kode_tiket: generateKodeTiket(idx),
+          kode_tiket: generateKodeTiket(idx, p.is_balita),
           waktu_bayar: waktuKonfirmasi,
           petugas_konfirmasi: profile.email,
           waktu_konfirmasi: waktuKonfirmasi,
           grup_transaksi_id: grupId,
           jam_transaksi: jamTransaksi,
           petugas_jual: profile.email, 
+          is_balita: p.is_balita,
         }
       })
 
@@ -302,10 +291,10 @@ function LoketJualAgenContent() {
         .update({ status: 'terisi' })
         .in('id', kursiDipilih)
 
-      const pembayaranData = inserted.map((p) => ({
+      const pembayaranData = inserted.map((p, idx) => ({
         pesanan_id: p.id,
         metode: metodePembayaran,
-        jumlah: jadwal.harga,
+        jumlah: penumpangList[idx].is_balita ? 0 : jadwal.harga,
         status: 'sukses',
         waktu_bayar: waktuKonfirmasi,
       }))
@@ -317,15 +306,16 @@ function LoketJualAgenContent() {
         grup_transaksi_id: grupId,
         jam_transaksi: jamTransaksi,
         jumlah_tiket: inserted.length,
-        total_bayar: jadwal.harga * inserted.length,
+        total_bayar: totalHarga,
         rute: `${jadwal.rute_asal} → ${jadwal.rute_tujuan}`,
         jam_berangkat: jadwal.jam_berangkat,
         nomor_hp: noHp,
-        daftar_penumpang: inserted.map((p) => ({
+        daftar_penumpang: inserted.map((p, idx) => ({
           nama: p.nama_penumpang,
           kode_tiket: p.kode_tiket,
           kursi_id: p.kursi_id,
-          jumlah: jadwal.harga,
+          jumlah: penumpangList[idx].is_balita ? 0 : jadwal.harga,
+          is_balita: penumpangList[idx].is_balita,
         })),
       })
 
@@ -404,13 +394,12 @@ function LoketJualAgenContent() {
   if (error && !jadwal) return <p className="p-6 text-center text-red-600 mt-10">Error: {error}</p>
   if (!jadwal) return <p className="p-6 text-center text-gray-900 mt-10">Data tidak lengkap</p>
 
-  const totalHarga = jadwal.harga * kursiDipilih.length
+  const totalHarga = penumpangList.reduce((sum, p) => sum + (p.is_balita ? 0 : jadwal.harga), 0)
   const jamPotong = jadwal.jam_berangkat.substring(0, 5)
 
   return (
     <div className="h-[100dvh] w-full bg-gray-50 flex flex-col overflow-hidden relative">
       
-      {/* HEADER (Fixed) */}
       <div className="flex-shrink-0 bg-white shadow-sm z-10 p-3 md:p-4">
         <div className="max-w-md mx-auto">
           <div className="flex justify-between items-start mb-2">
@@ -423,7 +412,6 @@ function LoketJualAgenContent() {
             </button>
           </div>
 
-          {/* Kartu Info Ringkas */}
           <div className="bg-gray-50 border border-gray-200 p-2 md:p-3 rounded-lg">
             <div className="flex justify-between items-center mb-0.5">
               <span className="text-xs md:text-sm font-bold text-gray-900">{jadwal.rute_asal} - {jadwal.rute_tujuan}</span>
@@ -438,7 +426,6 @@ function LoketJualAgenContent() {
         </div>
       </div>
 
-      {/* AREA TENGAH (Berubah sesuai step) */}
       {step === 'pilih-kursi' ? (
         <>
           <div className="flex-1 overflow-hidden p-2 md:p-4 flex flex-col max-w-md mx-auto w-full">
@@ -455,7 +442,6 @@ function LoketJualAgenContent() {
             </div>
           </div>
 
-          {/* FOOTER PILIH KURSI */}
           <div className="flex-shrink-0 bg-white border-t border-gray-200 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)] z-10 p-3 md:p-4">
             <div className="max-w-md mx-auto">
               <div className="flex justify-between items-center mb-2">
@@ -464,7 +450,7 @@ function LoketJualAgenContent() {
                 </p>
                 {kursiDipilih.length > 0 && (
                   <p className="text-xs md:text-sm font-bold text-gray-900">
-                    Total: Rp {totalHarga.toLocaleString('id-ID')}
+                    Total: Rp {(jadwal.harga * kursiDipilih.length).toLocaleString('id-ID')}
                   </p>
                 )}
               </div>
@@ -485,7 +471,6 @@ function LoketJualAgenContent() {
       ) : (
         <form onSubmit={handleTombolBayar} className="flex-1 flex flex-col overflow-hidden">
           
-          {/* AREA FORM (Bisa di-scroll) */}
           <div className="flex-1 overflow-y-auto p-2 md:p-4 w-full">
             <div className="max-w-md mx-auto space-y-2 md:space-y-3 pb-4">
               
@@ -522,8 +507,11 @@ function LoketJualAgenContent() {
                         <input type="text" value={p.nama} onChange={(e) => updatePenumpang(idx, 'nama', e.target.value)} className="w-full border border-gray-300 rounded px-2 py-1 md:py-1.5 text-xs text-gray-900 focus:ring-blue-500 focus:border-blue-500" placeholder="Sesuai KTP" required />
                       </div>
                       <div>
-                        <label className="block mb-0.5 text-[9px] md:text-[10px] font-medium text-gray-600">NIK (16 digit)</label>
-                        <input type="text" value={p.nik} onChange={(e) => updatePenumpang(idx, 'nik', e.target.value.replace(/\D/g, '').slice(0, 16))} className="w-full border border-gray-300 rounded px-2 py-1 md:py-1.5 text-xs text-gray-900 focus:ring-blue-500 focus:border-blue-500" placeholder="16 digit angka" required />
+                        <label className="block mb-0.5 text-[9px] md:text-[10px] font-medium text-gray-600">Status</label>
+                        <label className="flex items-center gap-1.5 cursor-pointer mt-1">
+                          <input type="checkbox" checked={p.is_balita} onChange={(e) => updatePenumpang(idx, 'is_balita', e.target.checked)} className="w-3.5 h-3.5 text-blue-600" />
+                          <span className="text-[10px] md:text-xs text-gray-900 font-medium">Balita (Tanpa NIK)</span>
+                        </label>
                       </div>
                     </div>
                   </div>
@@ -540,11 +528,9 @@ function LoketJualAgenContent() {
             </div>
           </div>
 
-          {/* FOOTER FORM (Fixed) - Metode Pembayaran & Tombol Taruh Sini */}
           <div className="flex-shrink-0 bg-white border-t border-gray-200 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)] z-10 p-2 md:p-3">
             <div className="max-w-md mx-auto space-y-1.5">
               
-              {/* METODE PEMBAYARAN (Sekarang selalu kelihatan di atas tombol) */}
               <div className="bg-gray-50 p-2 rounded-lg border border-gray-200">
                 <p className="text-[9px] md:text-[10px] font-bold text-gray-700 mb-1">Metode Pembayaran:</p>
                 <div className="flex gap-4">
@@ -559,7 +545,6 @@ function LoketJualAgenContent() {
                 </div>
               </div>
 
-              {/* PERINGATAN METODE */}
               {metodeBayar === 'cash' ? (
                 <div className="bg-yellow-50 border border-yellow-300 p-1.5 rounded-lg">
                   <p className="text-[9px] md:text-[10px] text-yellow-900 font-bold">⚠️ UANG HARUS DITERIMA UTUH (Rp {totalHarga.toLocaleString('id-ID')})</p>
@@ -582,7 +567,6 @@ function LoketJualAgenContent() {
         </form>
       )}
 
-      {/* MODAL POP-UP QRIS */}
       {showQrisModal && (
         <div className="absolute inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-xl shadow-2xl w-full max-w-xs overflow-hidden flex flex-col">
@@ -594,7 +578,6 @@ function LoketJualAgenContent() {
             <div className="p-4 flex flex-col items-center justify-center text-center">
               <p className="text-[10px] text-gray-600 mb-3">Minta pembeli scan QRIS di bawah ini</p>
               
-              {/* Gambar QR Palsu / Simulasi */}
               <div className="w-40 h-40 bg-gray-100 border-2 border-dashed border-gray-400 rounded-lg flex flex-col items-center justify-center mb-3">
                 <span className="text-3xl mb-1">🏦</span>
                 <span className="text-[10px] font-bold text-gray-500">QR CODE</span>

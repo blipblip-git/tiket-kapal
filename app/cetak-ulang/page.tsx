@@ -129,6 +129,7 @@ function CetakUlangContent() {
       tanggal: detailPilih.tanggal,
       harga: detailPilih.is_balita ? 0 : detailPilih.harga,
       kursi: detailPilih.kursi,
+      petugas_nama: 'Admin / Loket', // <-- FIX ERROR REPLACE
     })
     setPesan(result.message)
   }
@@ -273,7 +274,6 @@ function CetakUlangContent() {
                       {detailPilih.is_balita && <span className="text-[9px] text-orange-600 ml-1">(Balita)</span>}
                     </span>
                   </div>
-                  {/* NIK SUDAH DIHAPUS TOTAL DARI SINI */}
                   <div className="flex justify-between">
                     <span className="text-gray-500">Kapal</span>
                     <span className="font-medium text-gray-900 text-right">{detailPilih.kapal}</span>
@@ -302,7 +302,8 @@ function CetakUlangContent() {
                 </div>
                 
                 <div className="mt-3 text-center text-[9px] md:text-xs text-gray-400 border-t pt-2">
-                  Tunjukkan e-tiket ini ke petugas saat boarding.
+                  Perlihatkan e-tiket ke petugas<br/>
+                  Loket : Admin / Loket
                 </div>
               </div>
             </div>

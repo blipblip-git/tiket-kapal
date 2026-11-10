@@ -3,6 +3,9 @@ import QRCode from 'qrcode'
 export async function cetakTiketThermal(tiket: any) {
   const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)
   
+  const namaPenjual = tiket.petugas_nama || 'Admin'
+  const teksFooter = `Perlihatkan e-tiket ke petugas\nLoket : ${namaPenjual}\n`
+
   // =========================================================
   // MODE HP: WEB BLUETOOTH (TANPA APLIKASI TAMBAHAN)
   // =========================================================
@@ -90,7 +93,7 @@ export async function cetakTiketThermal(tiket: any) {
       textData += `TOTAL: Rp ${tiket.harga.toLocaleString('id-ID')}\n`
       textData += '\x1B\x61\x00' 
       textData += '--------------------------------\n'
-      textData += 'Tunjukan e-tiket ini ke petugas saat boarding\n'
+      textData += teksFooter
 
       const encoder = new TextEncoder()
       
@@ -112,7 +115,6 @@ export async function cetakTiketThermal(tiket: any) {
       }
       await sendData(imageBytes)
       
-      // HP: TETAP 10 BARIS (Tidak diubah)
       const endData = '\x1B\x64\x0A\x1D\x56\x00' 
       await sendData(encoder.encode(endData))
 
@@ -193,7 +195,7 @@ export async function cetakTiketThermal(tiket: any) {
     textData += `TOTAL: Rp ${tiket.harga.toLocaleString('id-ID')}\n`
     textData += '\x1B\x61\x00' 
     textData += '--------------------------------\n'
-    textData += 'Tunjukan e-tiket ini ke petugas saat boarding\n'
+    textData += teksFooter
 
     await writer.write(encoder.encode(textData))
     await writer.write(encoder.encode('\x1B\x61\x01'))
@@ -204,7 +206,6 @@ export async function cetakTiketThermal(tiket: any) {
     }
     await writer.write(imageBytes)
     
-    // LAPTOP: DIUBAH JADI 60 DOTS (0x3C)
     const endData = '\x1B\x4A\x3C\x1D\x56\x00' 
     await writer.write(encoder.encode(endData))
 

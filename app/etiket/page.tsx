@@ -281,6 +281,7 @@ function EtiketContent() {
       tanggal: detail?.tanggal || '-',
       harga: t.pesanan.is_balita ? 0 : (detail?.harga || 0),
       kursi: t.nomor_kursi,
+      petugas_nama: t.pesanan.nama_penjual_asli, // <-- TAMBAHAN: Kirim nama penjual ke printer
     })
     setPesanShare(result.message)
   }
@@ -461,12 +462,15 @@ function EtiketContent() {
         <div className="max-w-md mx-auto p-3 md:p-4 space-y-2">
           
           <div className="flex gap-2">
-            <button
-              onClick={() => handleCetakThermal(t)}
-              className="w-full bg-orange-500 text-white py-2 md:py-2.5 rounded-md hover:bg-orange-600 text-[11px] md:text-sm font-bold shadow-sm transition-colors"
-            >
-              🖨️ Cetak Thermal
-            </button>
+            {/* TOMBOL THERMAL DISEMBUNYIKAN JIKA ONLINE */}
+            {!isOnline && (
+              <button
+                onClick={() => handleCetakThermal(t)}
+                className="w-full bg-orange-500 text-white py-2 md:py-2.5 rounded-md hover:bg-orange-600 text-[11px] md:text-sm font-bold shadow-sm transition-colors"
+              >
+                🖨️ Cetak Thermal
+              </button>
+            )}
             
             <button
               onClick={() => simpanPdfSatu(t.pesanan.id, t.pesanan.nama_penumpang)}
