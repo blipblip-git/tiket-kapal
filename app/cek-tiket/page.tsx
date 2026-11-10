@@ -13,6 +13,12 @@ type Tiket = {
   waktu_pesan: string
   grup_transaksi_id: string
   jadwal_id: string
+  jadwal?: {
+    rute_asal: string
+    rute_tujuan: string
+    tanggal: string
+    jam_berangkat: string
+  }
 }
 
 function CekTiketContent() {
@@ -23,7 +29,6 @@ function CekTiketContent() {
   const [error, setError] = useState('')
   const [sudahCari, setSudahCari] = useState(false)
 
-  // State untuk pintu rahasia Superadmin
   const klikCount = useRef(0)
   const timerRef = useRef<NodeJS.Timeout | null>(null)
 
@@ -33,7 +38,7 @@ function CekTiketContent() {
     if (timerRef.current) clearTimeout(timerRef.current)
 
     if (klikCount.current === 3) {
-      e.preventDefault(); // Cegah form submit saat klik ke-3
+      e.preventDefault()
       klikCount.current = 0
       router.push('/superadmin')
     } else {
@@ -54,7 +59,10 @@ function CekTiketContent() {
 
     const { data, error: err } = await supabase
       .from('pesanan')
-      .select('id, nama_penumpang, kode_tiket, status, waktu_pesan, grup_transaksi_id, jadwal_id')
+      .select(`
+        id, nama_penumpang, kode_tiket, status, waktu_pesan, grup_transaksi_id, jadwal_id,
+        jadwal:jadwal_id (rute_asal, rute_tujuan, tanggal, jam_berangkat)
+      `)
       .eq('nomor_hp', noHp)
       .in('status', ['pending', 'paid'])
       .order('waktu_pesan', { ascending: false })
@@ -69,7 +77,7 @@ function CekTiketContent() {
         const selisihMenit = (sekarang - waktuPesan) / 60000
         return selisihMenit <= 10
       })
-      setHasil(validTiket)
+      setHasil(validTiket as unknown as Tiket[])
     }
     
     setLoading(false)
@@ -81,9 +89,15 @@ function CekTiketContent() {
     router.push(`/pembayaran?pesanan=${ids}`)
   }
 
+  const handleLihatEtiket = (grupId: string, idPesanan: string) => {
+    const tiketGrup = hasil.filter(t => t.grup_transaksi_id === grupId && t.status === 'paid')
+    const ids = tiketGrup.length > 0 ? tiketGrup.map(t => t.id).join(',') : idPesanan
+    router.push(`/etiket?pesanan=${ids}`)
+  }
+
   return (
-    <div className="min-h-screen bg-gray-100 flex items-center justify-center p-4">
-      <div className="max-w-md w-full bg-white p-8 rounded-xl shadow-md">
+    <div className="min-h-[100dvh] bg-gray-100 flex flex-col items-center pt-12 pb-8 px-4 overflow-y-auto">
+      <div className="max-w-md w-full bg-white p-6 md:p-8 rounded-xl shadow-md mb-4">
         <div className="text-center mb-6">
           <h1 className="text-2xl font-bold text-gray-900">Cek Tiket</h1>
           <p className="text-sm text-gray-600 mt-2">
@@ -120,47 +134,55 @@ function CekTiketContent() {
             Tidak ada tiket aktif ditemukan untuk nomor ini.
           </div>
         )}
+      </div>
 
-        {hasil.length > 0 && (
-          <div className="mt-6 space-y-4">
-            <h2 className="font-bold text-gray-900">Hasil Pencarian:</h2>
-            {hasil.map((t) => (
-              <div key={t.id} className="border p-4 rounded-lg bg-gray-50">
-                <div className="flex justify-between items-center mb-2">
-                  <span className="font-bold text-gray-900">{t.nama_penumpang}</span>
-                  <span className={`text-xs px-2 py-1 rounded font-bold ${
-                    t.status === 'paid' ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'
-                  }`}>
-                    {t.status === 'paid' ? 'LUNAS' : 'BELUM BAYAR'}
-                  </span>
-                </div>
-                <p className="text-xs text-gray-600 mb-3">Kode: {t.kode_tiket}</p>
-                
-                {t.status === 'pending' ? (
-                  <button
-                    onClick={() => handleLanjutBayar(t.grup_transaksi_id)}
-                    className="w-full bg-orange-500 text-white py-2 rounded text-sm font-medium hover:bg-orange-600"
-                  >
-                    Lanjutkan Pembayaran
-                  </button>
-                ) : (
-                  <Link 
-                    href={`/etiket?pesanan=${t.id}`}
-                    className="block text-center w-full bg-blue-600 text-white py-2 rounded text-sm font-medium hover:bg-blue-700"
-                  >
-                    Lihat E-Tiket
-                  </Link>
-                )}
+      {/* HASIL PENCARIAN DIPISAH DARI FORM UTAMA */}
+      {hasil.length > 0 && (
+        <div className="w-full max-w-md space-y-3">
+          <h2 className="font-bold text-gray-900 px-1">Hasil Pencarian:</h2>
+          {hasil.map((t) => (
+            <div key={t.id} className="bg-white p-4 rounded-xl shadow-sm border border-gray-200">
+              <div className="flex justify-between items-center mb-1">
+                <span className="font-bold text-gray-900">{t.nama_penumpang}</span>
+                <span className={`text-[10px] px-2 py-0.5 rounded font-bold ${
+                  t.status === 'paid' ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'
+                }`}>
+                  {t.status === 'paid' ? 'LUNAS' : 'BELUM BAYAR'}
+                </span>
               </div>
-            ))}
-          </div>
-        )}
-
-        <div className="mt-8 text-center">
-          <Link href="/" className="text-sm text-blue-600 hover:underline">
-            ← Kembali ke Beranda
-          </Link>
+              <p className="text-xs text-gray-500 font-mono mb-1">Kode: {t.kode_tiket}</p>
+              
+              {t.jadwal && (
+                <p className="text-[11px] text-blue-700 font-medium mb-3">
+                  {t.jadwal.rute_asal} - {t.jadwal.rute_tujuan} <br/>
+                  {new Date(t.jadwal.tanggal).toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' })} | {t.jadwal.jam_berangkat.substring(0, 5)}
+                </p>
+              )}
+              
+              {t.status === 'pending' ? (
+                <button
+                  onClick={() => handleLanjutBayar(t.grup_transaksi_id)}
+                  className="w-full bg-orange-500 text-white py-2 rounded-md text-sm font-bold hover:bg-orange-600 transition-colors"
+                >
+                  Lanjutkan Pembayaran
+                </button>
+              ) : (
+                <button 
+                  onClick={() => handleLihatEtiket(t.grup_transaksi_id, t.id)}
+                  className="w-full bg-blue-600 text-white py-2 rounded-md text-sm font-bold hover:bg-blue-700 transition-colors"
+                >
+                  Lihat E-Tiket
+                </button>
+              )}
+            </div>
+          ))}
         </div>
+      )}
+
+      <div className="mt-8 text-center w-full max-w-md">
+        <Link href="/" className="text-sm text-blue-600 hover:underline font-medium">
+          ← Kembali ke Beranda
+        </Link>
       </div>
     </div>
   )

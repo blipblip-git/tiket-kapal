@@ -2,7 +2,6 @@
 
 import { useState, useEffect, Suspense } from 'react'
 import { useRouter } from 'next/navigation'
-import { supabase } from '@/lib/supabase'
 
 function BerandaContent() {
   const router = useRouter()
@@ -11,7 +10,6 @@ function BerandaContent() {
   const [tujuan, setTujuan] = useState('')
   const [tanggal, setTanggal] = useState('')
   
-  // State untuk Search & Modal
   const [showAsalModal, setShowAsalModal] = useState(false)
   const [showTujuanModal, setShowTujuanModal] = useState(false)
   const [searchAsal, setSearchAsal] = useState('')
@@ -51,7 +49,9 @@ function BerandaContent() {
       alert('Kota Asal dan Tujuan tidak boleh sama.')
       return
     }
-    router.push(`/kursi?asal=${asal}&tujuan=${tujuan}&tanggal=${tanggal}`)
+    
+    // PINDAH KE HALAMAN BARU (PILIH JADWAL)
+    router.push(`/pilih-jadwal?asal=${encodeURIComponent(asal)}&tujuan=${encodeURIComponent(tujuan)}&tanggal=${tanggal}`)
   }
 
   const handlePilihKota = (kota: string, tipe: 'asal' | 'tujuan') => {
@@ -59,12 +59,12 @@ function BerandaContent() {
       setAsal(kota)
       setShowAsalModal(false)
       setSearchAsal('')
-      if (kota === tujuan) setTujuan('') // Reset tujuan jika sama
+      if (kota === tujuan) setTujuan('')
     } else {
       setTujuan(kota)
       setShowTujuanModal(false)
       setSearchTujuan('')
-      if (kota === asal) setAsal('') // Reset asal jika sama
+      if (kota === asal) setAsal('')
     }
   }
 
@@ -75,7 +75,17 @@ function BerandaContent() {
   return (
     <div className="min-h-[100dvh] bg-purple-700 flex flex-col items-center py-8 px-4 relative">
       
-      {/* LOGO TEMPAKUL */}
+      <style dangerouslySetInnerHTML={{__html: `
+        @keyframes heartbeat {
+          0% { transform: scale(1); box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7); }
+          50% { transform: scale(1.15); box-shadow: 0 0 0 10px rgba(239, 68, 68, 0); }
+          100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
+        }
+        .animate-heartbeat {
+          animation: heartbeat 1.5s infinite;
+        }
+      `}} />
+
       <div className="bg-white rounded-3xl shadow-lg w-full max-w-sm py-6 px-4 text-center mb-6">
         <h1 className="text-4xl font-serif text-gray-900 tracking-wide">tempakul</h1>
         <div className="flex justify-center gap-1.5 mt-3">
@@ -88,13 +98,11 @@ function BerandaContent() {
         </div>
       </div>
 
-      {/* KARTU PENCARIAN */}
       <div className="bg-white rounded-3xl shadow-lg w-full max-w-sm p-6 relative">
         <h2 className="text-xl font-bold text-gray-900 text-center mb-6">Cari Jadwal Tiket Speed</h2>
 
         <form onSubmit={handleCari} className="space-y-4">
           
-          {/* INPUT DARI */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Dari</label>
             <button
@@ -106,7 +114,6 @@ function BerandaContent() {
             </button>
           </div>
 
-          {/* TOMBOL TUKAR */}
           <div className="flex justify-center -my-2 relative z-10">
             <button 
               type="button" 
@@ -119,7 +126,6 @@ function BerandaContent() {
             </button>
           </div>
 
-          {/* INPUT KE */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Ke</label>
             <button
@@ -131,7 +137,6 @@ function BerandaContent() {
             </button>
           </div>
 
-          {/* INPUT TANGGAL */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Tanggal</label>
             <input
@@ -161,7 +166,7 @@ function BerandaContent() {
         </div>
       </div>
 
-      {/* ================= MODAL PILIH KOTA (DARI) ================= */}
+      {/* MODAL DARI */}
       {showAsalModal && (
         <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-xl shadow-2xl w-full max-w-xs overflow-hidden flex flex-col max-h-[80vh]">
@@ -178,7 +183,6 @@ function BerandaContent() {
             <div className="overflow-y-auto p-2">
               {filterKota(searchAsal).map(kota => {
                 const isSelected = asal === kota;
-                // Kota ini udah dipilih di tujuan, jadi redup dan gabisa diklik
                 const isDisabled = tujuan === kota; 
                 
                 return (
@@ -193,7 +197,7 @@ function BerandaContent() {
                     <span className="text-sm font-medium text-gray-900">{kota}</span>
                     <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${
                       isSelected 
-                        ? 'border-red-500 bg-red-500 animate-pulse shadow-[0_0_10px_rgba(239,68,68,0.7)]' 
+                        ? 'border-red-500 bg-red-500 animate-heartbeat' 
                         : 'border-gray-300'
                     }`}>
                       {isSelected && <div className="w-2 h-2 bg-white rounded-full"></div>}
@@ -211,7 +215,7 @@ function BerandaContent() {
         </div>
       )}
 
-      {/* ================= MODAL PILIH KOTA (KE) ================= */}
+      {/* MODAL KE */}
       {showTujuanModal && (
         <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-xl shadow-2xl w-full max-w-xs overflow-hidden flex flex-col max-h-[80vh]">
@@ -228,7 +232,6 @@ function BerandaContent() {
             <div className="overflow-y-auto p-2">
               {filterKota(searchTujuan).map(kota => {
                 const isSelected = tujuan === kota;
-                // Kota ini udah dipilih di asal, jadi redup dan gabisa diklik
                 const isDisabled = asal === kota; 
                 
                 return (
@@ -243,7 +246,7 @@ function BerandaContent() {
                     <span className="text-sm font-medium text-gray-900">{kota}</span>
                     <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${
                       isSelected 
-                        ? 'border-red-500 bg-red-500 animate-pulse shadow-[0_0_10px_rgba(239,68,68,0.7)]' 
+                        ? 'border-red-500 bg-red-500 animate-heartbeat' 
                         : 'border-gray-300'
                     }`}>
                       {isSelected && <div className="w-2 h-2 bg-white rounded-full"></div>}

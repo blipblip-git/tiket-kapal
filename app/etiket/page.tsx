@@ -281,7 +281,7 @@ function EtiketContent() {
       tanggal: detail?.tanggal || '-',
       harga: t.pesanan.is_balita ? 0 : (detail?.harga || 0),
       kursi: t.nomor_kursi,
-      petugas_nama: t.pesanan.nama_penjual_asli, // <-- TAMBAHAN: Kirim nama penjual ke printer
+      petugas_nama: t.pesanan.nama_penjual_asli,
     })
     setPesanShare(result.message)
   }
@@ -319,7 +319,7 @@ function EtiketContent() {
     const hargaTampil = tiket.pesanan.is_balita ? 0 : (detail?.harga || 0)
 
     return (
-      <div className="thermal-card p-3 md:p-6 text-gray-900 bg-white h-full flex flex-col justify-between">
+      <div className="thermal-card p-3 md:p-6 text-gray-900 bg-white flex flex-col">
         <div className="text-center mb-2 md:mb-4">
           <p className="font-bold text-xs md:text-sm thermal-title">{tiket.pesanan.kode_tiket}</p>
         </div>
@@ -340,7 +340,6 @@ function EtiketContent() {
               {tiket.pesanan.is_balita && <span className="text-[9px] text-orange-600 ml-1">(Balita)</span>}
             </span>
           </div>
-          {/* NIK SUDAH DIHAPUS TOTAL DARI SINI */}
           <div className="flex justify-between">
             <span className="text-gray-500">Kapal</span>
             <span className="font-medium text-gray-900 text-right">{detail?.nama_kapal}</span>
@@ -424,24 +423,32 @@ function EtiketContent() {
           )}
 
           {tiketList.length > 1 && (
-            <div className="flex overflow-x-auto gap-1 pb-1 mb-2 print-hidden">
-              {tiketList.map((_, i) => (
-                <button
-                  key={i}
-                  onClick={() => setActiveTiketIndex(i)}
-                  className={`flex-shrink-0 px-3 py-1.5 text-xs md:text-sm rounded-t-lg font-medium transition-colors ${
-                    activeTiketIndex === i 
-                      ? 'bg-blue-600 text-white' 
-                      : 'bg-gray-200 text-gray-600 hover:bg-gray-300'
-                  }`}
-                >
-                  Tiket #{i + 1}
-                </button>
-              ))}
-            </div>
+            <>
+              <div className="bg-blue-50 border-2 border-blue-400 p-3 rounded-lg shadow-sm print-hidden">
+                <p className="text-xs md:text-sm text-blue-800 font-bold text-center leading-tight">
+                  Ada beberapa e-tiket yang anda beli, klik "SIMPAN SEMUA TIKET ({tiketList.length})" di bawah.
+                </p>
+              </div>
+
+              <div className="flex overflow-x-auto gap-1 pb-1 mb-2 print-hidden">
+                {tiketList.map((_, i) => (
+                  <button
+                    key={i}
+                    onClick={() => setActiveTiketIndex(i)}
+                    className={`flex-shrink-0 px-3 py-1.5 text-xs md:text-sm rounded-t-lg font-medium transition-colors ${
+                      activeTiketIndex === i 
+                        ? 'bg-blue-600 text-white' 
+                        : 'bg-gray-200 text-gray-600 hover:bg-gray-300'
+                    }`}
+                  >
+                    Tiket #{i + 1}
+                  </button>
+                ))}
+              </div>
+            </>
           )}
 
-          <div className="bg-white rounded-lg shadow-md overflow-hidden print:shadow-none print:border-none border border-gray-200 flex flex-col h-full thermal-wrapper">
+          <div className="bg-white rounded-lg shadow-md overflow-hidden print:shadow-none print:border-none border border-gray-200 flex flex-col thermal-wrapper">
             <div className="bg-blue-600 text-white px-3 py-1.5 md:px-4 md:py-2 text-[10px] md:text-sm font-medium print-hidden text-center">
               Tiket #{activeTiketIndex + 1} dari {tiketList.length}
             </div>
@@ -450,7 +457,7 @@ function EtiketContent() {
               ref={(el) => {
                 tiketRefs.current[t.pesanan.id] = el
               }}
-              className="flex-1 bg-white"
+              className="bg-white"
             >
               <TiketCard tiket={t} />
             </div>
@@ -462,13 +469,12 @@ function EtiketContent() {
         <div className="max-w-md mx-auto p-3 md:p-4 space-y-2">
           
           <div className="flex gap-2">
-            {/* TOMBOL THERMAL DISEMBUNYIKAN JIKA ONLINE */}
             {!isOnline && (
               <button
                 onClick={() => handleCetakThermal(t)}
                 className="w-full bg-orange-500 text-white py-2 md:py-2.5 rounded-md hover:bg-orange-600 text-[11px] md:text-sm font-bold shadow-sm transition-colors"
               >
-                🖨️ Cetak Thermal
+                Cetak Thermal
               </button>
             )}
             
@@ -476,36 +482,35 @@ function EtiketContent() {
               onClick={() => simpanPdfSatu(t.pesanan.id, t.pesanan.nama_penumpang)}
               className="w-full bg-blue-600 text-white py-2 md:py-2.5 rounded-md hover:bg-blue-700 text-[11px] md:text-sm font-bold shadow-sm transition-colors"
             >
-              📄 Simpan PDF
+              Simpan PDF
             </button>
           </div>
+
+          {tiketList.length > 1 && (
+            <button
+              onClick={simpanSemuaPdf}
+              className="w-full bg-pink-500 text-white py-2 md:py-2.5 rounded-md hover:bg-pink-600 text-[11px] md:text-sm font-bold shadow-sm transition-colors"
+            >
+              Simpan Semua Tiket ({tiketList.length})
+            </button>
+          )}
 
           <div className="relative share-container">
             <button
               onClick={() => setShowShareMenu(showShareMenu === t.pesanan.id ? null : t.pesanan.id)}
               className="w-full bg-green-600 text-white py-2 md:py-2.5 rounded-md hover:bg-green-700 text-[11px] md:text-sm font-bold shadow-sm transition-colors"
             >
-              📤 Share / Kirim Tiket
+              Share / Kirim Tiket
             </button>
 
             {showShareMenu === t.pesanan.id && (
               <div className="absolute bottom-12 left-0 right-0 bg-white border border-gray-200 rounded-lg shadow-xl p-2 z-50 flex justify-center">
                 <button onClick={() => shareKe(t.pesanan.id, t.pesanan.kode_tiket)} className="flex flex-col items-center p-2 hover:bg-gray-50 rounded w-full">
-                  <span className="text-xl md:text-2xl text-green-500 mb-0.5">📲</span>
                   <span className="text-[10px] md:text-xs font-medium text-gray-700">Bagikan Gambar (WA/TG)</span>
                 </button>
               </div>
             )}
           </div>
-
-          {tiketList.length > 1 && (
-            <button
-              onClick={simpanSemuaPdf}
-              className="w-full bg-gray-700 text-white py-2 rounded-md hover:bg-gray-800 text-[11px] md:text-sm font-bold shadow-sm mt-1 transition-colors"
-            >
-              📥 Simpan Semua Tiket ({tiketList.length})
-            </button>
-          )}
 
         </div>
       </div>
