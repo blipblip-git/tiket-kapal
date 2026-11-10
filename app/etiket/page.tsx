@@ -370,6 +370,24 @@ function EtiketContent() {
     <div className="h-[100dvh] w-full bg-gray-100 flex flex-col overflow-hidden">
       
       <style dangerouslySetInnerHTML={{__html: `
+        @keyframes heartbeat-pink {
+          0% { transform: scale(1); box-shadow: 0 0 0 0 rgba(236, 72, 153, 0.7); }
+          50% { transform: scale(1.05); box-shadow: 0 0 0 10px rgba(236, 72, 153, 0); }
+          100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(236, 72, 153, 0); }
+        }
+        .animate-heartbeat-pink {
+          animation: heartbeat-pink 1.5s infinite;
+        }
+
+        @keyframes heartbeat-blue {
+          0% { transform: scale(1); box-shadow: 0 0 0 0 rgba(37, 99, 235, 0.7); }
+          50% { transform: scale(1.05); box-shadow: 0 0 0 10px rgba(37, 99, 235, 0); }
+          100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(37, 99, 235, 0); }
+        }
+        .animate-heartbeat-blue {
+          animation: heartbeat-blue 1.5s infinite;
+        }
+
         @media print {
           @page { 
             size: 58mm auto; 
@@ -415,37 +433,29 @@ function EtiketContent() {
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto w-full">
-        <div className="max-w-md mx-auto p-3 md:p-4 space-y-3 md:space-y-6 pb-4">
+      <div className="flex-1 overflow-y-auto w-full pb-24 print:pb-0">
+        <div className="max-w-md mx-auto p-3 md:p-4 space-y-3 md:space-y-6">
           
           {pesanShare && (
             <p className="text-[10px] md:text-sm text-center text-gray-900 mb-2 bg-yellow-100 p-2 rounded print-hidden">{pesanShare}</p>
           )}
 
           {tiketList.length > 1 && (
-            <>
-              <div className="bg-blue-50 border-2 border-blue-400 p-3 rounded-lg shadow-sm print-hidden">
-                <p className="text-xs md:text-sm text-blue-800 font-bold text-center leading-tight">
-                  Ada beberapa e-tiket yang anda beli, klik "SIMPAN SEMUA TIKET ({tiketList.length})" di bawah.
-                </p>
-              </div>
-
-              <div className="flex overflow-x-auto gap-1 pb-1 mb-2 print-hidden">
-                {tiketList.map((_, i) => (
-                  <button
-                    key={i}
-                    onClick={() => setActiveTiketIndex(i)}
-                    className={`flex-shrink-0 px-3 py-1.5 text-xs md:text-sm rounded-t-lg font-medium transition-colors ${
-                      activeTiketIndex === i 
-                        ? 'bg-blue-600 text-white' 
-                        : 'bg-gray-200 text-gray-600 hover:bg-gray-300'
-                    }`}
-                  >
-                    Tiket #{i + 1}
-                  </button>
-                ))}
-              </div>
-            </>
+            <div className="flex overflow-x-auto gap-1 pb-1 mb-2 print-hidden">
+              {tiketList.map((_, i) => (
+                <button
+                  key={i}
+                  onClick={() => setActiveTiketIndex(i)}
+                  className={`flex-shrink-0 px-3 py-1.5 text-xs md:text-sm rounded-t-lg font-medium transition-colors ${
+                    activeTiketIndex === i 
+                      ? 'bg-blue-600 text-white' 
+                      : 'bg-gray-200 text-gray-600 hover:bg-gray-300'
+                  }`}
+                >
+                  Tiket #{i + 1}
+                </button>
+              ))}
+            </div>
           )}
 
           <div className="bg-white rounded-lg shadow-md overflow-hidden print:shadow-none print:border-none border border-gray-200 flex flex-col thermal-wrapper">
@@ -480,7 +490,9 @@ function EtiketContent() {
             
             <button
               onClick={() => simpanPdfSatu(t.pesanan.id, t.pesanan.nama_penumpang)}
-              className="w-full bg-blue-600 text-white py-2 md:py-2.5 rounded-md hover:bg-blue-700 text-[11px] md:text-sm font-bold shadow-sm transition-colors"
+              className={`w-full bg-blue-600 text-white py-2 md:py-2.5 rounded-md hover:bg-blue-700 text-[11px] md:text-sm font-bold shadow-sm transition-colors ${
+                tiketList.length === 1 ? 'animate-heartbeat-blue' : ''
+              }`}
             >
               Simpan PDF
             </button>
@@ -489,7 +501,7 @@ function EtiketContent() {
           {tiketList.length > 1 && (
             <button
               onClick={simpanSemuaPdf}
-              className="w-full bg-pink-500 text-white py-2 md:py-2.5 rounded-md hover:bg-pink-600 text-[11px] md:text-sm font-bold shadow-sm transition-colors"
+              className="w-full bg-pink-500 text-white py-2 md:py-2.5 rounded-md hover:bg-pink-600 text-[11px] md:text-sm font-bold shadow-sm transition-colors animate-heartbeat-pink"
             >
               Simpan Semua Tiket ({tiketList.length})
             </button>

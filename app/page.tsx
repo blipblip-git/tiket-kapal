@@ -50,7 +50,6 @@ function BerandaContent() {
       return
     }
     
-    // PINDAH KE HALAMAN BARU (PILIH JADWAL)
     router.push(`/pilih-jadwal?asal=${encodeURIComponent(asal)}&tujuan=${encodeURIComponent(tujuan)}&tanggal=${tanggal}`)
   }
 
@@ -73,7 +72,7 @@ function BerandaContent() {
   }
 
   return (
-    <div className="min-h-[100dvh] bg-purple-700 flex flex-col items-center py-8 px-4 relative">
+    <div className="min-h-[100dvh] w-full bg-purple-700 flex flex-col items-center py-6 sm:py-8 px-3 sm:px-4 overflow-x-hidden">
       
       <style dangerouslySetInnerHTML={{__html: `
         @keyframes heartbeat {
@@ -86,29 +85,29 @@ function BerandaContent() {
         }
       `}} />
 
-      <div className="bg-white rounded-3xl shadow-lg w-full max-w-sm py-6 px-4 text-center mb-6">
-        <h1 className="text-4xl font-serif text-gray-900 tracking-wide">tempakul</h1>
-        <div className="flex justify-center gap-1.5 mt-3">
-          <span className="w-3.5 h-3.5 rounded-full bg-red-500"></span>
-          <span className="w-3.5 h-3.5 rounded-full bg-yellow-400"></span>
-          <span className="w-3.5 h-3.5 rounded-full bg-green-500"></span>
-          <span className="w-3.5 h-3.5 rounded-full bg-blue-500"></span>
-          <span className="w-3.5 h-3.5 rounded-full bg-purple-500"></span>
-          <span className="w-3.5 h-3.5 rounded-full bg-pink-500"></span>
+      <div className="bg-white rounded-3xl shadow-lg w-full max-w-[340px] sm:max-w-sm py-5 sm:py-6 px-4 text-center mb-5 sm:mb-6">
+        <h1 className="text-3xl sm:text-4xl font-serif text-gray-900 tracking-wide">tempakul</h1>
+        <div className="flex justify-center gap-1.5 mt-2 sm:mt-3">
+          <span className="w-3 h-3 sm:w-3.5 sm:h-3.5 rounded-full bg-red-500"></span>
+          <span className="w-3 h-3 sm:w-3.5 sm:h-3.5 rounded-full bg-yellow-400"></span>
+          <span className="w-3 h-3 sm:w-3.5 sm:h-3.5 rounded-full bg-green-500"></span>
+          <span className="w-3 h-3 sm:w-3.5 sm:h-3.5 rounded-full bg-blue-500"></span>
+          <span className="w-3 h-3 sm:w-3.5 sm:h-3.5 rounded-full bg-purple-500"></span>
+          <span className="w-3 h-3 sm:w-3.5 sm:h-3.5 rounded-full bg-pink-500"></span>
         </div>
       </div>
 
-      <div className="bg-white rounded-3xl shadow-lg w-full max-w-sm p-6 relative">
-        <h2 className="text-xl font-bold text-gray-900 text-center mb-6">Cari Jadwal Tiket Speed</h2>
+      <div className="bg-white rounded-3xl shadow-lg w-full max-w-[340px] sm:max-w-sm p-5 sm:p-6 relative">
+        <h2 className="text-lg sm:text-xl font-bold text-gray-900 text-center mb-5 sm:mb-6">Cari Jadwal Tiket Speed</h2>
 
-        <form onSubmit={handleCari} className="space-y-4">
+        <form onSubmit={handleCari} className="space-y-3 sm:space-y-4">
           
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Dari</label>
             <button
               type="button"
               onClick={() => setShowAsalModal(true)}
-              className="w-full text-left border border-gray-300 rounded-lg px-4 py-3 text-gray-900 focus:ring-purple-500 focus:border-purple-500 bg-white"
+              className="w-full text-left border border-gray-300 rounded-lg px-3 sm:px-4 py-2.5 sm:py-3 text-sm sm:text-base text-gray-900 focus:ring-purple-500 focus:border-purple-500 bg-white"
             >
               {asal || '-- Pilih Kota --'}
             </button>
@@ -118,9 +117,9 @@ function BerandaContent() {
             <button 
               type="button" 
               onClick={handleTukar}
-              className="bg-white border border-gray-200 p-2.5 rounded-full shadow-md text-gray-600 hover:text-purple-600 transition-colors"
+              className="bg-white border border-gray-200 p-2 rounded-full shadow-md text-gray-600 hover:text-purple-600 transition-colors"
             >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <svg className="w-4 h-4 sm:w-5 sm:h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4" />
               </svg>
             </button>
@@ -131,7 +130,7 @@ function BerandaContent() {
             <button
               type="button"
               onClick={() => setShowTujuanModal(true)}
-              className="w-full text-left border border-gray-300 rounded-lg px-4 py-3 text-gray-900 focus:ring-purple-500 focus:border-purple-500 bg-white"
+              className="w-full text-left border border-gray-300 rounded-lg px-3 sm:px-4 py-2.5 sm:py-3 text-sm sm:text-base text-gray-900 focus:ring-purple-500 focus:border-purple-500 bg-white"
             >
               {tujuan || '-- Pilih Kota --'}
             </button>
@@ -143,30 +142,29 @@ function BerandaContent() {
               type="date"
               value={tanggal}
               onChange={(e) => setTanggal(e.target.value)}
-              className="w-full border border-gray-300 rounded-lg px-4 py-3 text-gray-900 focus:ring-purple-500 focus:border-purple-500 bg-white"
+              className="w-full border border-gray-300 rounded-lg px-3 sm:px-4 py-2.5 sm:py-3 text-sm sm:text-base text-gray-900 focus:ring-purple-500 focus:border-purple-500 bg-white"
             />
           </div>
 
           <button
             type="submit"
-            className="w-full bg-purple-600 text-white py-3 rounded-lg font-bold text-base hover:bg-purple-700 shadow-md transition-colors mt-2"
+            className="w-full bg-purple-600 text-white py-2.5 sm:py-3 rounded-lg font-bold text-sm sm:text-base hover:bg-purple-700 shadow-md transition-colors mt-2"
           >
             Cari Jadwal
           </button>
         </form>
 
-        <div className="mt-6 pt-4 border-t border-gray-100 text-center">
-          <p className="text-xs text-gray-500 mb-2">Lupa atau belum cetak e-tiket?</p>
+        <div className="mt-5 sm:mt-6 pt-4 border-t border-gray-100 text-center">
+          <p className="text-[11px] sm:text-xs text-gray-500 mb-2">Lupa atau belum cetak e-tiket?</p>
           <button
             onClick={() => router.push('/cek-tiket')}
-            className="w-full bg-gray-50 text-gray-700 py-2.5 rounded-lg font-medium text-sm border border-gray-200 hover:bg-gray-100 transition-colors"
+            className="w-full bg-gray-50 text-gray-700 py-2 sm:py-2.5 rounded-lg font-medium text-xs sm:text-sm border border-gray-200 hover:bg-gray-100 transition-colors"
           >
             Cek Transaksi / Tiket Anda
           </button>
         </div>
       </div>
 
-      {/* MODAL DARI */}
       {showAsalModal && (
         <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-xl shadow-2xl w-full max-w-xs overflow-hidden flex flex-col max-h-[80vh]">
@@ -215,7 +213,6 @@ function BerandaContent() {
         </div>
       )}
 
-      {/* MODAL KE */}
       {showTujuanModal && (
         <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-xl shadow-2xl w-full max-w-xs overflow-hidden flex flex-col max-h-[80vh]">
