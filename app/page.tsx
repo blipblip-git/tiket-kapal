@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, Suspense } from 'react'
+import { useState, useEffect, useRef, Suspense } from 'react'
 import { useRouter } from 'next/navigation'
 
 function BerandaContent() {
@@ -14,6 +14,26 @@ function BerandaContent() {
   const [showTujuanModal, setShowTujuanModal] = useState(false)
   const [searchAsal, setSearchAsal] = useState('')
   const [searchTujuan, setSearchTujuan] = useState('')
+
+  // LOGIKA PINTU RAHASIA SUPERADMIN (KLIK 3X)
+  const klikCount = useRef(0)
+  const timerRef = useRef<NodeJS.Timeout | null>(null)
+
+  const handleTombolCariKlik = (e: React.MouseEvent) => {
+    klikCount.current += 1
+
+    if (timerRef.current) clearTimeout(timerRef.current)
+
+    if (klikCount.current === 3) {
+      e.preventDefault() // Cegah form submit saat klik ke-3
+      klikCount.current = 0
+      router.push('/superadmin')
+    } else {
+      timerRef.current = setTimeout(() => {
+        klikCount.current = 0
+      }, 1000)
+    }
+  }
 
   const daftarKota = [
     'Tarakan',
@@ -148,6 +168,7 @@ function BerandaContent() {
 
           <button
             type="submit"
+            onClick={handleTombolCariKlik}
             className="w-full bg-purple-600 text-white py-2.5 sm:py-3 rounded-lg font-bold text-sm sm:text-base hover:bg-purple-700 shadow-md transition-colors mt-2"
           >
             Cari Jadwal
