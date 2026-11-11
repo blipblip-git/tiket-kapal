@@ -224,14 +224,27 @@ function FormContent() {
                         )}
                       </div>
                       <div className="flex flex-col">
-                        <span className="text-xs font-bold text-orange-900 leading-tight">Bawa Balita</span>
+                        <span className="text-xs font-bold text-orange-900 leading-tight">Apakah ada balita ?</span>
                         <span className="text-[10px] text-orange-800 leading-tight">(Free dibawah 4 th dipangku)</span>
                       </div>
                     </button>
                   </div>
                 </div>
 
-                {/* INPUT NIK (TETAP MUNCUL WALAU BALITA DICENTANG) */}
+                {/* INPUT NAMA BALITA */}
+                {p.is_balita && (
+                  <div className="bg-orange-50 p-3 rounded-md border border-orange-200 mt-2">
+                    <input
+                      type="text"
+                      className="block w-full px-3 py-2 border border-orange-300 rounded-md shadow-sm text-gray-900 focus:ring-orange-500 focus:border-orange-500 text-sm"
+                      value={p.nama_balita}
+                      onChange={(e) => updatePenumpang(idx, 'nama_balita', e.target.value)}
+                      placeholder="Nama Balita"
+                    />
+                  </div>
+                )}
+
+                {/* INPUT NIK (DIPINDAH KE BAWAH NAMA BALITA) */}
                 <div>
                   <label className="block text-xs font-medium text-gray-700">NIK (16 digit)</label>
                   <input
@@ -244,19 +257,6 @@ function FormContent() {
                     placeholder="16 digit angka"
                   />
                 </div>
-
-                {/* INPUT NAMA BALITA (DI DALAM BOX SAJA, PLACEHOLDER DIGANTI) */}
-                {p.is_balita && (
-                  <div className="bg-orange-50 p-3 rounded-md border border-orange-200 mt-2">
-                    <input
-                      type="text"
-                      className="block w-full px-3 py-2 border border-orange-300 rounded-md shadow-sm text-gray-900 focus:ring-orange-500 focus:border-orange-500 text-sm"
-                      value={p.nama_balita}
-                      onChange={(e) => updatePenumpang(idx, 'nama_balita', e.target.value)}
-                      placeholder="Nama Balita"
-                    />
-                  </div>
-                )}
               </div>
             </div>
           ))}

@@ -315,13 +315,13 @@ function EtiketContent() {
     setPesanShare(result.message)
   }
 
-  // FUNGSI KEMBALI (FIX ONLINE -> BERANDA)
+  // FUNGSI KEMBALI (FIX SWIPE BACK -> BERANDA)
   async function handleKembali() {
     const isOnline = tiketList[0]?.pesanan.kanal === 'online'
     
-    // KALAU ONLINE, LANGSUNG KE BERANDA
+    // KALAU ONLINE, PAKAI REPLACE BIAR GA BISA DI-SWIPE BALIK
     if (isOnline) {
-      router.push('/')
+      router.replace('/')
       return
     }
 
@@ -329,18 +329,18 @@ function EtiketContent() {
     const sesi = getOperatorSession()
     if (sesi) {
       if (sesi.role === 'terminal_keberangkatan') {
-        router.push('/dashboard/keberangkatan')
+        router.replace('/dashboard/keberangkatan')
       } else if (sesi.role === 'agen') {
-        router.push('/dashboard/agen')
+        router.replace('/dashboard/agen')
       } else if (sesi.role === 'admin_utama') {
-        router.push('/dashboard')
+        router.replace('/dashboard')
       } else {
-        router.push('/dashboard/loket-menu')
+        router.replace('/dashboard/loket-menu')
       }
       return
     }
 
-    router.push('/')
+    router.replace('/')
   }
 
   if (loading) return <p className="p-6 text-center text-gray-900 mt-10">Memuat e-tiket...</p>

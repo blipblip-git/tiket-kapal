@@ -34,6 +34,7 @@ type JadwalInfo = {
 type Penumpang = {
   nama: string
   is_balita: boolean
+  nama_balita: string
 }
 
 const toTitleCase = (str: string) => {
@@ -55,9 +56,11 @@ function LoketJualContent() {
   const [loading, setLoading] = useState(true)
   const [loadingSubmit, setLoadingSubmit] = useState(false)
   const [error, setError] = useState('')
-  const [step, setStep] = useState<'pilih-kursi' | 'form' | 'qris'>('pilih-kursi')
+  const [step, setStep] = useState<'pilih-kursi' | 'form'>('pilih-kursi')
   
-  const [waktuSisa, setWaktuSisa] = useState(300)
+  const [metodeBayar, setMetodeBayar] = useState<'cash' | 'qris'>('cash')
+  const [showQrisModal, setShowQrisModal] = useState(false)
+  const [showCashModal, setShowCashModal] = useState(false)
 
   useEffect(() => {
     async function init() {
@@ -160,36 +163,6 @@ function LoketJualContent() {
     setKursiList(sortedKursi)
   }
 
-  useEffect(() => {
-    let interval: NodeJS.Timeout
-    if (step === 'qris' && waktuSisa > 0) {
-      interval = setInterval(() => {
-        setWaktuSisa((prev) => {
-          if (prev <= 1) {
-            clearInterval(interval)
-            handleTimeOut()
-            return 0
-          }
-          return prev - 1
-        })
-      }, 1000)
-    }
-    return () => clearInterval(interval)
-  }, [step, waktuSisa])
-
-  async function handleTimeOut() {
-    await supabase
-      .from('kursi')
-      .update({ status: 'kosong', waktu_hold: null })
-      .in('id', kursiDipilih)
-      
-    alert('Waktu pembayaran habis. Kursi telah dilepas.')
-    setStep('pilih-kursi')
-    setKursiDipilih([])
-    setWaktuSisa(300)
-    await fetchKursi()
-  }
-
   function toggleKursi(kursiId: string, status: string) {
     if (status !== 'kosong') return
     setKursiDipilih((prev) =>
@@ -204,7 +177,7 @@ function LoketJualContent() {
       alert('Pilih minimal 1 kursi dulu bray.')
       return
     }
-    setPenumpangList(kursiDipilih.map(() => ({ nama: '', is_balita: false })))
+    setPenumpangList(kursiDipilih.map(() => ({ nama: '', is_balita: false, nama_balita: '' })))
     setStep('form')
   }
 
@@ -212,12 +185,22 @@ function LoketJualContent() {
     setStep('pilih-kursi')
     setPenumpangList([])
     setError('')
-    setWaktuSisa(300)
   }
 
   function updatePenumpang(idx: number, field: keyof Penumpang, value: any) {
     const baru = [...penumpangList]
     baru[idx] = { ...baru[idx], [field]: value }
+    setPenumpangList(baru)
+  }
+
+  const toggleBalita = (idx: number) => {
+    const baru = [...penumpangList]
+    const currentStatus = baru[idx].is_balita
+    baru[idx] = {
+      ...baru[idx],
+      is_balita: !currentStatus,
+      nama_balita: !currentStatus ? baru[idx].nama_balita : ''
+    }
     setPenumpangList(baru)
   }
 
@@ -244,14 +227,16 @@ function LoketJualContent() {
     return `${hh}:${mm}:${ss}`
   }
 
-  async function handleKlikQRIS(e: React.FormEvent) {
+  function handleTombolBayar(e: React.FormEvent) {
     e.preventDefault()
-    if (!profile || !jadwal) return
-    setError('')
-
+    
     for (let i = 0; i < penumpangList.length; i++) {
       if (!penumpangList[i].nama) {
         setError(`Nama penumpang ${i + 1} wajib diisi`)
+        return
+      }
+      if (penumpangList[i].is_balita && !penumpangList[i].nama_balita) {
+        setError(`Nama balita untuk penumpang ${i + 1} wajib diisi.`)
         return
       }
     }
@@ -260,114 +245,127 @@ function LoketJualContent() {
       setError('Nomor HP wajib diisi.')
       return
     }
+    setError('')
 
-    setLoadingSubmit(true)
-
-    const waktuHold = new Date().toISOString()
-    const { error: errHold } = await supabase
-      .from('kursi')
-      .update({ status: 'hold', waktu_hold: waktuHold })
-      .in('id', kursiDipilih)
-
-    if (errHold) {
-      setError('Gagal mengunci kursi. Mungkin sudah diambil orang lain.')
-      setLoadingSubmit(false)
-      return
+    if (metodeBayar === 'qris') {
+      setShowQrisModal(true)
+    } else {
+      setShowCashModal(true)
     }
-
-    setWaktuSisa(300)
-    setStep('qris')
-    setLoadingSubmit(false)
   }
 
-  async function handleKonfirmasiBayar() {
+  async function prosesPesanan() {
     if (!profile || !jadwal) return
+    setError('')
+    setShowQrisModal(false)
+    setShowCashModal(false)
+
+    const totalHarga = kursiDipilih.length * jadwal.harga
     setLoadingSubmit(true)
 
-    const sekarang = new Date()
-    const waktuKonfirmasi = sekarang.toISOString()
-    const jamTransaksi = getJamTransaksi(sekarang)
-    const grupId = generateGrupId()
-    
-    let kanalPesanan = 'loket'
-    if (profile.role === 'petugas_mobile') kanalPesanan = 'mobile'
-    if (profile.role === 'terminal_keberangkatan') kanalPesanan = 'keberangkatan'
+    try {
+      const sekarang = new Date()
+      const waktuKonfirmasi = sekarang.toISOString()
+      const jamTransaksi = getJamTransaksi(sekarang)
+      const grupId = generateGrupId()
+      
+      let kanalPesanan = 'loket'
+      if (profile.role === 'petugas_mobile') kanalPesanan = 'mobile'
+      if (profile.role === 'terminal_keberangkatan') kanalPesanan = 'keberangkatan'
 
-    const pesananData = penumpangList.map((p, idx) => {
-      const namaRapi = toTitleCase(p.nama);
-      return {
-        jadwal_id: jadwal.id,
-        kursi_id: kursiDipilih[idx],
-        nama_penumpang: namaRapi,
-        // NIK SUDAH DIHAPUS TOTAL
-        nomor_hp: noHp,
-        kanal: kanalPesanan, 
-        status: 'paid',
-        kode_tiket: generateKodeTiket(idx, p.is_balita),
+      const pesananData: any[] = []
+
+      penumpangList.forEach((p, idx) => {
+        const namaRapi = toTitleCase(p.nama);
+        pesananData.push({
+          jadwal_id: jadwal.id,
+          kursi_id: kursiDipilih[idx],
+          nama_penumpang: namaRapi,
+          nomor_hp: noHp,
+          kanal: kanalPesanan, 
+          status: 'paid',
+          kode_tiket: generateKodeTiket(idx, false),
+          waktu_bayar: waktuKonfirmasi,
+          petugas_konfirmasi: profile.email,
+          waktu_konfirmasi: waktuKonfirmasi,
+          grup_transaksi_id: grupId,
+          jam_transaksi: jamTransaksi,
+          petugas_jual: profile.email,
+          is_balita: false,
+        })
+
+        if (p.is_balita && p.nama_balita) {
+          pesananData.push({
+            jadwal_id: jadwal.id,
+            kursi_id: null,
+            nama_penumpang: toTitleCase(p.nama_balita),
+            nomor_hp: noHp,
+            kanal: kanalPesanan, 
+            status: 'paid',
+            kode_tiket: 'BALITA-' + Date.now() + '-L' + idx,
+            waktu_bayar: waktuKonfirmasi,
+            petugas_konfirmasi: profile.email,
+            waktu_konfirmasi: waktuKonfirmasi,
+            grup_transaksi_id: grupId,
+            jam_transaksi: jamTransaksi,
+            petugas_jual: profile.email,
+            is_balita: true,
+          })
+        }
+      })
+
+      const { data: inserted, error: errInsert } = await supabase
+        .from('pesanan')
+        .insert(pesananData)
+        .select()
+
+      if (errInsert || !inserted) {
+        throw new Error('Gagal simpan pesanan: ' + (errInsert?.message || 'unknown'))
+      }
+
+      await supabase
+        .from('kursi')
+        .update({ status: 'terisi', waktu_hold: null })
+        .in('id', kursiDipilih)
+
+      const insertedDewasa = inserted.filter((p) => !p.is_balita)
+      const pembayaranData = insertedDewasa.map((p) => ({
+        pesanan_id: p.id,
+        metode: metodeBayar === 'cash' ? 'cash_loket' : 'simulasi_online',
+        jumlah: jadwal.harga,
+        status: 'sukses',
         waktu_bayar: waktuKonfirmasi,
-        petugas_konfirmasi: profile.email,
-        waktu_konfirmasi: waktuKonfirmasi,
+      }))
+      if (pembayaranData.length > 0) {
+        await supabase.from('pembayaran').insert(pembayaranData)
+      }
+
+      await catatAudit(profile as any, 'jual_langsung_loket', {
+        mode: kanalPesanan,
+        metode_bayar: metodeBayar === 'cash' ? 'cash_loket' : 'simulasi_online',
         grup_transaksi_id: grupId,
         jam_transaksi: jamTransaksi,
-        petugas_jual: profile.email,
-        is_balita: p.is_balita,
-      }
-    })
+        jumlah_tiket: insertedDewasa.length,
+        total_bayar: totalHarga,
+        rute: `${jadwal.rute_asal} → ${jadwal.rute_tujuan}`,
+        jam_berangkat: jadwal.jam_berangkat,
+        nomor_hp: noHp,
+        daftar_penumpang: inserted.map((p) => ({
+          nama: p.nama_penumpang,
+          kode_tiket: p.kode_tiket,
+          kursi_id: p.kursi_id,
+          jumlah: p.is_balita ? 0 : jadwal.harga,
+          is_balita: p.is_balita,
+        })),
+      })
 
-    const { data: inserted, error: errInsert } = await supabase
-      .from('pesanan')
-      .insert(pesananData)
-      .select()
-
-    if (errInsert || !inserted) {
-      setError('Gagal simpan pesanan: ' + (errInsert?.message || 'unknown'))
+      const ids = inserted.map((p) => p.id).join(',')
+      router.push(`/etiket?pesanan=${ids}`)
+      
+    } catch (err: any) {
+      setError(err.message || 'Terjadi kesalahan saat memproses pembayaran.')
       setLoadingSubmit(false)
-      return
     }
-
-    await supabase
-      .from('kursi')
-      .update({ status: 'terisi', waktu_hold: null })
-      .in('id', kursiDipilih)
-
-    const pembayaranData = inserted.map((p, idx) => ({
-      pesanan_id: p.id,
-      metode: 'simulasi_online',
-      jumlah: penumpangList[idx].is_balita ? 0 : jadwal.harga,
-      status: 'sukses',
-      waktu_bayar: waktuKonfirmasi,
-    }))
-    if (pembayaranData.length > 0) {
-      await supabase.from('pembayaran').insert(pembayaranData)
-    }
-
-    await catatAudit(profile as any, 'jual_langsung_loket', {
-      mode: kanalPesanan,
-      metode_bayar: 'simulasi_online',
-      grup_transaksi_id: grupId,
-      jam_transaksi: jamTransaksi,
-      jumlah_tiket: inserted.length,
-      total_bayar: inserted.reduce((sum, p, idx) => sum + (penumpangList[idx].is_balita ? 0 : jadwal.harga), 0),
-      rute: `${jadwal.rute_asal} → ${jadwal.rute_tujuan}`,
-      jam_berangkat: jadwal.jam_berangkat,
-      nomor_hp: noHp,
-      daftar_penumpang: inserted.map((p, idx) => ({
-        nama: p.nama_penumpang,
-        kode_tiket: p.kode_tiket,
-        kursi_id: p.kursi_id,
-        jumlah: penumpangList[idx].is_balita ? 0 : jadwal.harga,
-        is_balita: penumpangList[idx].is_balita,
-      })),
-    })
-
-    const ids = inserted.map((p) => p.id).join(',')
-    router.push(`/etiket?pesanan=${ids}`)
-  }
-
-  function formatWaktuSisa(detik: number) {
-    const m = Math.floor(detik / 60)
-    const s = detik % 60
-    return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`
   }
 
   function renderDenahKursi() {
@@ -441,11 +439,11 @@ function LoketJualContent() {
   if (error && !jadwal) return <p className="p-6 text-center text-red-600 mt-10">Error: {error}</p>
   if (!jadwal) return <p className="p-6 text-center text-gray-900 mt-10">Data tidak lengkap</p>
 
-  const totalHarga = penumpangList.reduce((sum, p) => sum + (p.is_balita ? 0 : jadwal.harga), 0)
+  const totalHarga = kursiDipilih.length * jadwal.harga
   const jamPotong = jadwal.jam_berangkat.substring(0, 5)
 
   return (
-    <div className="h-[100dvh] w-full bg-gray-50 flex flex-col overflow-hidden">
+    <div className="h-[100dvh] w-full bg-gray-50 flex flex-col overflow-hidden relative">
       
       <div className="flex-shrink-0 bg-white shadow-sm z-10 p-3 md:p-4">
         <div className="max-w-md mx-auto">
@@ -516,7 +514,7 @@ function LoketJualContent() {
       )}
 
       {step === 'form' && (
-        <form onSubmit={handleKlikQRIS} className="flex-1 flex flex-col overflow-hidden">
+        <form onSubmit={handleTombolBayar} className="flex-1 flex flex-col overflow-hidden">
           <div className="flex-1 overflow-y-auto p-3 md:p-4 w-full">
             <div className="max-w-md mx-auto space-y-3">
               <div className="bg-blue-50 border border-blue-200 p-2 rounded-lg text-center">
@@ -530,19 +528,44 @@ function LoketJualContent() {
                     <div className="flex justify-between items-center mb-2">
                       <p className="text-xs md:text-sm font-bold text-gray-900">Penumpang #{idx + 1} — Kursi {kursi?.nomor_kursi || '?'}</p>
                     </div>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                       <div>
                         <label className="block mb-1 text-[10px] md:text-xs font-medium text-gray-700">Nama Lengkap</label>
                         <input type="text" value={p.nama} onChange={(e) => updatePenumpang(idx, 'nama', e.target.value)} className="w-full border border-gray-300 rounded px-3 py-1.5 md:py-2 text-xs md:text-sm text-gray-900" required />
                       </div>
                       <div>
                         <label className="block mb-1 text-[10px] md:text-xs font-medium text-gray-700">Status</label>
-                        <label className="flex items-center gap-1.5 cursor-pointer mt-2">
-                          <input type="checkbox" checked={p.is_balita} onChange={(e) => updatePenumpang(idx, 'is_balita', e.target.checked)} className="w-4 h-4 text-orange-600 rounded focus:ring-orange-500" />
-                          <span className="text-[10px] md:text-xs font-bold text-orange-900">Balita (Tanpa NIK)</span>
-                        </label>
+                        <button
+                          type="button"
+                          onClick={() => toggleBalita(idx)}
+                          className={`mt-1 flex items-start gap-2 w-full text-left p-1.5 rounded transition-colors ${p.is_balita ? 'bg-orange-50' : 'hover:bg-gray-50'}`}
+                        >
+                          <div className={`w-4 h-4 mt-0.5 rounded border flex items-center justify-center flex-shrink-0 ${p.is_balita ? 'bg-orange-600 border-orange-600' : 'bg-white border-gray-300'}`}>
+                            {p.is_balita && (
+                              <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                              </svg>
+                            )}
+                          </div>
+                          <div className="flex flex-col">
+                            <span className="text-xs font-bold text-orange-900 leading-tight">Apakah ada balita ?</span>
+                            <span className="text-[10px] text-orange-800 leading-tight">(Free dibawah 4 th dipangku)</span>
+                          </div>
+                        </button>
                       </div>
                     </div>
+
+                    {p.is_balita && (
+                      <div className="bg-orange-50 p-3 rounded-md border border-orange-200 mt-2">
+                        <input
+                          type="text"
+                          className="block w-full px-3 py-2 border border-orange-300 rounded-md shadow-sm text-gray-900 focus:ring-orange-500 focus:border-orange-500 text-sm"
+                          value={p.nama_balita}
+                          onChange={(e) => updatePenumpang(idx, 'nama_balita', e.target.value)}
+                          placeholder="Nama Balita"
+                        />
+                      </div>
+                    )}
                   </div>
                 )
               })}
@@ -558,8 +581,22 @@ function LoketJualContent() {
 
           <div className="flex-shrink-0 bg-white border-t border-gray-200 shadow-sm z-10 p-3 md:p-4">
             <div className="max-w-md mx-auto space-y-2">
+              <div className="bg-gray-50 p-2 rounded-lg border border-gray-200">
+                <p className="text-[9px] md:text-[10px] font-bold text-gray-700 mb-1">Metode Pembayaran:</p>
+                <div className="flex gap-4">
+                  <label className="flex items-center gap-1.5 cursor-pointer">
+                    <input type="radio" name="metode" value="cash" checked={metodeBayar === 'cash'} onChange={() => setMetodeBayar('cash')} className="w-3.5 h-3.5 text-blue-600" />
+                    <span className="text-[10px] md:text-xs text-gray-900 font-medium">💵 Tunai</span>
+                  </label>
+                  <label className="flex items-center gap-1.5 cursor-pointer">
+                    <input type="radio" name="metode" value="qris" checked={metodeBayar === 'qris'} onChange={() => setMetodeBayar('qris')} className="w-3.5 h-3.5 text-blue-600" />
+                    <span className="text-[10px] md:text-xs text-gray-900 font-medium">📱 QRIS</span>
+                  </label>
+                </div>
+              </div>
+
               <button type="submit" disabled={loadingSubmit} className="w-full bg-green-600 text-white py-2.5 md:py-3 rounded-lg hover:bg-green-700 disabled:bg-gray-400 font-bold text-sm md:text-base shadow-sm transition-colors">
-                {loadingSubmit ? 'Mengunci Kursi...' : `📱 Lanjut Bayar via QRIS`}
+                {loadingSubmit ? 'Memproses...' : `✓ Bayar & Terbitkan ${kursiDipilih.length} Tiket`}
               </button>
               <button type="button" onClick={kembaliKeKursi} disabled={loadingSubmit} className="w-full text-gray-600 py-1.5 text-xs md:text-sm hover:underline font-medium">← Kembali Pilih Kursi</button>
             </div>
@@ -567,43 +604,88 @@ function LoketJualContent() {
         </form>
       )}
 
-      {step === 'qris' && (
-        <div className="flex-1 flex flex-col overflow-hidden bg-white">
-          <div className="flex-1 overflow-y-auto p-4 flex flex-col items-center justify-center">
-            <div className="w-full max-w-md space-y-4 text-center">
-              
-              <div className="bg-red-50 border border-red-200 p-2 rounded-lg">
-                <p className="text-xs font-bold text-red-600">⏰ Sisa Waktu Pembayaran</p>
-                <p className="text-3xl font-bold text-red-700 font-mono">{formatWaktuSisa(waktuSisa)}</p>
-              </div>
-
-              <div className="bg-blue-50 p-4 rounded-xl border border-blue-200 inline-block">
-                <p className="text-sm font-bold text-gray-900 mb-1">Total Tagihan</p>
-                <p className="text-3xl font-bold text-blue-700">Rp {totalHarga.toLocaleString('id-ID')}</p>
-              </div>
-
-              <div className="border-4 border-gray-900 p-2 inline-block rounded-lg bg-white">
-                <img 
-                  src={`https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=QRIS-SIMULASI-${Date.now()}`} 
-                  alt="QRIS" 
-                  className="w-48 h-48 md:w-56 md:h-56 object-contain" 
-                />
-              </div>
-
-              <p className="text-xs text-gray-600">Scan QRIS di atas menggunakan m-banking atau e-wallet Anda.</p>
-              <p className="text-[10px] text-gray-500 italic">(Ini adalah simulasi QRIS. Pembayaran tidak akan terpotong saldo Anda.)</p>
-
+      {/* MODAL POP-UP QRIS */}
+      {showQrisModal && (
+        <div className="absolute inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-xs overflow-hidden flex flex-col">
+            <div className="bg-blue-600 text-white p-3 text-center">
+              <h3 className="font-bold text-sm">Pembayaran QRIS</h3>
+              <p className="text-[10px] opacity-90 mt-1">Total: Rp {totalHarga.toLocaleString('id-ID')}</p>
             </div>
-          </div>
-
-          <div className="flex-shrink-0 bg-white border-t border-gray-200 p-3 md:p-4 max-w-md mx-auto w-full space-y-2">
-            <button onClick={handleKonfirmasiBayar} disabled={loadingSubmit} className="w-full bg-green-600 text-white py-3 rounded-lg hover:bg-green-700 disabled:bg-gray-400 font-bold text-sm md:text-base shadow-sm transition-colors">
-              {loadingSubmit ? 'Memproses...' : '✓ Konfirmasi Pembayaran Sukses'}
-            </button>
-            <button onClick={handleTimeOut} disabled={loadingSubmit} className="w-full text-red-600 py-1.5 text-xs md:text-sm hover:underline font-medium">Batalkan & Lepas Kursi</button>
+            
+            <div className="p-4 flex flex-col items-center justify-center text-center">
+              <p className="text-[10px] text-gray-600 mb-3">Pastikan pembeli sudah membayar dengan QRIS baru cetak e-tiket.</p>
+              
+              <div className="w-40 h-40 bg-gray-100 border-2 border-dashed border-gray-400 rounded-lg flex flex-col items-center justify-center mb-3">
+                <span className="text-3xl mb-1">🏦</span>
+                <span className="text-[10px] font-bold text-gray-500">QR CODE</span>
+                <span className="text-[10px] font-bold text-gray-500">SIMULASI</span>
+              </div>
+              
+              <p className="text-[9px] text-gray-500">Pastikan notifikasi transfer/saldo sudah masuk ke rekening Anda.</p>
+            </div>
+            
+            <div className="p-3 bg-gray-50 border-t flex flex-col gap-2">
+              <button 
+                type="button"
+                onClick={prosesPesanan} 
+                disabled={loadingSubmit}
+                className="w-full bg-green-600 text-white py-2 rounded-lg text-xs font-bold hover:bg-green-700 shadow-sm"
+              >
+                {loadingSubmit ? 'Memproses...' : '✓ Pembeli Sudah Bayar'}
+              </button>
+              <button 
+                type="button"
+                onClick={() => setShowQrisModal(false)}
+                disabled={loadingSubmit}
+                className="w-full bg-white border border-gray-300 text-gray-700 py-2 rounded-lg text-xs font-bold hover:bg-gray-100 shadow-sm"
+              >
+                Batal
+              </button>
+            </div>
           </div>
         </div>
       )}
+
+      {/* MODAL POP-UP CASH */}
+      {showCashModal && (
+        <div className="absolute inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-xs overflow-hidden flex flex-col">
+            <div className="bg-green-600 text-white p-3 text-center">
+              <h3 className="font-bold text-sm">Pembayaran Tunai</h3>
+              <p className="text-[10px] opacity-90 mt-1">Total: Rp {totalHarga.toLocaleString('id-ID')}</p>
+            </div>
+            
+            <div className="p-4 flex flex-col items-center justify-center text-center">
+              <div className="w-16 h-16 bg-yellow-100 rounded-full flex items-center justify-center mb-3">
+                <span className="text-3xl">💵</span>
+              </div>
+              <p className="text-sm font-bold text-gray-900 mb-1">Pastikan Uang Diterima Utuh!</p>
+              <p className="text-[11px] text-gray-600">Pastikan pembeli sudah membayar sebesar <b>Rp {totalHarga.toLocaleString('id-ID')}</b> baru cetak e-tiket.</p>
+            </div>
+            
+            <div className="p-3 bg-gray-50 border-t flex flex-col gap-2">
+              <button 
+                type="button"
+                onClick={prosesPesanan} 
+                disabled={loadingSubmit}
+                className="w-full bg-green-600 text-white py-2 rounded-lg text-xs font-bold hover:bg-green-700 shadow-sm"
+              >
+                {loadingSubmit ? 'Memproses...' : '✓ Uang Sudah Diterima'}
+              </button>
+              <button 
+                type="button"
+                onClick={() => setShowCashModal(false)}
+                disabled={loadingSubmit}
+                className="w-full bg-white border border-gray-300 text-gray-700 py-2 rounded-lg text-xs font-bold hover:bg-gray-100 shadow-sm"
+              >
+                Batal
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
     </div>
   )
 }
