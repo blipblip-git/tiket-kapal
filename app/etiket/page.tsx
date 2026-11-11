@@ -204,6 +204,7 @@ function EtiketContent() {
         const pdf = new jsPDF({ orientation: 'portrait', unit: 'px', format: [img.width, img.height] })
         pdf.addImage(dataUrl, 'JPEG', 0, 0, img.width, img.height)
         pdf.save(`${namaDepan}.pdf`)
+        setPesanShare('PDF berhasil diunduh. Silakan cek folder Unduhan/File di HP Anda.')
       }
     } catch (err) {
       console.error('Gagal generate gambar:', err)
@@ -216,13 +217,10 @@ function EtiketContent() {
       const t = tiketList[i]
       setPesanShare(`Memproses tiket ${i + 1} dari ${tiketList.length}...`)
       
-      // 1. SET DATA KE HIDDEN RENDER
       setRenderData(t)
       
-      // 2. TUNGGU SEBENTAR BIAR RENDER SELESAI
       await new Promise(r => setTimeout(r, 800))
 
-      // 3. AMBIL GAMBAR DARI HIDDEN RENDER
       if (renderRef.current) {
         try {
           const dataUrl = await toPng(renderRef.current, {
@@ -246,12 +244,11 @@ function EtiketContent() {
         }
       }
 
-      // 4. JEDA 2 DETIK SEBELUM LANJUT KE TIKET BERIKUTNYA
       await new Promise(r => setTimeout(r, 2000))
     }
     
     setRenderData(null)
-    setPesanShare('Semua tiket berhasil diproses.')
+    setPesanShare('Semua PDF berhasil diunduh. Silakan cek folder Unduhan/File di HP Anda.')
   }
 
   async function shareKe(pesananId: string, kodeTiket: string) {
@@ -287,13 +284,13 @@ function EtiketContent() {
           title: 'E-Tiket Kapal',
           text: teksPesan,
         })
-        setPesanShare('Berhasil dibagikan!')
+        setPesanShare('Gambar tiket berhasil dibagikan. Cek di Galeri Foto atau WhatsApp.')
       } else {
         const link = document.createElement('a')
         link.download = `E-Tiket-${kodeTiket}.png`
         link.href = dataUrl
         link.click()
-        setPesanShare('Gambar ter-download. Silakan lampirkan manual ke WhatsApp.')
+        setPesanShare('Gambar tiket berhasil diunduh. Cek di Galeri Foto HP Anda.')
       }
     } catch (err: any) {
       console.error(err)
@@ -318,9 +315,18 @@ function EtiketContent() {
     setPesanShare(result.message)
   }
 
+  // FUNGSI KEMBALI (FIX ONLINE -> BERANDA)
   async function handleKembali() {
-    const sesi = getOperatorSession()
+    const isOnline = tiketList[0]?.pesanan.kanal === 'online'
     
+    // KALAU ONLINE, LANGSUNG KE BERANDA
+    if (isOnline) {
+      router.push('/')
+      return
+    }
+
+    // KALAU OFFLINE (LOKET/AGEN), BALIK KE DASHBOARD MASING-MASING
+    const sesi = getOperatorSession()
     if (sesi) {
       if (sesi.role === 'terminal_keberangkatan') {
         router.push('/dashboard/keberangkatan')
