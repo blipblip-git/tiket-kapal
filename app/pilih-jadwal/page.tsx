@@ -21,6 +21,7 @@ function PilihJadwalContent() {
   const tanggal = searchParams.get('tanggal') || ''
 
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
   const [jadwalTersedia, setJadwalTersedia] = useState<JadwalItem[]>([])
 
   useEffect(() => {
@@ -30,116 +31,132 @@ function PilihJadwalContent() {
         return
       }
 
-      // 1. AMBIL TEMPLATE JADWAL
-      const { data: templates } = await supabase
-        .from('template_jadwal')
-        .select(`*, kapal:kapal_id(kapasitas)`)
-        .eq('aktif', true)
-        .eq('rute_asal', asal)
+      try {
+        // 1. AMBIL TEMPLATE JADWAL (Ditambah filter rute_tujuan)
+        const { data: templates, error: errT } = await supabase
+          .from('template_jadwal')
+          .select(`*, kapal:kapal_id(kapasitas)`)
+          .eq('aktif', true)
+          .eq('rute_asal', asal)
+          .eq('rute_tujuan', tujuan)
 
-      // 2. CEK JADWAL YANG SUDAH ADA
-      let { data: jadwalData } = await supabase
-        .from('jadwal')
-        .select('id, jam_berangkat, harga, kapal_id, status_jadwal')
-        .eq('tanggal', tanggal)
-        .eq('status', 'aktif')
-        .eq('rute_asal', asal)
+        if (errT) throw errT
 
-      // 3. AUTO-GENERATE JIKA KOSONG
-      if (templates && templates.length > 0) {
-        const newJadwalPayload: any[] = []
-        
-        for (const t of templates) {
-          const existing = jadwalData?.find((j: any) => 
-            j.kapal_id === t.kapal_id && 
-            j.rute_asal === t.rute_asal && 
-            j.jam_berangkat === t.jam_berangkat
-          );
+        // 2. CEK JADWAL YANG SUDAH ADA (Ditambah filter rute_tujuan)
+        let { data: jadwalData, error: errJ } = await supabase
+          .from('jadwal')
+          .select('id, jam_berangkat, harga, kapal_id, status_jadwal')
+          .eq('tanggal', tanggal)
+          .eq('status', 'aktif')
+          .eq('rute_asal', asal)
+          .eq('rute_tujuan', tujuan)
+
+        if (errJ) throw errJ
+
+        // 3. AUTO-GENERATE JIKA KOSONG
+        if (templates && templates.length > 0) {
+          const newJadwalPayload: any[] = []
           
-          if (!existing) {
-            newJadwalPayload.push({
-              kapal_id: t.kapal_id,
-              rute_asal: t.rute_asal,
-              rute_tujuan: t.rute_tujuan,
-              tanggal: tanggal,
-              jam_berangkat: t.jam_berangkat,
-              harga: 150000, 
-              status_jadwal: 'open',
-            });
-          }
-        }
-
-        if (newJadwalPayload.length > 0) {
-          const { data: insertedJadwal, error: insertError } = await supabase
-            .from('jadwal')
-            .insert(newJadwalPayload, { ignoreDuplicates: true })
-            .select('id, jam_berangkat, harga, kapal_id, status_jadwal')
-
-          if (!insertError && insertedJadwal) {
-            jadwalData = [...(jadwalData || []), ...insertedJadwal]
+          for (const t of templates) {
+            const existing = jadwalData?.find((j: any) => 
+              j.kapal_id === t.kapal_id && 
+              j.rute_asal === t.rute_asal && 
+              j.jam_berangkat === t.jam_berangkat
+            );
             
-            // BIKIN KURSI OTOMATIS
-            const kursiPayload: any[] = []
-            for (const j of insertedJadwal) {
-              const t = templates.find((x: any) => 
-                x.kapal_id === j.kapal_id && 
-                x.rute_asal === asal && 
-                x.jam_berangkat === j.jam_berangkat
-              )
-              const kapasitas = t?.kapal?.kapasitas || 0
-              if (kapasitas > 0) {
-                for (let i = 1; i <= kapasitas; i++) {
-                  kursiPayload.push({
-                    jadwal_id: j.id,
-                    nomor_kursi: i.toString(),
-                    status: 'kosong'
-                  })
+            if (!existing) {
+              newJadwalPayload.push({
+                kapal_id: t.kapal_id,
+                rute_asal: t.rute_asal,
+                rute_tujuan: t.rute_tujuan,
+                tanggal: tanggal,
+                jam_berangkat: t.jam_berangkat,
+                harga: t.harga || 150000,
+                status: 'aktif',
+                status_jadwal: 'open',
+              });
+            }
+          }
+
+          if (newJadwalPayload.length > 0) {
+            const { data: insertedJadwal, error: insertError } = await supabase
+              .from('jadwal')
+              .insert(newJadwalPayload, { ignoreDuplicates: true })
+              .select('id, jam_berangkat, harga, kapal_id, status_jadwal')
+
+            if (insertError) throw insertError
+
+            if (insertedJadwal) {
+              jadwalData = [...(jadwalData || []), ...insertedJadwal]
+              
+              // BIKIN KURSI OTOMATIS
+              const kursiPayload: any[] = []
+              for (const j of insertedJadwal) {
+                const t = templates.find((x: any) => 
+                  x.kapal_id === j.kapal_id && 
+                  x.rute_asal === asal && 
+                  x.jam_berangkat === j.jam_berangkat
+                )
+                const kapasitas = t?.kapal?.kapasitas || 0
+                if (kapasitas > 0) {
+                  for (let i = 1; i <= kapasitas; i++) {
+                    kursiPayload.push({
+                      jadwal_id: j.id,
+                      nomor_kursi: i.toString(),
+                      status: 'kosong'
+                    })
+                  }
                 }
               }
-            }
-            if (kursiPayload.length > 0) {
-              await supabase.from('kursi').insert(kursiPayload, { ignoreDuplicates: true })
+              if (kursiPayload.length > 0) {
+                await supabase.from('kursi').insert(kursiPayload, { ignoreDuplicates: true })
+              }
             }
           }
         }
-      }
 
-      // 4. TAMPILKAN DATA
-      const { data: kapalData } = await supabase.from('kapal').select('id, nama')
-      const kapalMap = new Map(kapalData?.map((k) => [k.id, k]) || [])
+        // 4. TAMPILKAN DATA
+        const { data: kapalData, error: errK } = await supabase.from('kapal').select('id, nama')
+        if (errK) throw errK
 
-      if (jadwalData) {
-        const now = new Date()
-        const witaTime = new Date(now.getTime() + (8 * 60 * 60 * 1000))
-        const hariIniWITA = witaTime.toISOString().split('T')[0]
+        const kapalMap = new Map(kapalData?.map((k) => [k.id, k]) || [])
 
-        const mapped = jadwalData.map((item: any) => {
-          let isClosed = false
-          if (tanggal === hariIniWITA) {
-            const [jamB, menitB] = item.jam_berangkat.split(':').map(Number)
-            const totalMenitBerangkat = (jamB * 60) + menitB
-            const totalMenitSekarang = (witaTime.getUTCHours() * 60) + witaTime.getUTCMinutes()
-            
-            if (totalMenitBerangkat - totalMenitSekarang <= 60) {
+        if (jadwalData) {
+          const now = new Date()
+          const witaTime = new Date(now.getTime() + (8 * 60 * 60 * 1000))
+          const hariIniWITA = witaTime.toISOString().split('T')[0]
+
+          const mapped = jadwalData.map((item: any) => {
+            let isClosed = false
+            if (tanggal === hariIniWITA) {
+              const [jamB, menitB] = item.jam_berangkat.split(':').map(Number)
+              const totalMenitBerangkat = (jamB * 60) + menitB
+              const totalMenitSekarang = (witaTime.getUTCHours() * 60) + witaTime.getUTCMinutes()
+              
+              if (totalMenitBerangkat - totalMenitSekarang <= 60) {
+                isClosed = true
+              }
+            } else if (tanggal < hariIniWITA) {
               isClosed = true
             }
-          } else if (tanggal < hariIniWITA) {
-            isClosed = true
-          }
 
-          return {
-            id: item.id,
-            jam_berangkat: item.jam_berangkat,
-            harga: item.harga,
-            nama_kapal: kapalMap.get(item.kapal_id)?.nama || '-',
-            isClosed
-          }
-        }).sort((a, b) => a.jam_berangkat.localeCompare(b.jam_berangkat))
+            return {
+              id: item.id,
+              jam_berangkat: item.jam_berangkat,
+              harga: item.harga,
+              nama_kapal: kapalMap.get(item.kapal_id)?.nama || '-',
+              isClosed
+            }
+          }).sort((a, b) => a.jam_berangkat.localeCompare(b.jam_berangkat))
 
-        setJadwalTersedia(mapped)
+          setJadwalTersedia(mapped)
+        }
+      } catch (err: any) {
+        console.error('Gagal memuat jadwal:', err)
+        setError('Gagal memuat jadwal. Silakan coba lagi atau hubungi admin.')
+      } finally {
+        setLoading(false)
       }
-      
-      setLoading(false)
     }
     fetchJadwal()
   }, [asal, tujuan, tanggal, router])
@@ -170,6 +187,19 @@ function PilihJadwalContent() {
     )
   }
 
+  if (error) {
+    return (
+      <div className="min-h-[100dvh] bg-gray-50 flex flex-col items-center justify-center p-4">
+        <div className="bg-white p-6 rounded-xl shadow-md text-center max-w-sm w-full">
+          <p className="text-red-600 font-bold mb-4">{error}</p>
+          <button onClick={() => router.push('/')} className="bg-blue-600 text-white px-4 py-2 rounded-lg font-medium hover:bg-blue-700 transition-colors">
+            Kembali ke Beranda
+          </button>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="min-h-[100dvh] bg-gray-50 flex flex-col">
       <div className="bg-white shadow-sm p-4 sticky top-0 z-10">
@@ -184,7 +214,6 @@ function PilihJadwalContent() {
 
       <div className="flex-1 p-4">
         <div className="max-w-md mx-auto space-y-3">
-          {/* KALAU KOSONG, CUMA DIEM AJA / KOSONGAN */}
           {jadwalTersedia.map((j) => (
             <button
               key={j.id}

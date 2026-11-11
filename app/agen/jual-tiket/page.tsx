@@ -116,7 +116,8 @@ function JualTiketAgenContent() {
             rute_tujuan: t.rute_tujuan,
             tanggal: tgl,
             jam_berangkat: t.jam_berangkat,
-            harga: 150000, 
+            harga: t.harga || 150000, // <-- PERBAIKAN 1
+            status: 'aktif',          // <-- PERBAIKAN 2
             status_jadwal: 'open',
           });
         }
