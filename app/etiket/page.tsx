@@ -53,6 +53,10 @@ function EtiketContent() {
   const [activeTiketIndex, setActiveTiketIndex] = useState(0)
 
   const tiketRefs = useRef<{ [key: string]: HTMLDivElement | null }>({})
+  
+  // STATE UNTUK HIDDEN RENDER
+  const [renderData, setRenderData] = useState<TiketLengkap | null>(null)
+  const renderRef = useRef<HTMLDivElement>(null)
 
   const pesananIds = pesananParam ? pesananParam.split(',').filter(Boolean) : []
 
@@ -181,9 +185,10 @@ function EtiketContent() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  async function generateGambar(pesananId: string): Promise<string | null> {
+  // FUNGSI SIMPAN PDF 1 FILE
+  async function simpanPdfSatu(pesananId: string, namaPenumpang: string) {
     const ref = tiketRefs.current[pesananId]
-    if (!ref) return null
+    if (!ref) return
     try {
       const dataUrl = await toPng(ref, {
         quality: 0.85,
@@ -191,44 +196,61 @@ function EtiketContent() {
         backgroundColor: '#ffffff',
         width: ref.clientWidth,
         height: ref.clientHeight,
-        style: {
-          transform: 'scale(1)',
-          transformOrigin: 'top left',
-        }
       })
-      return dataUrl
+      const namaDepan = namaPenumpang.split(' ')[0]
+      const img = new Image()
+      img.src = dataUrl
+      img.onload = () => {
+        const pdf = new jsPDF({ orientation: 'portrait', unit: 'px', format: [img.width, img.height] })
+        pdf.addImage(dataUrl, 'JPEG', 0, 0, img.width, img.height)
+        pdf.save(`${namaDepan}.pdf`)
+      }
     } catch (err) {
       console.error('Gagal generate gambar:', err)
-      return null
     }
   }
 
-  async function simpanPdfSatu(pesananId: string, namaPenumpang: string) {
-    setPesanShare('Menyiapkan PDF...')
-    const dataUrl = await generateGambar(pesananId)
-    if (!dataUrl) {
-      setPesanShare('Gagal membuat PDF')
-      return
-    }
-
-    const namaDepan = namaPenumpang.split(' ')[0]
-    const img = new Image()
-    img.src = dataUrl
-    img.onload = () => {
-      const pdf = new jsPDF({ orientation: 'portrait', unit: 'px', format: [img.width, img.height] })
-      pdf.addImage(dataUrl, 'JPEG', 0, 0, img.width, img.height)
-      pdf.save(`${namaDepan}.pdf`)
-      setPesanShare(`Berhasil mengunduh ${namaDepan}.pdf`)
-    }
-  }
-
+  // FUNGSI SIMPAN SEMUA PDF PAKAI HIDDEN RENDER
   async function simpanSemuaPdf() {
-    setPesanShare('Memproses semua tiket...')
     for (let i = 0; i < tiketList.length; i++) {
       const t = tiketList[i]
-      await simpanPdfSatu(t.pesanan.id, t.pesanan.nama_penumpang)
-      await new Promise(resolve => setTimeout(resolve, 2000))
+      setPesanShare(`Memproses tiket ${i + 1} dari ${tiketList.length}...`)
+      
+      // 1. SET DATA KE HIDDEN RENDER
+      setRenderData(t)
+      
+      // 2. TUNGGU SEBENTAR BIAR RENDER SELESAI
+      await new Promise(r => setTimeout(r, 800))
+
+      // 3. AMBIL GAMBAR DARI HIDDEN RENDER
+      if (renderRef.current) {
+        try {
+          const dataUrl = await toPng(renderRef.current, {
+            quality: 0.85,
+            pixelRatio: 1.5,
+            backgroundColor: '#ffffff',
+            width: renderRef.current.clientWidth,
+            height: renderRef.current.clientHeight,
+          })
+          
+          const namaDepan = t.pesanan.nama_penumpang.split(' ')[0]
+          const img = new Image()
+          img.src = dataUrl
+          await new Promise((resolve) => { img.onload = resolve })
+
+          const pdf = new jsPDF({ orientation: 'portrait', unit: 'px', format: [img.width, img.height] })
+          pdf.addImage(dataUrl, 'JPEG', 0, 0, img.width, img.height)
+          pdf.save(`${namaDepan}.pdf`)
+        } catch (err) {
+          console.error(`Gagal memproses tiket ${i + 1}`, err)
+        }
+      }
+
+      // 4. JEDA 2 DETIK SEBELUM LANJUT KE TIKET BERIKUTNYA
+      await new Promise(r => setTimeout(r, 2000))
     }
+    
+    setRenderData(null)
     setPesanShare('Semua tiket berhasil diproses.')
   }
 
@@ -236,8 +258,18 @@ function EtiketContent() {
     setShowShareMenu(null)
     setPesanShare('Menyiapkan gambar untuk dibagikan...')
     
-    const dataUrl = await generateGambar(pesananId)
-    if (!dataUrl) {
+    const ref = tiketRefs.current[pesananId]
+    if (!ref) return
+    let dataUrl: string | null = null
+    try {
+      dataUrl = await toPng(ref, {
+        quality: 0.85,
+        pixelRatio: 1.5,
+        backgroundColor: '#ffffff',
+        width: ref.clientWidth,
+        height: ref.clientHeight,
+      })
+    } catch (err) {
       setPesanShare('Gagal membuat gambar tiket')
       return
     }
@@ -525,6 +557,19 @@ function EtiketContent() {
           </div>
 
         </div>
+      </div>
+
+      {/* ================= KOTAK RAHASIA UNTUK HIDDEN RENDER ================= */}
+      <div style={{ position: 'absolute', top: '-9999px', left: '-9999px' }}>
+        {renderData && (
+          <div 
+            ref={renderRef}
+            className="bg-white" 
+            style={{ width: '350px' }}
+          >
+            <TiketCard tiket={renderData} />
+          </div>
+        )}
       </div>
 
     </div>

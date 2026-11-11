@@ -45,7 +45,6 @@ function LaporanContent() {
   const [error, setError] = useState('')
   
   const [laporan, setLaporan] = useState<LaporanPerJam[]>([])
-  
   const [tanggal, setTanggal] = useState('')
 
   const [selectedJam, setSelectedJam] = useState<string | null>(null)
@@ -103,7 +102,6 @@ function LaporanContent() {
         query = query.eq('jadwal.rute_asal', lokasiParam)
       }
 
-      // FILTER PENJUALAN: Jika Agen atau Petugas Keberangkatan, HANYA ambil jualan milik mereka sendiri
       if (profile.role === 'agen' || profile.role === 'terminal_keberangkatan') {
         query = query.eq('petugas_jual', profile.email)
       }
@@ -182,9 +180,11 @@ function LaporanContent() {
           }
 
           const group = groupedByJam[jam]
-          group.total_terjual += 1
+          
+          if (!item.is_balita) {
+            group.total_terjual += 1
+          }
 
-          // FIX BALITA: Jika balita, harga dianggap 0 (tidak masuk pendapatan)
           const hargaAktual = item.is_balita ? 0 : (item.jadwal.harga || 0)
           group.total_pendapatan += hargaAktual
           
@@ -203,7 +203,7 @@ function LaporanContent() {
             kursi: item.kursi?.nomor_kursi || '-',
             kanal: item.kanal || 'loket',
             kode_tiket: item.kode_tiket,
-            harga: hargaAktual, // Pakai harga aktual (0 jika balita)
+            harga: hargaAktual,
             tanggal: item.jadwal.tanggal,
             rute: `${item.jadwal.rute_asal} - ${item.jadwal.rute_tujuan}`,
             nama_kapal: dataKapal?.nama || '-',
@@ -246,11 +246,6 @@ function LaporanContent() {
   if (error) return <p className="p-6 text-center text-red-600">{error}</p>
   if (!profile) return null
 
-  let labelRole = 'Operator'
-  if (profile.role === 'terminal_keberangkatan') labelRole = 'Operator Keberangkatan'
-  if (profile.role === 'admin_utama') labelRole = 'Admin Utama'
-  if (profile.role === 'agen') labelRole = 'Agen'
-  
   const ruteLengkap = `${lokasiParam || profile.lokasi} - ${lokasiParam === 'Tarakan' ? 'Tanjung Selor' : (lokasiParam === 'Tanjung Selor' ? 'Tarakan' : (profile.lokasi === 'Tarakan' ? 'Tanjung Selor' : 'Tarakan'))}`
 
   const now = new Date()
@@ -271,7 +266,9 @@ function LaporanContent() {
     dataJam.rincian.forEach(p => {
       if (!petugasMap[p.nama_petugas]) petugasMap[p.nama_petugas] = { nama: p.nama_petugas, total: 0, cash: 0, qris: 0, jumlah: 0 }
       const pt = petugasMap[p.nama_petugas]
-      pt.jumlah += 1
+      
+      if (!p.is_balita) pt.jumlah += 1
+      
       pt.total += p.harga
       if (p.metode_bayar === 'Cash') pt.cash += p.harga
       else if (p.metode_bayar === 'QRIS') pt.qris += p.harga
@@ -294,6 +291,10 @@ function LaporanContent() {
   
   const tanggalFormatHeader = new Date(tanggal).toLocaleDateString('id-ID', { day: '2-digit', month: 'long', year: 'numeric' })
 
+  const dataRincianAktif = selectedJam && selectedPetugas ? getRincianPenumpang(selectedJam, selectedPetugas) : []
+  const jmlDewasa = dataRincianAktif.filter(p => !p.is_balita).length
+  const jmlBalita = dataRincianAktif.filter(p => p.is_balita).length
+
   return (
     <div className="h-[100dvh] w-full bg-gray-100 p-3 md:p-6 print:p-0 print:bg-white flex flex-col overflow-hidden">
       <style dangerouslySetInnerHTML={{__html: `
@@ -301,11 +302,6 @@ function LaporanContent() {
           @page { 
             size: A4; 
             margin: 15mm; 
-            @bottom-center {
-              content: counter(page);
-              font-size: 10pt;
-              font-family: sans-serif;
-            }
           }
           body { 
             background: white; 
@@ -324,8 +320,13 @@ function LaporanContent() {
             overflow: hidden !important;
           }
           .no-print { display: none !important; }
+          
+          table { font-size: 9px !important; }
+          th, td { padding: 2px 4px !important; }
           tr { page-break-inside: avoid; }
           table { page-break-inside: auto; }
+          h1 { font-size: 14px !important; margin-bottom: 8px !important; }
+          .print-info { font-size: 9px !important; margin-bottom: 8px !important; }
         }
       `}} />
 
@@ -364,14 +365,14 @@ function LaporanContent() {
                       <thead>
                         <tr className="bg-gray-200 border-b">
                           <th className="border p-1 text-[9px] md:text-xs w-[6%]" rowSpan={2}>No</th>
-                          <th className="border p-1 text-[9px] md:text-xs w-[18%] text-center" rowSpan={2}>Jam / Kapal</th>
+                          <th className="border p-1 text-[9px] md:text-xs w-[24%] text-center" rowSpan={2}>Jam / Kapal</th>
                           <th className="border p-1 text-[9px] md:text-xs" colSpan={4}>Total</th>
                           <th className="border p-1 text-[9px] md:text-xs w-[12%]" rowSpan={2}>Aksi</th>
                         </tr>
                         <tr className="bg-gray-200 border-b">
-                          <th className="border p-1 text-[9px] md:text-xs w-[5%] whitespace-nowrap">Kursi</th>
-                          <th className="border p-1 text-[9px] md:text-xs w-[14%]">Cash</th>
-                          <th className="border p-1 text-[9px] md:text-xs w-[14%]">Qris</th>
+                          <th className="border p-1 text-[9px] md:text-xs w-[10%] whitespace-nowrap">Kursi</th>
+                          <th className="border p-1 text-[9px] md:text-xs w-[16%]">Cash</th>
+                          <th className="border p-1 text-[9px] md:text-xs w-[16%]">Qris</th>
                           <th className="border p-1 text-[9px] md:text-xs w-[16%]">Jual</th>
                         </tr>
                       </thead>
@@ -427,14 +428,14 @@ function LaporanContent() {
                       <thead>
                         <tr className="bg-gray-200 border-b">
                           <th className="border p-1 text-[9px] md:text-xs w-[6%]" rowSpan={2}>No</th>
-                          <th className="border p-1 text-[9px] md:text-xs w-[18%] text-center uppercase" rowSpan={2}>Petugas</th>
+                          <th className="border p-1 text-[9px] md:text-xs w-[24%] text-center uppercase" rowSpan={2}>Petugas</th>
                           <th className="border p-1 text-[9px] md:text-xs" colSpan={4}>Total</th>
                           <th className="border p-1 text-[9px] md:text-xs w-[12%]" rowSpan={2}>Aksi</th>
                         </tr>
                         <tr className="bg-gray-200 border-b">
-                          <th className="border p-1 text-[9px] md:text-xs w-[5%] whitespace-nowrap">Kursi</th>
-                          <th className="border p-1 text-[9px] md:text-xs w-[14%]">Cash</th>
-                          <th className="border p-1 text-[9px] md:text-xs w-[14%]">Qris</th>
+                          <th className="border p-1 text-[9px] md:text-xs w-[10%] whitespace-nowrap">Kursi</th>
+                          <th className="border p-1 text-[9px] md:text-xs w-[16%]">Cash</th>
+                          <th className="border p-1 text-[9px] md:text-xs w-[16%]">Qris</th>
                           <th className="border p-1 text-[9px] md:text-xs w-[16%]">Jual</th>
                         </tr>
                       </thead>
@@ -480,8 +481,16 @@ function LaporanContent() {
               {/* LEVEL 3: RINCIAN PENUMPANG */}
               {selectedJam && selectedPetugas && (
                 <div className="bg-white rounded shadow border border-gray-200 overflow-hidden mb-6 flex flex-col flex-1 min-h-0">
+                  
                   <div className="bg-blue-600 px-3 md:px-4 py-2 md:py-3 border-b flex justify-between items-center flex-wrap gap-2 flex-shrink-0">
-                    <h2 className="text-white font-bold text-xs md:text-base truncate">Rincian {selectedPetugas} - Jam {selectedJam}</h2>
+                    <div>
+                      <h2 className="text-white font-bold text-xs md:text-base truncate">Rincian {selectedPetugas} - Jam {selectedJam}</h2>
+                      <div className="text-[10px] md:text-xs text-blue-100 font-medium mt-0.5 flex flex-col">
+                        <span>Total Penumpang : {dataRincianAktif.length} Orang</span>
+                        <span className="pl-[105px]">Dewasa {jmlDewasa} Orang</span>
+                        <span className="pl-[105px]">Balita {jmlBalita} Orang</span>
+                      </div>
+                    </div>
                     <div className="flex gap-2">
                       <button onClick={() => handlePrint('rincian-penumpang')} className="bg-white text-blue-700 px-2 md:px-3 py-1 rounded text-[10px] md:text-sm font-bold hover:bg-gray-100">🖨️ Cetak</button>
                       <button onClick={() => setSelectedPetugas(null)} className="bg-blue-700 text-white px-2 md:px-3 py-1 rounded text-[10px] md:text-sm hover:bg-blue-800">&larr; Kembali</button>
@@ -492,19 +501,19 @@ function LaporanContent() {
                     <table className="w-full table-fixed border-collapse text-gray-900">
                       <thead className="bg-gray-200 border-b sticky top-0 z-10">
                         <tr>
-                          <th className="border p-1 text-[9px] md:text-xs w-[6%]" rowSpan={2}>No</th>
-                          <th className="border p-1 text-[9px] md:text-xs w-[25%] text-center" rowSpan={2}>Nama / Kursi</th>
+                          <th className="border p-1 text-[9px] md:text-xs w-[5%]" rowSpan={2}>No</th>
+                          <th className="border p-1 text-[9px] md:text-xs w-[35%] text-left" rowSpan={2}>Nama / Kursi</th>
                           <th className="border p-1 text-[9px] md:text-xs w-[15%]" rowSpan={2}>Kode</th>
                           <th className="border p-1 text-[9px] md:text-xs" colSpan={3}>Penjualan</th>
                         </tr>
                         <tr>
-                          <th className="border p-1 text-[9px] md:text-xs w-[18%]">Cash</th>
-                          <th className="border p-1 text-[9px] md:text-xs w-[18%]">Qris</th>
-                          <th className="border p-1 text-[9px] md:text-xs w-[18%]">Total</th>
+                          <th className="border p-1 text-[9px] md:text-xs w-[15%]">Cash</th>
+                          <th className="border p-1 text-[9px] md:text-xs w-[15%]">Qris</th>
+                          <th className="border p-1 text-[9px] md:text-xs w-[15%]">Total</th>
                         </tr>
                       </thead>
                       <tbody className="bg-white divide-y divide-gray-200">
-                        {getRincianPenumpang(selectedJam, selectedPetugas).map((p, idx) => {
+                        {dataRincianAktif.map((p, idx) => {
                           const isCash = p.metode_bayar === 'Cash';
                           return (
                             <tr key={p.id} className="hover:bg-gray-50 text-center">
@@ -513,7 +522,7 @@ function LaporanContent() {
                                 {p.nama} / {p.kursi}
                                 {p.is_balita && <span className="text-[8px] md:text-[10px] text-orange-600 ml-1">(Balita)</span>}
                               </td>
-                              <td className="border p-1 text-[9px] md:text-xs font-mono">{potongKode(p.kode_tiket)}</td>
+                              <td className="border p-1 text-[9px] md:text-xs">{potongKode(p.kode_tiket)}</td>
                               <td className="border p-1 text-[9px] md:text-xs font-bold">{isCash && p.harga > 0 ? `Rp ${p.harga.toLocaleString('id-ID')}` : '-'}</td>
                               <td className="border p-1 text-[9px] md:text-xs font-bold">{!isCash && p.harga > 0 ? `Rp ${p.harga.toLocaleString('id-ID')}` : '-'}</td>
                               <td className="border p-1 text-[9px] md:text-xs font-bold">{p.harga > 0 ? `Rp ${p.harga.toLocaleString('id-ID')}` : '-'}</td>
@@ -526,15 +535,15 @@ function LaporanContent() {
 
                   <div className="bg-blue-600 text-white font-bold text-center flex-shrink-0 w-full">
                     <div className="flex w-full">
-                      <div className="p-2 border text-[9px] md:text-xs text-center w-[46%]">TOTAL</div>
-                      <div className="p-2 border text-[9px] md:text-xs text-center w-[18%]">
-                        Rp {getRincianPenumpang(selectedJam, selectedPetugas).filter(r => r.metode_bayar === 'Cash').reduce((s, x) => s + x.harga, 0).toLocaleString('id-ID')}
+                      <div className="p-2 border text-[9px] md:text-xs text-center w-[50%]">TOTAL</div>
+                      <div className="p-2 border text-[9px] md:text-xs text-center w-[15%]">
+                        Rp {dataRincianAktif.filter(r => r.metode_bayar === 'Cash').reduce((s, x) => s + x.harga, 0).toLocaleString('id-ID')}
                       </div>
-                      <div className="p-2 border text-[9px] md:text-xs text-center w-[18%]">
-                        Rp {getRincianPenumpang(selectedJam, selectedPetugas).filter(r => r.metode_bayar === 'QRIS').reduce((s, x) => s + x.harga, 0).toLocaleString('id-ID')}
+                      <div className="p-2 border text-[9px] md:text-xs text-center w-[15%]">
+                        Rp {dataRincianAktif.filter(r => r.metode_bayar === 'QRIS').reduce((s, x) => s + x.harga, 0).toLocaleString('id-ID')}
                       </div>
-                      <div className="p-2 border text-[9px] md:text-xs text-center w-[18%]">
-                        Rp {getRincianPenumpang(selectedJam, selectedPetugas).reduce((s, x) => s + x.harga, 0).toLocaleString('id-ID')}
+                      <div className="p-2 border text-[9px] md:text-xs text-center w-[20%]">
+                        Rp {dataRincianAktif.reduce((s, x) => s + x.harga, 0).toLocaleString('id-ID')}
                       </div>
                     </div>
                   </div>
@@ -671,7 +680,7 @@ function LaporanContent() {
                                 {p.is_balita && <span className="text-[9px] text-orange-600 ml-1">(Balita)</span>}
                               </td>
                               <td className="px-2 py-2 text-[10px] md:text-xs text-gray-700">{p.rute} / {p.nama_kapal}</td>
-                              <td className="px-2 py-2 text-[10px] md:text-xs font-mono text-gray-600">{potongKode(p.kode_tiket)}</td>
+                              <td className="px-2 py-2 text-[10px] md:text-xs text-gray-600">{potongKode(p.kode_tiket)}</td>
                               <td className="px-2 py-2 text-[10px] md:text-xs text-gray-600">
                                 {p.waktu_boarding ? new Date(p.waktu_boarding).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) : '-'}
                               </td>
@@ -692,7 +701,7 @@ function LaporanContent() {
         <div className="hidden print-rekap-harian mt-8">
           <div className="text-center mb-6">
             <h1 className="text-xl font-bold text-gray-900">Rekapan Laporan Penjualan {ruteLengkap}</h1>
-            <div className="text-sm text-left mt-4 grid grid-cols-[100px_10px_1fr] gap-y-1">
+            <div className="text-sm text-left mt-4 grid grid-cols-[100px_10px_1fr] gap-y-1 print-info">
               <span>Petugas</span><span>:</span><span>{profile.nama}</span>
               <span>Tanggal</span><span>:</span><span>{tanggal}</span>
               <span>Rute</span><span>:</span><span>{ruteLengkap}</span>
@@ -735,7 +744,7 @@ function LaporanContent() {
           <div className="hidden print-rekap-petugas mt-8">
             <div className="text-center mb-6">
               <h1 className="text-xl font-bold text-gray-900">Rekap Petugas Jam {selectedJam}</h1>
-              <div className="text-sm text-left mt-4 grid grid-cols-[100px_10px_1fr] gap-y-1">
+              <div className="text-sm text-left mt-4 grid grid-cols-[100px_10px_1fr] gap-y-1 print-info">
                 <span>Petugas</span><span>:</span><span>{profile.nama}</span>
                 <span>Tanggal</span><span>:</span><span>{tanggal}</span>
               </div>
@@ -785,37 +794,64 @@ function LaporanContent() {
           <div className="hidden print-rincian-penumpang mt-8">
             <div className="text-center mb-6">
               <h1 className="text-xl font-bold text-gray-900">Rincian Laporan Penjualan - {selectedPetugas}</h1>
-              <div className="text-sm text-left mt-4 grid grid-cols-[100px_10px_1fr] gap-y-1">
-                <span>Petugas</span><span>:</span><span>{profile.nama}</span>
-                <span>Tanggal</span><span>:</span><span>{tanggal}</span>
-                <span>Jam</span><span>:</span><span>{selectedJam}</span>
-              </div>
+              
+              {/* PERBAIKAN: TABLE INFO PRINT RATA KIRI */}
+              <table className="text-sm text-left mt-4" style={{ borderCollapse: 'collapse', tableLayout: 'fixed', width: '300px' }}>
+                <tbody>
+                  <tr>
+                    <td className="align-top" style={{ width: '130px' }}>Petugas</td>
+                    <td className="align-top" style={{ width: '10px' }}>:</td>
+                    <td className="align-top">{profile.nama}</td>
+                  </tr>
+                  <tr>
+                    <td className="align-top">Tanggal</td>
+                    <td className="align-top">:</td>
+                    <td className="align-top">{tanggal}</td>
+                  </tr>
+                  <tr>
+                    <td className="align-top">Jam</td>
+                    <td className="align-top">:</td>
+                    <td className="align-top">{selectedJam}</td>
+                  </tr>
+                  <tr>
+                    <td className="align-top">Total Penumpang</td>
+                    <td className="align-top">:</td>
+                    <td className="align-top">{dataRincianAktif.length} Orang</td>
+                  </tr>
+                  <tr>
+                    <td className="align-top"></td>
+                    <td className="align-top"></td>
+                    <td className="align-top">Dewasa {jmlDewasa} Orang | Balita {jmlBalita} Orang</td>
+                  </tr>
+                </tbody>
+              </table>
+
             </div>
             <table className="w-full text-sm border-collapse border border-gray-400">
               <thead>
                 <tr className="bg-gray-200 text-center text-gray-900">
-                  <th className="border border-gray-400 px-2 py-2 w-10" rowSpan={2}>No</th>
-                  <th className="border border-gray-400 px-2 py-2 text-center" rowSpan={2}>Nama / Kursi</th>
-                  <th className="border border-gray-400 px-2 py-2" rowSpan={2}>Kode Tiket</th>
+                  <th className="border border-gray-400 px-2 py-2 w-[5%]" rowSpan={2}>No</th>
+                  <th className="border border-gray-400 px-2 py-2 text-left w-[35%]" rowSpan={2}>Nama / Kursi</th>
+                  <th className="border border-gray-400 px-2 py-2 w-[15%]" rowSpan={2}>Kode Tiket</th>
                   <th className="border border-gray-400 px-2 py-2" colSpan={3}>Penjualan</th>
                 </tr>
                 <tr className="bg-gray-200 text-center text-gray-900">
-                  <th className="border border-gray-400 px-2 py-1">Cash</th>
-                  <th className="border border-gray-400 px-2 py-1">Qris</th>
-                  <th className="border border-gray-400 px-2 py-1">Total</th>
+                  <th className="border border-gray-400 px-2 py-1 w-[15%]">Cash</th>
+                  <th className="border border-gray-400 px-2 py-1 w-[15%]">Qris</th>
+                  <th className="border border-gray-400 px-2 py-1 w-[15%]">Total</th>
                 </tr>
               </thead>
               <tbody>
-                {getRincianPenumpang(selectedJam, selectedPetugas).map((d, idx) => {
+                {dataRincianAktif.map((d, idx) => {
                   const isCash = d.metode_bayar === 'Cash';
                   return (
                     <tr key={d.id} className="text-center text-gray-900">
                       <td className="border border-gray-400 px-2 py-1">{idx + 1}</td>
-                      <td className="border border-gray-400 px-2 py-1 text-center font-bold">
+                      <td className="border border-gray-400 px-2 py-1 text-left font-bold">
                         {d.nama} / {d.kursi}
                         {d.is_balita && <span className="text-xs text-orange-600 ml-1">(Balita)</span>}
                       </td>
-                      <td className="border border-gray-400 px-2 py-1 font-mono text-xs">{potongKode(d.kode_tiket)}</td>
+                      <td className="border border-gray-400 px-2 py-1 text-xs">{potongKode(d.kode_tiket)}</td>
                       <td className="border border-gray-400 px-2 py-1 text-right">{isCash && d.harga > 0 ? `Rp ${d.harga.toLocaleString('id-ID')}` : '-'}</td>
                       <td className="border border-gray-400 px-2 py-1 text-right">{!isCash && d.harga > 0 ? `Rp ${d.harga.toLocaleString('id-ID')}` : '-'}</td>
                       <td className="border border-gray-400 px-2 py-1 text-right font-bold">{d.harga > 0 ? `Rp ${d.harga.toLocaleString('id-ID')}` : '-'}</td>
@@ -823,10 +859,9 @@ function LaporanContent() {
                   )
                 })}
                 {(() => {
-                  const rincian = getRincianPenumpang(selectedJam, selectedPetugas);
-                  const totalCash = rincian.filter(r => r.metode_bayar === 'Cash').reduce((s, x) => s + x.harga, 0);
-                  const totalQris = rincian.filter(r => r.metode_bayar === 'QRIS').reduce((s, x) => s + x.harga, 0);
-                  const totalHarga = rincian.reduce((s, x) => s + x.harga, 0);
+                  const totalCash = dataRincianAktif.filter(r => r.metode_bayar === 'Cash').reduce((s, x) => s + x.harga, 0);
+                  const totalQris = dataRincianAktif.filter(r => r.metode_bayar === 'QRIS').reduce((s, x) => s + x.harga, 0);
+                  const totalHarga = dataRincianAktif.reduce((s, x) => s + x.harga, 0);
                   
                   return (
                     <tr className="font-bold bg-gray-300 text-center text-gray-900">
@@ -844,7 +879,7 @@ function LaporanContent() {
 
         <div className="hidden print-manifest mt-8">
           <h1 className="text-xl font-bold text-center mb-6">LAPORAN MANIFEST PENUMPANG JAM {selectedJam}</h1>
-          <div className="mb-4 text-sm grid grid-cols-[150px_10px_1fr] gap-y-1">
+          <div className="mb-4 text-sm grid grid-cols-[150px_10px_1fr] gap-y-1 print-info">
             <span>Tanggal</span><span>:</span><span>{tanggal}</span>
             <span>Rute</span><span>:</span><span>{ruteLengkap}</span>
             <span>Kapal</span><span>:</span><span>{laporan.find(l => l.jam === selectedJam)?.nama_kapal || '-'}</span>
@@ -868,7 +903,7 @@ function LaporanContent() {
                     {p.nama} / {p.kursi}
                     {p.is_balita && <span className="text-xs text-orange-600 ml-1">(Balita)</span>}
                   </td>
-                  <td className="border border-gray-400 px-2 py-1 font-mono text-xs">{potongKode(p.kode_tiket)}</td>
+                  <td className="border border-gray-400 px-2 py-1 text-xs">{potongKode(p.kode_tiket)}</td>
                   <td className="border border-gray-400 px-2 py-1">
                     {p.waktu_boarding ? new Date(p.waktu_boarding).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) : '-'}
                   </td>
@@ -884,7 +919,7 @@ function LaporanContent() {
 
         <div className="hidden print-rekap-boarding mt-8">
           <h1 className="text-xl font-bold text-center mb-6">LAPORAN REKAP SCAN BOARDING</h1>
-          <div className="mb-4 text-sm grid grid-cols-[100px_10px_1fr] gap-y-1">
+          <div className="mb-4 text-sm grid grid-cols-[100px_10px_1fr] gap-y-1 print-info">
             <span>Per Tanggal</span><span>:</span><span>{tanggal}</span>
             <span>Rute</span><span>:</span><span>{ruteLengkap}</span>
           </div>
@@ -919,7 +954,7 @@ function LaporanContent() {
         {expandedJam && rincianAktif && (
           <div className="hidden print-rincian-boarding mt-8">
             <h1 className="text-xl font-bold text-center mb-6">LAPORAN RINCIAN SCAN BOARDING JAM {expandedJam}</h1>
-            <div className="mb-4 text-sm grid grid-cols-[100px_10px_1fr] gap-y-1">
+            <div className="mb-4 text-sm grid grid-cols-[100px_10px_1fr] gap-y-1 print-info">
               <span>Tanggal</span><span>:</span><span>{tanggal}</span>
               <span>Rute</span><span>:</span><span>{ruteLengkap}</span>
             </div>
@@ -944,7 +979,7 @@ function LaporanContent() {
                       {p.is_balita && <span className="text-xs text-orange-600 ml-1">(Balita)</span>}
                     </td>
                     <td className="border border-gray-400 px-2 py-1">{p.nama_kapal}</td>
-                    <td className="border border-gray-400 px-2 py-1 font-mono text-xs">{potongKode(p.kode_tiket)}</td>
+                    <td className="border border-gray-400 px-2 py-1 text-xs">{potongKode(p.kode_tiket)}</td>
                     <td className="border border-gray-400 px-2 py-1">
                       {p.waktu_boarding ? new Date(p.waktu_boarding).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) : '-'}
                     </td>

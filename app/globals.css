@@ -42,3 +42,11 @@ body {
     overflow-y: auto; /* Tetap izinkan scroll kalau konten panjang */
   }
 }
+
+/* 3. LEPAS KUNCIAN TINGGI SAAT MODE PRINT BIAR BISA PINDAH HALAMAN */
+@media print {
+  html, body {
+    height: auto !important;
+    overflow: visible !important;
+  }
+}

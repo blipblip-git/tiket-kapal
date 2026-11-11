@@ -15,19 +15,18 @@ function BerandaContent() {
   const [searchAsal, setSearchAsal] = useState('')
   const [searchTujuan, setSearchTujuan] = useState('')
 
-  // LOGIKA PINTU RAHASIA SUPERADMIN (KLIK 3X)
+  // LOGIKA PINTU RAHASIA (KLIK 3X TULISAN TEMPAKUL -> LOGIN PETUGAS)
   const klikCount = useRef(0)
   const timerRef = useRef<NodeJS.Timeout | null>(null)
 
-  const handleTombolCariKlik = (e: React.MouseEvent) => {
+  const handleJudulKlik = () => {
     klikCount.current += 1
 
     if (timerRef.current) clearTimeout(timerRef.current)
 
     if (klikCount.current === 3) {
-      e.preventDefault() // Cegah form submit saat klik ke-3
       klikCount.current = 0
-      router.push('/superadmin')
+      router.push('/login')
     } else {
       timerRef.current = setTimeout(() => {
         klikCount.current = 0
@@ -46,11 +45,21 @@ function BerandaContent() {
     'Sungai Nyamuk'
   ]
 
+  // LOGIKA RESET TANGGAL JAM 16.00 WITA
+  const getTanggalDefault = () => {
+    const now = new Date()
+    const witaTime = new Date(now.getTime() + (8 * 60 * 60 * 1000))
+    let targetDate = witaTime
+    
+    // Jika jam 16.00 WITA atau lebih, otomatis maju ke besok
+    if (witaTime.getUTCHours() >= 16) {
+      targetDate = new Date(witaTime.getTime() + (24 * 60 * 60 * 1000))
+    }
+    return targetDate.toISOString().split('T')[0]
+  }
+
   useEffect(() => {
-    const today = new Date()
-    const offset = today.getTimezoneOffset() * 60000
-    const localDate = new Date(today.getTime() - offset).toISOString().split('T')[0]
-    setTanggal(localDate)
+    setTanggal(getTanggalDefault())
   }, [])
 
   const handleTukar = () => {
@@ -105,7 +114,10 @@ function BerandaContent() {
         }
       `}} />
 
-      <div className="bg-white rounded-3xl shadow-lg w-full max-w-[340px] sm:max-w-sm py-5 sm:py-6 px-4 text-center mb-5 sm:mb-6">
+      <div 
+        onClick={handleJudulKlik}
+        className="bg-white rounded-3xl shadow-lg w-full max-w-[340px] sm:max-w-sm py-5 sm:py-6 px-4 text-center mb-5 sm:mb-6 cursor-pointer select-none"
+      >
         <h1 className="text-3xl sm:text-4xl font-serif text-gray-900 tracking-wide">tempakul</h1>
         <div className="flex justify-center gap-1.5 mt-2 sm:mt-3">
           <span className="w-3 h-3 sm:w-3.5 sm:h-3.5 rounded-full bg-red-500"></span>
@@ -168,7 +180,6 @@ function BerandaContent() {
 
           <button
             type="submit"
-            onClick={handleTombolCariKlik}
             className="w-full bg-purple-600 text-white py-2.5 sm:py-3 rounded-lg font-bold text-sm sm:text-base hover:bg-purple-700 shadow-md transition-colors mt-2"
           >
             Cari Jadwal

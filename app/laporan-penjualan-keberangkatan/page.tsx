@@ -61,7 +61,7 @@ export default function LaporanPenjualanKeberangkatanPage() {
     const { data, error } = await supabase
       .from('pesanan')
       .select(`
-        id, nama_penumpang, kode_tiket, is_balita,
+        id, nama_penumpang, kode_tiket, is_balita, created_at,
         jadwal:jadwal_id (harga, rute_asal, rute_tujuan, jam_berangkat, tanggal),
         kursi:kursi_id (nomor_kursi),
         pembayaran:pembayaran (metode)
@@ -69,6 +69,7 @@ export default function LaporanPenjualanKeberangkatanPage() {
       .eq('status', 'paid')
       .eq('kanal', 'keberangkatan')
       .eq('petugas_jual', profile.email)
+      .order('created_at', { ascending: true })
 
     if (error) {
       console.error('Gagal load laporan:', error)
@@ -88,7 +89,6 @@ export default function LaporanPenjualanKeberangkatanPage() {
       const jamKapal = item.jadwal?.jam_berangkat
       const jamStr = jamKapal ? jamKapal.slice(0, 5) : '00:00'
       
-      // FIX BALITA: Jika balita, harga aktual jadi 0
       const hargaAsli = item.jadwal?.harga || 0
       const harga = item.is_balita ? 0 : hargaAsli
       const kursi = item.kursi?.nomor_kursi || '-'
@@ -111,7 +111,10 @@ export default function LaporanPenjualanKeberangkatanPage() {
         }
       }
 
-      grouped[jamStr].total_penumpang += 1
+      if (!item.is_balita) {
+        grouped[jamStr].total_penumpang += 1
+      }
+      
       grouped[jamStr].total_pendapatan += harga
       
       if (metode === 'cash' || metode === 'cash_loket') {
@@ -126,7 +129,7 @@ export default function LaporanPenjualanKeberangkatanPage() {
         kursi,
         kode_tiket: item.kode_tiket,
         metode,
-        harga: harga, // Simpan harga yang sudah dikondisikan (0 jika balita)
+        harga: harga,
         is_balita: item.is_balita || false,
       })
     })
@@ -153,7 +156,6 @@ export default function LaporanPenjualanKeberangkatanPage() {
 
   const dataTerpilih = laporan.find((l) => l.jam === jamTerpilih)
 
-  // FIX KODE TIKET: Titik-titik dihilangkan
   const potongKode = (kode: string) => {
     if (!kode) return '-'
     return kode.length > 6 ? kode.slice(-6) : kode
@@ -169,6 +171,9 @@ export default function LaporanPenjualanKeberangkatanPage() {
   const tujuan = asal === 'Tarakan' ? 'Tanjung Selor' : 'Tarakan'
   const teksRute = `${asal} - ${tujuan}`
 
+  const jmlDewasa = dataTerpilih ? dataTerpilih.detail.filter(p => !p.is_balita).length : 0
+  const jmlBalita = dataTerpilih ? dataTerpilih.detail.filter(p => p.is_balita).length : 0
+
   return (
     <div className="h-[100dvh] w-full bg-gray-100 flex flex-col overflow-hidden print:h-auto print:overflow-visible print:bg-white print:block">
       <style dangerouslySetInnerHTML={{__html: `
@@ -178,6 +183,17 @@ export default function LaporanPenjualanKeberangkatanPage() {
           .print-hidden { display: none !important; }
           .print-rekap-only { display: ${printMode === 'rekap' ? 'block' : 'none'} !important; }
           .print-rincian-only { display: ${printMode === 'rincian' ? 'block' : 'none'} !important; }
+          
+          html, body {
+            height: auto !important;
+            overflow: visible !important;
+          }
+          
+          table { font-size: 9px !important; }
+          th, td { padding: 2px 4px !important; }
+          tr { page-break-inside: avoid; }
+          table { page-break-inside: auto; }
+          h1 { font-size: 14px !important; margin-bottom: 8px !important; }
         }
       `}} />
 
@@ -275,8 +291,14 @@ export default function LaporanPenjualanKeberangkatanPage() {
 
           {jamTerpilih && dataTerpilih && (
             <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
-              <div className="bg-blue-600 px-3 py-2 md:px-4 md:py-3 flex justify-between items-center">
-                <h2 className="text-white font-bold text-[10px] md:text-base">Rincian Jam {jamTerpilih}</h2>
+              <div className="bg-blue-600 px-3 py-2 md:px-4 md:py-3 flex justify-between items-center flex-wrap gap-2">
+                <div>
+                  <h2 className="text-white font-bold text-[10px] md:text-base">Rincian Jam {jamTerpilih}</h2>
+                  <div className="text-[10px] md:text-xs text-blue-100 font-medium mt-0.5 flex flex-col">
+                    <span>Total Penumpang : {dataTerpilih.detail.length} Orang</span>
+                    <span className="pl-[105px]">Dewasa {jmlDewasa} Orang | Balita {jmlBalita} Orang</span>
+                  </div>
+                </div>
                 <span className="text-white font-medium text-[9px] md:text-sm">{teksRute}</span>
                 <div className="flex gap-1 md:gap-2 flex-shrink-0">
                   <button onClick={() => handlePrint('rincian')} className="bg-white text-blue-700 px-2 py-0.5 md:px-4 md:py-1.5 rounded text-[9px] md:text-sm font-bold">🖨️ Cetak</button>
@@ -288,7 +310,7 @@ export default function LaporanPenjualanKeberangkatanPage() {
                   <thead className="bg-gray-200 border-b text-center text-gray-900">
                     <tr>
                       <th className="px-1 py-1 md:px-4 md:py-2 border border-gray-300 w-6 md:w-auto">No</th>
-                      <th className="px-1 py-1 md:px-4 md:py-2 border border-gray-300 text-center">Nama / Kursi</th>
+                      <th className="px-1 py-1 md:px-4 md:py-2 border border-gray-300 text-left">Nama / Kursi</th>
                       <th className="px-1 py-1 md:px-4 md:py-2 border border-gray-300">Kode</th>
                       <th className="px-1 py-1 md:px-4 md:py-2 border border-gray-300">Cash</th>
                       <th className="px-1 py-1 md:px-4 md:py-2 border border-gray-300">Qris</th>
@@ -301,11 +323,11 @@ export default function LaporanPenjualanKeberangkatanPage() {
                       return (
                         <tr key={d.id} className="border-b last:border-0 hover:bg-gray-50 text-center">
                           <td className="px-1 py-1 md:px-4 md:py-2 text-gray-900 font-bold border border-gray-300">{idx + 1}</td>
-                          <td className="px-1 py-1 md:px-4 md:py-2 font-bold text-gray-900 text-center border border-gray-300">
+                          <td className="px-1 py-1 md:px-4 md:py-2 font-bold text-gray-900 text-left border border-gray-300">
                             {d.nama_penumpang} / {d.kursi}
                             {d.is_balita && <span className="text-[8px] md:text-[10px] text-orange-600 ml-1">(Balita)</span>}
                           </td>
-                          <td className="px-1 py-1 md:px-4 md:py-2 font-mono text-gray-800 border border-gray-300">{potongKode(d.kode_tiket)}</td>
+                          <td className="px-1 py-1 md:px-4 md:py-2 text-gray-800 border border-gray-300">{potongKode(d.kode_tiket)}</td>
                           <td className="px-1 py-1 md:px-4 md:py-2 text-gray-900 border border-gray-300">{isCash && d.harga > 0 ? `Rp ${d.harga.toLocaleString('id-ID')}` : '-'}</td>
                           <td className="px-1 py-1 md:px-4 md:py-2 text-gray-900 border border-gray-300">{!isCash && d.harga > 0 ? `Rp ${d.harga.toLocaleString('id-ID')}` : '-'}</td>
                           <td className="px-1 py-1 md:px-4 md:py-2 font-bold text-gray-900 border border-gray-300">{d.harga > 0 ? `Rp ${d.harga.toLocaleString('id-ID')}` : '-'}</td>
@@ -379,18 +401,48 @@ export default function LaporanPenjualanKeberangkatanPage() {
         <div className="hidden print-rincian-only">
           <div className="text-center mb-6">
             <h1 className="text-xl font-bold text-gray-900">Rincian Laporan Penjualan {teksRute}</h1>
-            <div className="text-sm text-left mt-4 grid grid-cols-[100px_10px_1fr] gap-y-1">
-              <span>Petugas</span><span>:</span><span>{profile?.nama}</span>
-              <span>Tanggal</span><span>:</span><span>{formatTanggal(tanggal)}</span>
-              <span>Rute</span><span>:</span><span>{teksRute}</span>
-              <span>Jam</span><span>:</span><span>{jamTerpilih}</span>
-            </div>
+            
+            <table className="text-sm text-left mt-4" style={{ borderCollapse: 'collapse', tableLayout: 'fixed', width: '300px' }}>
+              <tbody>
+                <tr>
+                  <td className="align-top" style={{ width: '130px' }}>Petugas</td>
+                  <td className="align-top" style={{ width: '10px' }}>:</td>
+                  <td className="align-top">{profile?.nama}</td>
+                </tr>
+                <tr>
+                  <td className="align-top">Tanggal</td>
+                  <td className="align-top">:</td>
+                  <td className="align-top">{formatTanggal(tanggal)}</td>
+                </tr>
+                <tr>
+                  <td className="align-top">Rute</td>
+                  <td className="align-top">:</td>
+                  <td className="align-top">{teksRute}</td>
+                </tr>
+                <tr>
+                  <td className="align-top">Jam</td>
+                  <td className="align-top">:</td>
+                  <td className="align-top">{jamTerpilih}</td>
+                </tr>
+                <tr>
+                  <td className="align-top">Total Penumpang</td>
+                  <td className="align-top">:</td>
+                  <td className="align-top">{dataTerpilih.detail.length} Orang</td>
+                </tr>
+                <tr>
+                  <td className="align-top"></td>
+                  <td className="align-top"></td>
+                  <td className="align-top">Dewasa {jmlDewasa} Orang | Balita {jmlBalita} Orang</td>
+                </tr>
+              </tbody>
+            </table>
+
           </div>
           <table className="w-full text-sm border-collapse border border-gray-400">
             <thead>
               <tr className="bg-gray-200 text-center text-gray-900">
                 <th className="border border-gray-400 px-2 py-2 w-10">No</th>
-                <th className="border border-gray-400 px-2 py-2 text-center">Nama / Kursi</th>
+                <th className="border border-gray-400 px-2 py-2 text-left">Nama / Kursi</th>
                 <th className="border border-gray-400 px-2 py-2">Kode Tiket</th>
                 <th className="border border-gray-400 px-2 py-2">Cash</th>
                 <th className="border border-gray-400 px-2 py-2">Qris</th>
@@ -403,11 +455,11 @@ export default function LaporanPenjualanKeberangkatanPage() {
                 return (
                   <tr key={d.id} className="text-center text-gray-900">
                     <td className="border border-gray-400 px-2 py-1">{idx + 1}</td>
-                    <td className="border border-gray-400 px-2 py-1 text-center font-bold">
+                    <td className="border border-gray-400 px-2 py-1 text-left font-bold">
                       {d.nama_penumpang} / {d.kursi}
                       {d.is_balita && <span className="text-xs text-orange-600 ml-1">(Balita)</span>}
                     </td>
-                    <td className="border border-gray-400 px-2 py-1 font-mono text-xs">{potongKode(d.kode_tiket)}</td>
+                    <td className="border border-gray-400 px-2 py-1 text-xs">{potongKode(d.kode_tiket)}</td>
                     <td className="border border-gray-400 px-2 py-1 text-right">{isCash && d.harga > 0 ? `Rp ${d.harga.toLocaleString('id-ID')}` : '-'}</td>
                     <td className="border border-gray-400 px-2 py-1 text-right">{!isCash && d.harga > 0 ? `Rp ${d.harga.toLocaleString('id-ID')}` : '-'}</td>
                     <td className="border border-gray-400 px-2 py-1 text-right font-bold">{d.harga > 0 ? `Rp ${d.harga.toLocaleString('id-ID')}` : '-'}</td>

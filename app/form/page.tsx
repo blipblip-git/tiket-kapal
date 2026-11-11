@@ -12,6 +12,7 @@ type Kursi = {
 
 type Penumpang = {
   nama: string
+  nik: string
   is_balita: boolean
   nama_balita: string
 }
@@ -20,6 +21,11 @@ const toTitleCase = (str: string) => {
   if (!str) return '';
   return str.toLowerCase().replace(/\b\w/g, (char) => char.toUpperCase());
 };
+
+const maskNik = (nik: string) => {
+  if (!nik || nik.length !== 16) return nik;
+  return nik.slice(0, 4) + '********' + nik.slice(12);
+}
 
 function FormContent() {
   const searchParams = useSearchParams()
@@ -58,7 +64,7 @@ function FormContent() {
 
       if (jData && kData) {
         setJadwal(jData)
-        setPenumpangList(kursiIds.map(() => ({ nama: '', is_balita: false, nama_balita: '' })))
+        setPenumpangList(kursiIds.map(() => ({ nama: '', nik: '', is_balita: false, nama_balita: '' })))
         setKursiList(kData)
       }
       setLoading(false)
@@ -75,10 +81,11 @@ function FormContent() {
 
   const toggleBalita = (idx: number) => {
     const baru = [...penumpangList]
-    baru[idx] = { 
-      ...baru[idx], 
-      is_balita: !baru[idx].is_balita,
-      nama_balita: !baru[idx].is_balita ? baru[idx].nama_balita : '' // Reset nama jika di-uncheck
+    const currentStatus = baru[idx].is_balita
+    baru[idx] = {
+      ...baru[idx],
+      is_balita: !currentStatus,
+      nama_balita: !currentStatus ? baru[idx].nama_balita : ''
     }
     setPenumpangList(baru)
   }
@@ -90,6 +97,10 @@ function FormContent() {
     for (let i = 0; i < penumpangList.length; i++) {
       if (!penumpangList[i].nama) {
         setError(`Nama penumpang #${i + 1} wajib diisi.`)
+        return
+      }
+      if (penumpangList[i].nik.length !== 16) {
+        setError(`NIK penumpang #${i + 1} harus 16 digit.`)
         return
       }
       if (penumpangList[i].is_balita && !penumpangList[i].nama_balita) {
@@ -113,6 +124,7 @@ function FormContent() {
           jadwal_id: jadwalId,
           kursi_id: kursiList[idx].id, 
           nama_penumpang: toTitleCase(p.nama),
+          nik: maskNik(p.nik),
           nomor_hp: noHp,
           kanal: 'online',
           status: 'pending',
@@ -128,6 +140,7 @@ function FormContent() {
             jadwal_id: jadwalId,
             kursi_id: null,
             nama_penumpang: toTitleCase(p.nama_balita),
+            nik: '-',
             nomor_hp: noHp,
             kanal: 'online',
             status: 'pending',
@@ -198,7 +211,6 @@ function FormContent() {
                   
                   <div>
                     <label className="block text-xs font-medium text-gray-700">Status</label>
-                    {/* TOMBOL TOGGLE PENGGANTI CHECKBOX */}
                     <button
                       type="button"
                       onClick={() => toggleBalita(idx)}
@@ -219,7 +231,21 @@ function FormContent() {
                   </div>
                 </div>
 
-                {/* KOLOM NAMA BALITA */}
+                {/* INPUT NIK (TETAP MUNCUL WALAU BALITA DICENTANG) */}
+                <div>
+                  <label className="block text-xs font-medium text-gray-700">NIK (16 digit)</label>
+                  <input
+                    type="text"
+                    required
+                    maxLength={16}
+                    className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm text-gray-900 focus:ring-blue-500 focus:border-blue-500 text-sm"
+                    value={p.nik}
+                    onChange={(e) => updatePenumpang(idx, 'nik', e.target.value.replace(/\D/g, '').slice(0, 16))}
+                    placeholder="16 digit angka"
+                  />
+                </div>
+
+                {/* INPUT NAMA BALITA (DI DALAM BOX SAJA, PLACEHOLDER DIGANTI) */}
                 {p.is_balita && (
                   <div className="bg-orange-50 p-3 rounded-md border border-orange-200 mt-2">
                     <input
@@ -245,7 +271,6 @@ function FormContent() {
               onChange={(e) => setNoHp(e.target.value.replace(/\D/g, ''))}
               placeholder="Contoh: 081234567890"
             />
-            <p className="text-xs text-gray-500 mt-1">Kode tiket akan dikirim ke nomor ini.</p>
           </div>
 
           {error && <p className="text-red-500 text-sm">{error}</p>}
