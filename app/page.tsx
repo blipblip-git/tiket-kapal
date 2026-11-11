@@ -15,7 +15,7 @@ function BerandaContent() {
   const [searchAsal, setSearchAsal] = useState('')
   const [searchTujuan, setSearchTujuan] = useState('')
 
-  // LOGIKA PINTU RAHASIA (KLIK 3X TULISAN TEMPAKUL -> LOGIN PETUGAS)
+  // LOGIKA PINTU RAHASIA (KLIK 3X TULISAN LINTASEA -> LOGIN PETUGAS)
   const klikCount = useRef(0)
   const timerRef = useRef<NodeJS.Timeout | null>(null)
 
@@ -118,7 +118,7 @@ function BerandaContent() {
         onClick={handleJudulKlik}
         className="bg-white rounded-3xl shadow-lg w-full max-w-[340px] sm:max-w-sm py-5 sm:py-6 px-4 text-center mb-5 sm:mb-6 cursor-pointer select-none"
       >
-        <h1 className="text-3xl sm:text-4xl font-serif text-gray-900 tracking-wide">tempakul</h1>
+        <h1 className="text-3xl sm:text-4xl font-serif text-gray-900 tracking-wide">lintasea</h1>
         <div className="flex justify-center gap-1.5 mt-2 sm:mt-3">
           <span className="w-3 h-3 sm:w-3.5 sm:h-3.5 rounded-full bg-red-500"></span>
           <span className="w-3 h-3 sm:w-3.5 sm:h-3.5 rounded-full bg-yellow-400"></span>

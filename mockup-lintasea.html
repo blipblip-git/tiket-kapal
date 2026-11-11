@@ -1,0 +1,42 @@
+cd ~/projects/tiket-kapal && cat > mockup-lintasea.html << 'EOF'
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Mockup Lintasea SVG</title>
+<style>
+  body { background: #f3f4f6; display: flex; justify-content: center; align-items: center; min-height: 100vh; margin: 0; font-family: system-ui, sans-serif; }
+  .box { background: white; padding: 50px 60px; border-radius: 16px; box-shadow: 0 10px 25px rgba(0,0,0,0.1); text-align: center; }
+  .label { font-size: 14px; color: #6b7280; margin-bottom: 30px; font-weight: 600; }
+</style>
+</head>
+<body>
+  <div class="box">
+    <div class="label">Logo Lintassea (SVG Vector)</div>
+    
+    <!-- SVG Logo Lintassea -->
+    <svg width="300" height="80" viewBox="0 0 300 80" xmlns="http://www.w3.org/2000/svg">
+      <!-- Huruf 'linta' -->
+      <text x="0" y="55" font-family="'Playfair Display', serif" font-size="60" font-weight="400" fill="#111827" textLength="140" lengthAdjust="spacingAndGlyphs">linta</text>
+      
+      <!-- Huruf 's' pertama -->
+      <text x="142" y="55" font-family="'Playfair Display', serif" font-size="60" font-weight="400" fill="#111827">s</text>
+      
+      <!-- Huruf 's' kedua (menyatu/overlap) -->
+      <text x="165" y="55" font-family="'Playfair Display', serif" font-size="60" font-weight="400" fill="#111827">s</text>
+      
+      <!-- Huruf 'ea' -->
+      <text x="190" y="55" font-family="'Playfair Display', serif" font-size="60" font-weight="400" fill="#111827">ea</text>
+    </svg>
+
+    <div style="font-size: 13px; color: #9ca3af; margin-top: 30px; max-width: 300px;">
+      *Teks di atas adalah SVG. Jarak huruf "s" bisa diatur manual. Kabari jika masih kurang nempel.
+    </div>
+  </div>
+  
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400&display=swap" rel="stylesheet">
+</body>
+</html>
+EOF
+echo "Mockup SVG selesai!"
