@@ -60,6 +60,28 @@ function EtiketContent() {
 
   const pesananIds = pesananParam ? pesananParam.split(',').filter(Boolean) : []
 
+  // BLOKIR TOMBOL BACK (SWIPE)
+  useEffect(() => {
+    if (loading || tiketList.length === 0) return
+
+    const isOnline = tiketList[0]?.pesanan.kanal === 'online'
+    const backUrl = isOnline 
+      ? '/' 
+      : (getOperatorSession()?.role === 'terminal_keberangkatan' ? '/dashboard/keberangkatan' : (getOperatorSession()?.role === 'agen' ? '/dashboard/agen' : (getOperatorSession()?.role === 'admin_utama' ? '/dashboard' : '/dashboard/loket-menu')))
+
+    // Tambah history palsu biar swipe ga langsung keluar
+    window.history.pushState(null, '', window.location.href)
+
+    const handlePopState = () => {
+      router.replace(backUrl)
+    }
+
+    window.addEventListener('popstate', handlePopState)
+    return () => {
+      window.removeEventListener('popstate', handlePopState)
+    }
+  }, [loading, tiketList, router])
+
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') setShowShareMenu(null)
