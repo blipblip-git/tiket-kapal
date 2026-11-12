@@ -17,6 +17,7 @@ type RincianPenumpang = {
   nama_kapten: string
   rute: string
   is_balita: boolean
+  grup_transaksi_id: string | null // TAMBAHAN
 }
 
 type LaporanPerJam = {
@@ -87,8 +88,9 @@ function PusatLaporanContent() {
       kapalData?.forEach((k: any) => kapalMap.set(k.id, k))
     }
 
+    // TAMBAHAN: grup_transaksi_id
     const { data, error } = await supabase.from('pesanan').select(`
-        id, nama_penumpang, kode_tiket, kanal, status, status_boarding, waktu_boarding, is_balita,
+        id, nama_penumpang, kode_tiket, kanal, status, status_boarding, waktu_boarding, is_balita, grup_transaksi_id,
         jadwal:jadwal_id (rute_asal, rute_tujuan, harga, tanggal, jam_berangkat, status_jadwal, kapal_id),
         kursi:kursi_id (nomor_kursi)
       `).eq('status', 'paid').eq('jadwal.tanggal', tanggal)
@@ -127,7 +129,19 @@ function PusatLaporanContent() {
       group.total_pendapatan += item.jadwal.harga || 0
       
       group.rincian.push({
-        id: item.id, nama: item.nama_penumpang, kursi: item.kursi?.nomor_kursi || '-', kanal: item.kanal || 'loket', kode_tiket: item.kode_tiket, harga: item.jadwal.harga || 0, status_boarding: item.status_boarding || 'belum', waktu_boarding: item.waktu_boarding || null, nama_kapal: group.nama_kapal, nama_kapten: group.nama_kapten, rute: `${item.jadwal.rute_asal} - ${item.jadwal.rute_tujuan}`, is_balita: item.is_balita || false
+        id: item.id, 
+        nama: item.nama_penumpang, 
+        kursi: item.kursi?.nomor_kursi || '-', 
+        kanal: item.kanal || 'loket', 
+        kode_tiket: item.kode_tiket, 
+        harga: item.jadwal.harga || 0, 
+        status_boarding: item.status_boarding || 'belum', 
+        waktu_boarding: item.waktu_boarding || null, 
+        nama_kapal: group.nama_kapal, 
+        nama_kapten: group.nama_kapten, 
+        rute: `${item.jadwal.rute_asal} - ${item.jadwal.rute_tujuan}`, 
+        is_balita: item.is_balita || false,
+        grup_transaksi_id: item.grup_transaksi_id || null // TAMBAHAN
       })
     })
     setLaporan(Object.values(groupedByJam).sort((a, b) => a.jam.localeCompare(b.jam)))
@@ -157,47 +171,112 @@ function PusatLaporanContent() {
   const laporanBelumClosed = laporan.filter(l => tanggal === hariIniStr && l.jam >= jamSekarang && ((parseInt(l.jam.split(':')[0])*60 + parseInt(l.jam.split(':')[1])) - (parseInt(jamSekarang.split(':')[0])*60 + parseInt(jamSekarang.split(':')[1]))) <= 60)
   const laporanSudahClosed = laporan.filter(l => tanggal !== hariIniStr || l.jam < jamSekarang)
   
-  const rincianAktif = expandedJam ? laporanSudahClosed.find(l => l.jam === expandedJam) : null
+  const rincianAktif = expandedJam ? laporan.find(l => l.jam === expandedJam) : null
 
+  // ================= LOGIKA BARU: TEMPELKAN BALITA KE ORTU =================
   const urutkanBerdasarkanScan = (rincian: RincianPenumpang[]) => {
-    return [...rincian].sort((a, b) => {
-      if (!a.waktu_boarding && !b.waktu_boarding) return 0;
-      if (!a.waktu_boarding) return 1;
-      if (!b.waktu_boarding) return -1;
-      return new Date(a.waktu_boarding).getTime() - new Date(b.waktu_boarding).getTime();
-    });
+    // 1. Kelompokkan berdasarkan grup_transaksi_id (atau id unik kalau grup kosong)
+    const grupMap = new Map<string, RincianPenumpang[]>()
+    
+    rincian.forEach(p => {
+      const key = p.grup_transaksi_id || p.id
+      if (!grupMap.has(key)) grupMap.set(key, [])
+      grupMap.get(key)!.push(p)
+    })
+
+    // 2. Urutkan orang dewasa di setiap grup, lalu tempel balita di bawahnya
+    const grupArray = Array.from(grupMap.values()).map(grup => {
+      // Pisahkan dewasa dan balita dalam 1 grup
+      const dewasa = grup.filter(p => !p.is_balita).sort((a, b) => {
+        if (!a.waktu_boarding && !b.waktu_boarding) return 0;
+        if (!a.waktu_boarding) return 1;
+        if (!b.waktu_boarding) return -1;
+        return new Date(a.waktu_boarding).getTime() - new Date(b.waktu_boarding).getTime();
+      })
+      const balita = grup.filter(p => p.is_balita)
+      
+      // Gabungkan: Dewasa duluan, baru Balita
+      return [...dewasa, ...balita]
+    })
+
+    // 3. Urutkan grup berdasarkan waktu scan orang dewasa pertama di grup itu
+    grupArray.sort((grupA, grupB) => {
+      const waktuA = grupA[0]?.waktu_boarding
+      const waktuB = grupB[0]?.waktu_boarding
+      if (!waktuA && !waktuB) return 0;
+      if (!waktuA) return 1;
+      if (!waktuB) return -1;
+      return new Date(waktuA).getTime() - new Date(waktuB).getTime();
+    })
+
+    // 4. Ratakan kembali jadi 1 array
+    return grupArray.flat()
   }
+  // ========================================================================
 
   const potongKode = (kode: string) => kode.length > 6 ? kode.slice(-6) : kode
+
+  const dataUrut = rincianAktif ? urutkanBerdasarkanScan(rincianAktif.rincian) : []
+  const barisPerHalaman = 30
+  const halamanData: RincianPenumpang[][] = []
+  
+  for (let i = 0; i < dataUrut.length; i += barisPerHalaman) {
+    halamanData.push(dataUrut.slice(i, i + barisPerHalaman))
+  }
+
+  const totalDewasa = rincianAktif ? rincianAktif.rincian.filter(p => !p.is_balita).length : 0;
+  const totalBalita = rincianAktif ? rincianAktif.rincian.filter(p => p.is_balita).length : 0;
+
+  const tanggalFormatHeader = new Date(tanggal).toLocaleDateString('id-ID', { day: '2-digit', month: 'long', year: 'numeric' })
 
   return (
     <>
       <style dangerouslySetInnerHTML={{__html: `
         @media print {
-          @page { size: A4; margin: 0 !important; }
-          html, body {
-            margin: 0 !important;
+          @page { 
+            size: A4; 
+            margin: 15mm 15mm 20mm 15mm;
+          }
+          body { background: white; margin: 0; }
+          .print-hidden { display: none !important; }
+          html, body { 
+            height: auto !important; 
+            overflow: visible !important; 
+            margin: 0 !important; 
             padding: 0 !important;
-            background: white !important;
-            height: auto !important;
-            overflow: visible !important;
           }
-          body * { visibility: hidden; }
-          .print-container, .print-container * { visibility: visible; }
-          .print-container {
-            position: absolute;
-            left: 0;
-            top: 0;
-            width: 100%;
-            padding: 15mm !important;
+          
+          table { font-size: 11px !important; width: 100%; border-collapse: collapse; }
+          th, td { padding: 3px 6px !important; }
+          
+          tr { page-break-inside: avoid; }
+          
+          .page-break {
+            page-break-after: always;
+            break-after: page;
+            position: relative;
+            min-height: 100vh;
             box-sizing: border-box;
-            background: white;
           }
-          .screen-only { display: none !important; }
+          
+          .page-break:last-child {
+            page-break-after: auto;
+            break-after: auto;
+          }
+
+          .nomor-halaman {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            text-align: center;
+            font-size: 12px;
+            color: #000;
+          }
         }
       `}} />
 
-      <div className="screen-only h-[100dvh] w-full bg-gray-50 flex flex-col overflow-hidden">
+      <div className="h-[100dvh] w-full bg-gray-50 flex flex-col overflow-hidden print:hidden">
         
         {mode === 'menu' && (
           <div className="max-w-md w-full mx-auto p-4 flex-1 flex flex-col">
@@ -271,31 +350,28 @@ function PusatLaporanContent() {
                 <div className="flex-1 overflow-y-auto w-full p-4">
                   <div className="max-w-md mx-auto space-y-6">
                     <div>
-                      <h2 className="text-sm font-bold text-gray-800 mb-2 border-b border-gray-300 pb-1">Jadwal Belum Closing</h2>
+                      <h2 className="text-sm font-bold text-gray-800 mb-2 border-b border-gray-300 pb-1">OPEN SCHEDULE</h2>
                       {laporanBelumClosed.length === 0 ? (
                         <div className="bg-white p-4 rounded-lg border border-gray-200 text-center shadow-sm">
-                          <p className="text-gray-500 text-xs">Belum ada jadwal.</p>
+                          <p className="text-gray-500 text-xs">Belum ada jadwal open.</p>
                         </div>
                       ) : (
                         <div className="space-y-2">
                           {laporanBelumClosed.map((l) => (
                             <div key={l.jam} className="bg-white rounded-lg border border-gray-200 overflow-hidden shadow-sm">
-                              <div className="bg-blue-50 px-3 py-2 flex justify-between items-center">
-                                <span className="font-bold text-xs text-gray-900">🕒 Jam {l.jam}</span>
-                                <span className="text-xs font-bold text-blue-600">{l.total_terjual} Penumpang</span>
-                              </div>
-                              <div className="p-2">
-                                {l.rincian.length === 0 ? (
-                                  <p className="text-[10px] text-gray-400 italic text-center py-1">Belum ada penumpang.</p>
-                                ) : (
-                                  l.rincian.map((p, idx) => (
-                                    <div key={p.id} className="text-[11px] p-1 text-gray-800 border-b border-gray-100 last:border-0">
-                                      {idx + 1}. {p.nama} / {p.kursi} <span className="text-gray-500">({potongKode(p.kode_tiket)})</span>
-                                      {p.is_balita && <span className="text-[9px] text-orange-600 ml-1">(Balita)</span>}
-                                    </div>
-                                  ))
-                                )}
-                              </div>
+                              <button 
+                                onClick={() => setExpandedJam(l.jam)}
+                                className="w-full px-3 py-2 flex justify-between items-center hover:bg-gray-50 transition"
+                              >
+                                <div className="text-left">
+                                  <p className="font-bold text-xs text-gray-900">Jam {l.jam}</p>
+                                  <p className="text-[10px] text-gray-600">{l.nama_kapal}</p>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                  <span className="text-[9px] bg-blue-100 text-blue-800 px-1.5 py-0.5 rounded font-bold">{l.total_terjual} Org</span>
+                                  <span className="text-blue-600 text-[10px]">▶</span>
+                                </div>
+                              </button>
                             </div>
                           ))}
                         </div>
@@ -303,10 +379,10 @@ function PusatLaporanContent() {
                     </div>
 
                     <div>
-                      <h2 className="text-sm font-bold text-gray-800 mb-2 border-b border-gray-300 pb-1">Jadwal Sudah Closing</h2>
+                      <h2 className="text-sm font-bold text-gray-800 mb-2 border-b border-gray-300 pb-1">CLOSING SCHEDULE</h2>
                       {laporanSudahClosed.length === 0 ? (
                         <div className="bg-white p-4 rounded-lg border border-gray-200 text-center shadow-sm">
-                          <p className="text-gray-500 text-xs">Belum ada jadwal.</p>
+                          <p className="text-gray-500 text-xs">Belum ada jadwal closing.</p>
                         </div>
                       ) : (
                         <div className="space-y-2">
@@ -314,15 +390,15 @@ function PusatLaporanContent() {
                             <div key={l.jam} className="bg-white rounded-lg border border-gray-200 shadow-sm">
                               <button 
                                 onClick={() => setExpandedJam(l.jam)} 
-                                className="w-full px-3 py-2.5 flex justify-between items-center hover:bg-gray-50 transition"
+                                className="w-full px-3 py-2 flex justify-between items-center hover:bg-gray-50 transition"
                               >
-                                <div className="flex items-center gap-2">
-                                  <span className="text-sm">📋</span>
-                                  <span className="font-bold text-xs text-gray-900">Manifest Jam {l.jam}</span>
+                                <div className="text-left">
+                                  <p className="font-bold text-xs text-gray-900">Jam {l.jam}</p>
+                                  <p className="text-[10px] text-gray-600">{l.nama_kapal}</p>
                                 </div>
-                                <div className="flex items-center gap-3">
-                                  <span className="text-[10px] font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full">{l.total_terjual} Penumpang</span>
-                                  <span className="text-[10px] text-blue-600">▼</span>
+                                <div className="flex items-center gap-2">
+                                  <span className="text-[9px] bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded font-bold">{l.total_terjual} Org</span>
+                                  <span className="text-blue-600 text-[10px]">▶</span>
                                 </div>
                               </button>
                             </div>
@@ -339,7 +415,7 @@ function PusatLaporanContent() {
                   <div className="max-w-md mx-auto flex justify-between items-center">
                     <div>
                       <h1 className="text-xl font-bold text-gray-900 leading-tight">Rincian Manifest</h1>
-                      <p className="text-sm text-gray-600 mt-0.5">Jam {expandedJam}</p>
+                      <p className="text-sm text-gray-600 mt-0.5">Jam {expandedJam} - {tanggalFormatHeader}</p>
                     </div>
                     <button onClick={() => setExpandedJam(null)} className="text-xs bg-red-50 text-red-600 hover:bg-red-100 px-3 py-1.5 rounded border border-red-200 font-bold">
                       Tutup
@@ -348,11 +424,13 @@ function PusatLaporanContent() {
                 </div>
 
                 <div className="flex-shrink-0 bg-blue-50 p-4 border-b border-blue-200">
-                  <div className="max-w-md mx-auto text-[11px] grid grid-cols-[80px_10px_1fr] gap-y-1 text-gray-700">
-                    <span>Tanggal</span><span>:</span><span>{tanggal}</span>
+                  <div className="max-w-md mx-auto text-[11px] grid grid-cols-[100px_10px_1fr] gap-y-1.5 text-gray-700">
+                    <span>Tanggal</span><span>:</span><span>{tanggalFormatHeader}</span>
                     <span>Rute</span><span>:</span><span>{ruteLengkap}</span>
                     <span>Kapal</span><span>:</span><span className="font-medium text-gray-900">{rincianAktif?.nama_kapal}</span>
                     <span>Kapten</span><span>:</span><span className="font-medium text-gray-900">{rincianAktif?.nama_kapten}</span>
+                    <span>Total Penumpang</span><span>:</span><span className="font-bold">{rincianAktif?.total_terjual} Orang</span>
+                    <span></span><span></span><span className="font-medium">Dewasa {totalDewasa} org | <span className="text-orange-600">Balita {totalBalita} org</span></span>
                   </div>
                 </div>
 
@@ -404,49 +482,66 @@ function PusatLaporanContent() {
       </div>
 
       {rincianAktif && (
-        <div className="print-container" style={{ display: 'none' }}>
-          <style>{`
-            @media print {
-              .print-container { display: block !important; }
-            }
-          `}</style>
-          <h1 className="text-lg font-bold text-center mb-4">LAPORAN MANIFEST PENUMPANG JAM {rincianAktif.jam}</h1>
+        <div className="hidden print:block w-full">
           
-          <div className="mb-4 text-xs grid grid-cols-[120px_10px_1fr] gap-y-1">
-            <span>Tanggal</span><span>:</span><span>{tanggal}</span>
-            <span>Rute</span><span>:</span><span>{ruteLengkap}</span>
-            <span>Kapal</span><span>:</span><span>{rincianAktif.nama_kapal}</span>
-            <span>Kapten</span><span>:</span><span>{rincianAktif.nama_kapten}</span>
-            <span className="whitespace-nowrap">Jumlah Penumpang</span><span>:</span><span className="font-bold">{rincianAktif.total_terjual} Orang</span>
-          </div>
-          
-          <table className="w-full text-xs border-collapse border border-gray-400">
-            <thead>
-              <tr className="bg-gray-200 text-center text-gray-900">
-                <th className="border border-gray-400 px-2 py-1 w-8">NO</th>
-                <th className="border border-gray-400 px-2 py-1">NAMA / KURSI</th>
-                <th className="border border-gray-400 px-2 py-1">WAKTU SCAN</th>
-              </tr>
-            </thead>
-            <tbody>
-              {urutkanBerdasarkanScan(rincianAktif.rincian).map((p, idx) => (
-                <tr key={p.id} className="text-gray-900 text-center">
-                  <td className="border border-gray-400 px-2 py-1">{idx + 1}</td>
-                  <td className="border border-gray-400 px-2 py-1 font-bold text-left">
-                    {p.nama} / {p.kursi}
-                    {p.is_balita && <span className="text-xs text-orange-600 ml-1">(Balita)</span>}
-                  </td>
-                  <td className="border border-gray-400 px-2 py-1">
-                    {p.waktu_boarding ? new Date(p.waktu_boarding).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) : '-'}
-                  </td>
-                </tr>
-              ))}
-              <tr className="font-bold bg-gray-300 text-center text-gray-900">
-                <td colSpan={2} className="border border-gray-400 px-2 py-1 text-center">TOTAL PENUMPANG</td>
-                <td className="border border-gray-400 px-2 py-1 text-center">{rincianAktif.total_terjual}</td>
-              </tr>
-            </tbody>
-          </table>
+          {halamanData.map((halaman, pageIdx) => {
+            const isLastPage = pageIdx === halamanData.length - 1
+            const startNo = pageIdx * barisPerHalaman + 1
+            const nomorHalaman = pageIdx + 1
+
+            return (
+              <div key={pageIdx} className="page-break">
+                
+                <div className="text-center mb-4">
+                  <h1 className="text-xl font-bold text-gray-900">LAPORAN MANIFEST PENUMPANG JAM {expandedJam}</h1>
+                </div>
+                <div className="mb-4 text-sm grid grid-cols-[150px_10px_1fr] gap-y-1">
+                  <span>Tanggal</span><span>:</span><span>{tanggalFormatHeader}</span>
+                  <span>Rute</span><span>:</span><span>{ruteLengkap}</span>
+                  <span>Kapal</span><span>:</span><span>{rincianAktif.nama_kapal}</span>
+                  <span>Kapten</span><span>:</span><span>{rincianAktif.nama_kapten}</span>
+                  <span>Total Penumpang</span><span>:</span><span className="font-bold">{rincianAktif.total_terjual} Orang</span>
+                  <span></span><span></span><span>Dewasa {totalDewasa} org | Balita {totalBalita} org</span>
+                </div>
+
+                <table className="w-full text-sm border-collapse border border-gray-400">
+                  <thead>
+                    <tr className="bg-gray-200 text-center text-gray-900">
+                      <th className="border border-gray-400 px-2 py-2 text-center" style={{ width: '40px' }}>NO</th>
+                      <th className="border border-gray-400 px-2 py-2 text-center">NAMA / KURSI</th>
+                      <th className="border border-gray-400 px-2 py-2 text-center" style={{ width: '80px' }}>SCAN</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {halaman.map((p, idx) => (
+                      <tr key={p.id} className="text-gray-900 text-center">
+                        <td className="border border-gray-400 px-2 py-1 text-center">{startNo + idx}</td>
+                        <td className="border border-gray-400 px-2 py-1 font-bold text-left">
+                          {p.nama} / {p.kursi}
+                          {p.is_balita && <span className="text-xs text-orange-600 ml-1">(Balita)</span>}
+                        </td>
+                        <td className="border border-gray-400 px-2 py-1 text-center">
+                          {p.waktu_boarding ? new Date(p.waktu_boarding).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) : '-'}
+                        </td>
+                      </tr>
+                    ))}
+                    
+                    {isLastPage && (
+                      <tr className="font-bold bg-gray-300 text-center text-gray-900">
+                        <td colSpan={2} className="border border-gray-400 px-2 py-1 text-center">TOTAL PENUMPANG</td>
+                        <td className="border border-gray-400 px-2 py-1 text-center">{rincianAktif.total_terjual}</td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+
+                <div className="nomor-halaman">
+                  {nomorHalaman}
+                </div>
+              </div>
+            )
+          })}
+
         </div>
       )}
     </>

@@ -11,6 +11,7 @@ type RincianPenumpang = {
   status_boarding: string
   waktu_boarding: string | null
   is_balita: boolean
+  grup_transaksi_id: string | null // TAMBAHAN
 }
 
 type LaporanPerJam = {
@@ -65,8 +66,9 @@ function ManifestDetailContent() {
         kapalData?.forEach((k: any) => kapalMap.set(k.id, k))
       }
 
+      // TAMBAHAN: grup_transaksi_id
       const { data: pesananData } = await supabase.from('pesanan').select(`
-          id, nama_penumpang, status_boarding, waktu_boarding, is_balita,
+          id, nama_penumpang, status_boarding, waktu_boarding, is_balita, grup_transaksi_id,
           jadwal:jadwal_id (jam_berangkat, rute_asal, kapal_id),
           kursi:kursi_id (nomor_kursi)
         `).eq('status', 'paid').eq('jadwal.tanggal', tanggal).eq('jadwal.rute_asal', lokasi)
@@ -98,7 +100,8 @@ function ManifestDetailContent() {
           kursi: item.kursi?.nomor_kursi || '-', 
           status_boarding: item.status_boarding || 'belum',
           waktu_boarding: item.waktu_boarding || null,
-          is_balita: item.is_balita || false
+          is_balita: item.is_balita || false,
+          grup_transaksi_id: item.grup_transaksi_id || null // TAMBAHAN
         })
       })
 
@@ -110,14 +113,39 @@ function ManifestDetailContent() {
 
   const handlePrint = () => { setTimeout(() => window.print(), 100) }
   
+  // ================= LOGIKA BARU: TEMPELKAN BALITA KE ORTU =================
   const urutkanBerdasarkanScan = (rincian: RincianPenumpang[]) => {
-    return [...rincian].sort((a, b) => {
-      if (!a.waktu_boarding && !b.waktu_boarding) return 0;
-      if (!a.waktu_boarding) return 1;
-      if (!b.waktu_boarding) return -1;
-      return new Date(a.waktu_boarding).getTime() - new Date(b.waktu_boarding).getTime();
-    });
+    const grupMap = new Map<string, RincianPenumpang[]>()
+    
+    rincian.forEach(p => {
+      const key = p.grup_transaksi_id || p.id
+      if (!grupMap.has(key)) grupMap.set(key, [])
+      grupMap.get(key)!.push(p)
+    })
+
+    const grupArray = Array.from(grupMap.values()).map(grup => {
+      const dewasa = grup.filter(p => !p.is_balita).sort((a, b) => {
+        if (!a.waktu_boarding && !b.waktu_boarding) return 0;
+        if (!a.waktu_boarding) return 1;
+        if (!b.waktu_boarding) return -1;
+        return new Date(a.waktu_boarding).getTime() - new Date(b.waktu_boarding).getTime();
+      })
+      const balita = grup.filter(p => p.is_balita)
+      return [...dewasa, ...balita]
+    })
+
+    grupArray.sort((grupA, grupB) => {
+      const waktuA = grupA[0]?.waktu_boarding
+      const waktuB = grupB[0]?.waktu_boarding
+      if (!waktuA && !waktuB) return 0;
+      if (!waktuA) return 1;
+      if (!waktuB) return -1;
+      return new Date(waktuA).getTime() - new Date(waktuB).getTime();
+    })
+
+    return grupArray.flat()
   }
+  // ========================================================================
 
   if (loading) return <p className="p-6 text-center text-gray-600">Memuat...</p>
   if (!profile) return null
@@ -136,7 +164,6 @@ function ManifestDetailContent() {
   const totalDewasa = rincianAktif ? rincianAktif.rincian.filter(p => !p.is_balita).length : 0;
   const totalBalita = rincianAktif ? rincianAktif.rincian.filter(p => p.is_balita).length : 0;
 
-  // LOGIKA MANUAL PAGINATION (30 baris per halaman)
   const dataUrut = rincianAktif ? urutkanBerdasarkanScan(rincianAktif.rincian) : []
   const barisPerHalaman = 30
   const halamanData: RincianPenumpang[][] = []
@@ -180,7 +207,6 @@ function ManifestDetailContent() {
             break-after: auto;
           }
 
-          /* Nomor halaman di dalam container page-break */
           .nomor-halaman {
             position: absolute;
             bottom: 0;
@@ -327,7 +353,6 @@ function ManifestDetailContent() {
         )}
       </div>
 
-      {/* ================= TAMPILAN PRINT ================= */}
       {rincianAktif && (
         <div className="hidden print:block w-full">
           
@@ -339,7 +364,6 @@ function ManifestDetailContent() {
             return (
               <div key={pageIdx} className="page-break">
                 
-                {/* HEADER SETIAP HALAMAN */}
                 <div className="text-center mb-4">
                   <h1 className="text-xl font-bold text-gray-900">LAPORAN MANIFEST PENUMPANG JAM {expandedJam}</h1>
                 </div>
@@ -352,7 +376,6 @@ function ManifestDetailContent() {
                   <span></span><span></span><span>Dewasa {totalDewasa} org | Balita {totalBalita} org</span>
                 </div>
 
-                {/* TABEL DATA */}
                 <table className="w-full text-sm border-collapse border border-gray-400">
                   <thead>
                     <tr className="bg-gray-200 text-center text-gray-900">
@@ -375,7 +398,6 @@ function ManifestDetailContent() {
                       </tr>
                     ))}
                     
-                    {/* TOTAL PENUMPANG HANYA DI HALAMAN TERAKHIR */}
                     {isLastPage && (
                       <tr className="font-bold bg-gray-300 text-center text-gray-900">
                         <td colSpan={2} className="border border-gray-400 px-2 py-1 text-center">TOTAL PENUMPANG</td>
@@ -385,7 +407,6 @@ function ManifestDetailContent() {
                   </tbody>
                 </table>
 
-                {/* NOMOR HALAMAN (ABSOLUTE DI BAWAH) */}
                 <div className="nomor-halaman">
                   {nomorHalaman}
                 </div>
