@@ -103,8 +103,6 @@ function ScanContent() {
       )
       setScannerAktif(true)
 
-      // === TRIK ZOOM OUT OTOMATIS UNTUK KAMERA HP ===
-      // Memberi jeda sebentar agar kamera menyala sempurna, lalu paksa zoom out
       setTimeout(async () => {
         try {
           const videoElement = document.querySelector('#qr-reader video') as HTMLVideoElement;
@@ -112,11 +110,9 @@ function ScanContent() {
             const stream = videoElement.srcObject as MediaStream;
             const track = stream.getVideoTracks()[0];
             
-            // Cek apakah HP mendukung fitur zoom
             if (track && track.getCapabilities) {
               const capabilities = track.getCapabilities() as any;
               if (capabilities.zoom) {
-                // Memaksa zoom ke batas paling minimum (Zoom Out maksimal)
                 await track.applyConstraints({
                   advanced: [{ zoom: capabilities.zoom.min } as any]
                 });
@@ -127,8 +123,7 @@ function ScanContent() {
         } catch (e) {
           console.warn("HP ini tidak mendukung fitur paksa zoom, abaikan.", e);
         }
-      }, 1500); // Jeda 1.5 detik setelah kamera nyala
-      // ===============================================
+      }, 1500);
 
     } catch (err: any) {
       console.error('Camera error:', err)
@@ -167,7 +162,7 @@ function ScanContent() {
     try {
       const { data: p, error: errP } = await supabase
         .from('pesanan')
-        .select('id, nama_penumpang, nik, kode_tiket, status_boarding, jadwal_id, kursi_id')
+        .select('id, nama_penumpang, nik, kode_tiket, status_boarding, jadwal_id, kursi_id, is_balita')
         .eq('kode_tiket', kodeTiket)
         .maybeSingle()
 
@@ -231,22 +226,29 @@ function ScanContent() {
         return
       }
 
-      const { data: k, error: errK } = await supabase
-        .from('kursi')
-        .select('nomor_kursi')
-        .eq('id', p.kursi_id)
-        .maybeSingle()
+      // === PERBAIKAN: CEK APAKAH BALITA ===
+      let nomorKursi = '-'
+      if (!p.is_balita && p.kursi_id) {
+        const { data: k, error: errK } = await supabase
+          .from('kursi')
+          .select('nomor_kursi')
+          .eq('id', p.kursi_id)
+          .maybeSingle()
 
-      if (errK) {
-        setHasil({ status: 'tidak_valid', pesan: 'Gagal mengambil data kursi, coba lagi' })
-        return
+        if (errK) {
+          setHasil({ status: 'tidak_valid', pesan: 'Gagal mengambil data kursi, coba lagi' })
+          return
+        }
+        nomorKursi = k?.nomor_kursi || '-'
+      } else if (p.is_balita) {
+        nomorKursi = 'Balita'
       }
 
       if (p.status_boarding === 'sudah') {
         setHasil({
           status: 'sudah_boarding',
           pesanan: { ...p, jadwal: j },
-          nomor_kursi: k?.nomor_kursi || '-',
+          nomor_kursi: nomorKursi,
           pesan: 'Sudah pernah di-scan'
         })
         return
@@ -269,8 +271,8 @@ function ScanContent() {
       setHasil({
         status: 'valid',
         pesanan: { ...p, jadwal: j },
-        nomor_kursi: k?.nomor_kursi || '-',
-        pesan: 'Boarding berhasil',
+        nomor_kursi: nomorKursi,
+        pesan: p.is_balita ? 'Boarding Balita berhasil' : 'Boarding berhasil',
       })
     } catch (err) {
       console.error('prosesScan error:', err)
