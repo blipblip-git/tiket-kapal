@@ -136,13 +136,22 @@ function ManifestDetailContent() {
   const totalDewasa = rincianAktif ? rincianAktif.rincian.filter(p => !p.is_balita).length : 0;
   const totalBalita = rincianAktif ? rincianAktif.rincian.filter(p => p.is_balita).length : 0;
 
+  // LOGIKA MANUAL PAGINATION (30 baris per halaman)
+  const dataUrut = rincianAktif ? urutkanBerdasarkanScan(rincianAktif.rincian) : []
+  const barisPerHalaman = 30
+  const halamanData: RincianPenumpang[][] = []
+  
+  for (let i = 0; i < dataUrut.length; i += barisPerHalaman) {
+    halamanData.push(dataUrut.slice(i, i + barisPerHalaman))
+  }
+
   return (
     <div className="h-[100dvh] w-full bg-gray-100 p-3 md:p-6 print:p-0 print:bg-white flex flex-col overflow-hidden print:h-auto print:overflow-visible print:block">
       <style dangerouslySetInnerHTML={{__html: `
         @media print {
           @page { 
             size: A4; 
-            margin: 0 !important;
+            margin: 15mm 15mm 20mm 15mm;
           }
           body { background: white; margin: 0; }
           .print-hidden { display: none !important; }
@@ -152,9 +161,35 @@ function ManifestDetailContent() {
             margin: 0 !important; 
             padding: 0 !important;
           }
-          .print-area { padding: 15mm !important; box-sizing: border-box; }
+          
+          table { font-size: 11px !important; width: 100%; border-collapse: collapse; }
+          th, td { padding: 3px 6px !important; }
+          
           tr { page-break-inside: avoid; }
-          table { page-break-inside: auto; }
+          
+          .page-break {
+            page-break-after: always;
+            break-after: page;
+            position: relative;
+            min-height: 100vh;
+            box-sizing: border-box;
+          }
+          
+          .page-break:last-child {
+            page-break-after: auto;
+            break-after: auto;
+          }
+
+          /* Nomor halaman di dalam container page-break */
+          .nomor-halaman {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            text-align: center;
+            font-size: 12px;
+            color: #000;
+          }
         }
       `}} />
 
@@ -246,15 +281,13 @@ function ManifestDetailContent() {
             </div>
 
             <div className="flex-shrink-0 bg-blue-50 border-b border-blue-200 p-3">
-              <div className="max-w-md mx-auto text-[10px] grid grid-cols-[70px_10px_1fr] gap-y-1.5 text-gray-700">
+              <div className="max-w-md mx-auto text-[10px] grid grid-cols-[100px_10px_1fr] gap-y-1.5 text-gray-700">
                 <span>Tanggal</span><span>:</span><span>{tanggalFormatHeader}</span>
                 <span>Rute</span><span>:</span><span>{lokasi} - {lokasi === 'Tarakan' ? 'Tanjung Selor' : 'Tarakan'}</span>
                 <span>Kapal</span><span>:</span><span className="font-medium text-gray-900">{rincianAktif?.nama_kapal}</span>
                 <span>Kapten</span><span>:</span><span className="font-medium text-gray-900">{rincianAktif?.nama_kapten}</span>
-                <span className="col-span-3 mt-1 pt-1 border-t border-blue-200">
-                  Total Penumpang: <br/>
-                  <span className="font-medium">Dewasa {totalDewasa} orang</span> &nbsp;|&nbsp; <span className="font-medium text-orange-600">Balita {totalBalita} orang</span>
-                </span>
+                <span>Total Penumpang</span><span>:</span><span className="font-bold">{rincianAktif?.total_terjual} Orang</span>
+                <span></span><span></span><span className="font-medium">Dewasa {totalDewasa} org | <span className="text-orange-600">Balita {totalBalita} org</span></span>
               </div>
             </div>
 
@@ -264,7 +297,7 @@ function ManifestDetailContent() {
                   <thead className="bg-gray-100 border-b sticky top-0 z-10">
                     <tr>
                       <th className="border p-1 text-[9px] md:text-xs w-[10%] text-center">No</th>
-                      <th className="border p-1 text-[9px] md:text-xs text-left">Nama / Kursi</th>
+                      <th className="border p-1 text-[9px] md:text-xs text-center">Nama / Kursi</th>
                       <th className="border p-1 text-[9px] md:text-xs w-[20%] text-center">Scan</th>
                     </tr>
                   </thead>
@@ -272,7 +305,7 @@ function ManifestDetailContent() {
                     {rincianAktif && urutkanBerdasarkanScan(rincianAktif.rincian).map((p, idx) => (
                       <tr key={p.id} className="hover:bg-gray-50 text-center">
                         <td className="border p-1 text-[9px] md:text-xs">{idx + 1}</td>
-                        <td className="border p-1 text-[9px] md:text-xs font-bold text-left">
+                        <td className="border p-1 text-[9px] md:text-xs font-bold text-left pl-2">
                           {p.nama} / {p.kursi}
                           {p.is_balita && <span className="text-[8px] md:text-[10px] text-orange-600 ml-1">(Balita)</span>}
                         </td>
@@ -294,44 +327,72 @@ function ManifestDetailContent() {
         )}
       </div>
 
+      {/* ================= TAMPILAN PRINT ================= */}
       {rincianAktif && (
-        <div className="hidden print:block w-full print-area">
-          <h1 className="text-xl font-bold text-center mb-6">LAPORAN MANIFEST PENUMPANG JAM {expandedJam}</h1>
-          <div className="mb-4 text-sm grid grid-cols-[120px_10px_1fr] gap-y-1">
-            <span>Tanggal</span><span>:</span><span>{tanggalFormatHeader}</span>
-            <span>Rute</span><span>:</span><span>{lokasi} - {lokasi === 'Tarakan' ? 'Tanjung Selor' : 'Tarakan'}</span>
-            <span>Kapal</span><span>:</span><span>{rincianAktif.nama_kapal}</span>
-            <span>Kapten</span><span>:</span><span>{rincianAktif.nama_kapten}</span>
-            <span>Total</span><span>:</span><span>{rincianAktif.total_terjual} Orang</span>
-            <span></span><span></span><span>Dewasa: {totalDewasa} org | Balita: {totalBalita} org</span>
-          </div>
-          <table className="w-full text-sm border-collapse border border-gray-400">
-            <thead>
-              <tr className="bg-gray-200 text-center text-gray-900">
-                <th className="border border-gray-400 px-2 py-2 w-10">NO</th>
-                <th className="border border-gray-400 px-2 py-2 text-left">NAMA / KURSI</th>
-                <th className="border border-gray-400 px-2 py-2 w-24">SCAN</th>
-              </tr>
-            </thead>
-            <tbody>
-              {urutkanBerdasarkanScan(rincianAktif.rincian).map((p, idx) => (
-                <tr key={p.id} className="text-gray-900 text-center">
-                  <td className="border border-gray-400 px-2 py-1">{idx + 1}</td>
-                  <td className="border border-gray-400 px-2 py-1 font-bold text-left">
-                    {p.nama} / {p.kursi}
-                    {p.is_balita && <span className="text-xs text-orange-600 ml-1">(Balita)</span>}
-                  </td>
-                  <td className="border border-gray-400 px-2 py-1">
-                    {p.waktu_boarding ? new Date(p.waktu_boarding).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) : '-'}
-                  </td>
-                </tr>
-              ))}
-              <tr className="font-bold bg-gray-300 text-center text-gray-900">
-                <td colSpan={2} className="border border-gray-400 px-2 py-1 text-center">TOTAL PENUMPANG</td>
-                <td className="border border-gray-400 px-2 py-1 text-center">{rincianAktif.total_terjual}</td>
-              </tr>
-            </tbody>
-          </table>
+        <div className="hidden print:block w-full">
+          
+          {halamanData.map((halaman, pageIdx) => {
+            const isLastPage = pageIdx === halamanData.length - 1
+            const startNo = pageIdx * barisPerHalaman + 1
+            const nomorHalaman = pageIdx + 1
+
+            return (
+              <div key={pageIdx} className="page-break">
+                
+                {/* HEADER SETIAP HALAMAN */}
+                <div className="text-center mb-4">
+                  <h1 className="text-xl font-bold text-gray-900">LAPORAN MANIFEST PENUMPANG JAM {expandedJam}</h1>
+                </div>
+                <div className="mb-4 text-sm grid grid-cols-[150px_10px_1fr] gap-y-1">
+                  <span>Tanggal</span><span>:</span><span>{tanggalFormatHeader}</span>
+                  <span>Rute</span><span>:</span><span>{lokasi} - {lokasi === 'Tarakan' ? 'Tanjung Selor' : 'Tarakan'}</span>
+                  <span>Kapal</span><span>:</span><span>{rincianAktif.nama_kapal}</span>
+                  <span>Kapten</span><span>:</span><span>{rincianAktif.nama_kapten}</span>
+                  <span>Total Penumpang</span><span>:</span><span className="font-bold">{rincianAktif.total_terjual} Orang</span>
+                  <span></span><span></span><span>Dewasa {totalDewasa} org | Balita {totalBalita} org</span>
+                </div>
+
+                {/* TABEL DATA */}
+                <table className="w-full text-sm border-collapse border border-gray-400">
+                  <thead>
+                    <tr className="bg-gray-200 text-center text-gray-900">
+                      <th className="border border-gray-400 px-2 py-2 text-center" style={{ width: '40px' }}>NO</th>
+                      <th className="border border-gray-400 px-2 py-2 text-center">NAMA / KURSI</th>
+                      <th className="border border-gray-400 px-2 py-2 text-center" style={{ width: '80px' }}>SCAN</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {halaman.map((p, idx) => (
+                      <tr key={p.id} className="text-gray-900 text-center">
+                        <td className="border border-gray-400 px-2 py-1 text-center">{startNo + idx}</td>
+                        <td className="border border-gray-400 px-2 py-1 font-bold text-left">
+                          {p.nama} / {p.kursi}
+                          {p.is_balita && <span className="text-xs text-orange-600 ml-1">(Balita)</span>}
+                        </td>
+                        <td className="border border-gray-400 px-2 py-1 text-center">
+                          {p.waktu_boarding ? new Date(p.waktu_boarding).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) : '-'}
+                        </td>
+                      </tr>
+                    ))}
+                    
+                    {/* TOTAL PENUMPANG HANYA DI HALAMAN TERAKHIR */}
+                    {isLastPage && (
+                      <tr className="font-bold bg-gray-300 text-center text-gray-900">
+                        <td colSpan={2} className="border border-gray-400 px-2 py-1 text-center">TOTAL PENUMPANG</td>
+                        <td className="border border-gray-400 px-2 py-1 text-center">{rincianAktif.total_terjual}</td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+
+                {/* NOMOR HALAMAN (ABSOLUTE DI BAWAH) */}
+                <div className="nomor-halaman">
+                  {nomorHalaman}
+                </div>
+              </div>
+            )
+          })}
+
         </div>
       )}
 
