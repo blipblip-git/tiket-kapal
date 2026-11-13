@@ -29,13 +29,11 @@ function JualTiketAgenContent() {
   const [tanggal, setTanggal] = useState('')
   const [isRefreshing, setIsRefreshing] = useState(false)
 
-  // STATE UNTUK TEKS DINAMIS
   const [teks, setTeks] = useState({
     judul_jual_tiket: 'Jual Tiket',
   })
 
   useEffect(() => {
-    // FETCH TEKS DARI DATABASE
     async function fetchTeks() {
       const { data } = await supabase.from('pengaturan_teks').select('data_teks').eq('role', 'agen').single()
       if (data && data.data_teks) {
@@ -46,7 +44,6 @@ function JualTiketAgenContent() {
   }, [])
 
   useEffect(() => {
-    // JIKA MODE PREVIEW DARI SUPERADMIN, BUAT PROFIL PALSU
     if (isPreview) {
       setProfile({ 
         id: 'preview', 
@@ -116,8 +113,8 @@ function JualTiketAgenContent() {
             rute_tujuan: t.rute_tujuan,
             tanggal: tgl,
             jam_berangkat: t.jam_berangkat,
-            harga: t.harga || 150000, // <-- PERBAIKAN 1
-            status: 'aktif',          // <-- PERBAIKAN 2
+            harga: t.harga || 150000,
+            status: 'aktif',
             status_jadwal: 'open',
           });
         }
@@ -134,24 +131,32 @@ function JualTiketAgenContent() {
           
           const kursiPayload: any[] = []
           for (const j of insertedJadwal) {
-            const t = templates.find((x: any) => 
-              x.kapal_id === j.kapal_id && 
-              x.rute_asal === j.rute_asal && 
-              x.jam_berangkat === j.jam_berangkat
-            )
-            const kapasitas = t?.kapal?.kapasitas || 0
-            if (kapasitas > 0) {
-              for (let i = 1; i <= kapasitas; i++) {
-                kursiPayload.push({
-                  jadwal_id: j.id,
-                  nomor_kursi: i.toString(),
-                  status: 'kosong'
-                })
+            const { data: existingKursi } = await supabase
+              .from('kursi')
+              .select('id')
+              .eq('jadwal_id', j.id)
+              .limit(1)
+
+            if (!existingKursi || existingKursi.length === 0) {
+              const t = templates.find((x: any) => 
+                x.kapal_id === j.kapal_id && 
+                x.rute_asal === j.rute_asal && 
+                x.jam_berangkat === j.jam_berangkat
+              )
+              const kapasitas = t?.kapal?.kapasitas || 0
+              if (kapasitas > 0) {
+                for (let i = 1; i <= kapasitas; i++) {
+                  kursiPayload.push({
+                    jadwal_id: j.id,
+                    nomor_kursi: i.toString(),
+                    status: 'kosong'
+                  })
+                }
               }
             }
           }
           if (kursiPayload.length > 0) {
-            await supabase.from('kursi').insert(kursiPayload, { ignoreDuplicates: true })
+            await supabase.from('kursi').insert(kursiPayload)
           }
         }
       }
@@ -231,7 +236,6 @@ function JualTiketAgenContent() {
         <div className="max-w-md mx-auto">
           <div className="flex justify-between items-start mb-3">
             <div>
-              {/* TEKS DINAMIS DARI DATABASE */}
               <h1 className="text-xl font-bold text-gray-900 leading-tight">{teks.judul_jual_tiket}</h1>
               <p className="text-sm text-gray-600 mt-0.5">Agen : {profile.lokasi}</p>
             </div>

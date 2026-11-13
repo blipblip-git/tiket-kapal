@@ -12,7 +12,6 @@ type Kapal = {
   layout_kursi: string
   status: 'aktif' | 'cadangan' | 'rusak'
   catatan: string | null
-  foto_url: string | null
   nama_kapten: string | null
 }
 
@@ -24,7 +23,6 @@ export default function ManajemenKapalPage() {
   const [aksiLoading, setAksiLoading] = useState<string | null>(null)
   const [pesan, setPesan] = useState<{ tipe: 'ok' | 'err'; teks: string } | null>(null)
 
-  // State Modal
   const [modalTambah, setModalTambah] = useState(false)
   const [modalEdit, setModalEdit] = useState<Kapal | null>(null)
   
@@ -34,39 +32,31 @@ export default function ManajemenKapalPage() {
   const [inputStatus, setInputStatus] = useState<'aktif' | 'cadangan' | 'rusak'>('aktif')
   const [inputCatatan, setInputCatatan] = useState('')
   const [inputKapten, setInputKapten] = useState('')
-  const [inputFoto, setInputFoto] = useState<File | null>(null)
   const [modalLoading, setModalLoading] = useState(false)
 
   useEffect(() => {
     async function init() {
-      // 1. Coba ambil dari Supabase Auth dulu
       let p = await getProfile()
-      
-      // 2. Jika gagal, coba dari localStorage
       if (!p) {
         const sesiLokal = getOperatorSession()
-        if (sesiLokal) {
-          p = sesiLokal as unknown as Profile
-        }
+        if (sesiLokal) p = sesiLokal as unknown as Profile
       }
-
-      // 3. Jika dua-duanya kosong, baru tendang ke login
       if (!p || p.role !== 'admin_utama') {
         router.push('/login')
         return
       }
-      
       setProfile(p)
-      await loadKapal()
+      await loadKapal(p.id)
       setLoading(false)
     }
     init()
   }, [router])
 
-  async function loadKapal() {
+  async function loadKapal(operatorId: string) {
     const { data, error } = await supabase
       .from('kapal')
       .select('*')
+      .eq('operator_id', operatorId)
       .order('nama', { ascending: true })
 
     if (error) {
@@ -76,42 +66,16 @@ export default function ManajemenKapalPage() {
     setKapalList((data || []) as Kapal[])
   }
 
-  async function uploadFoto(file: File, namaKapal: string) {
-    const fileExt = file.name.split('.').pop()
-    const fileName = `${namaKapal.replace(/\s+/g, '_')}_${Date.now()}.${fileExt}`
-    const filePath = `${fileName}`
-
-    const { error: uploadError } = await supabase.storage
-      .from('kapal')
-      .upload(filePath, file)
-
-    if (uploadError) throw uploadError
-
-    const { data } = supabase.storage.from('kapal').getPublicUrl(filePath)
-    return data.publicUrl
-  }
-
-  // ==================== TAMBAH ====================
   async function handleTambah(e: React.FormEvent) {
     e.preventDefault()
     setPesan(null)
+    if (!profile) return
     if (!inputNama || !inputKapasitas || !inputKapten) {
       setPesan({ tipe: 'err', teks: 'Nama, kapasitas, dan nama kapten wajib diisi.' })
       return
     }
 
     setModalLoading(true)
-    let fotoUrl = null
-
-    try {
-      if (inputFoto) {
-        fotoUrl = await uploadFoto(inputFoto, inputNama)
-      }
-    } catch (err: any) {
-      setPesan({ tipe: 'err', teks: 'Gagal upload foto: ' + err.message })
-      setModalLoading(false)
-      return
-    }
 
     const { error } = await supabase.from('kapal').insert({
       nama: inputNama,
@@ -120,7 +84,7 @@ export default function ManajemenKapalPage() {
       status: inputStatus,
       catatan: inputCatatan || null,
       nama_kapten: inputKapten,
-      foto_url: fotoUrl,
+      operator_id: profile.id
     })
 
     setModalLoading(false)
@@ -132,14 +96,13 @@ export default function ManajemenKapalPage() {
 
     setPesan({ tipe: 'ok', teks: 'Kapal berhasil ditambahkan.' })
     setModalTambah(false)
-    setInputNama(''); setInputKapasitas(''); setInputLayout('2-3'); setInputStatus('aktif'); setInputCatatan(''); setInputKapten(''); setInputFoto(null)
-    await loadKapal()
+    setInputNama(''); setInputKapasitas(''); setInputLayout('2-3'); setInputStatus('aktif'); setInputCatatan(''); setInputKapten('')
+    await loadKapal(profile.id)
   }
 
-  // ==================== EDIT ====================
   async function handleEdit(e: React.FormEvent) {
     e.preventDefault()
-    if (!modalEdit) return
+    if (!modalEdit || !profile) return
     setPesan(null)
     if (!inputNama || !inputKapasitas || !inputKapten) {
       setPesan({ tipe: 'err', teks: 'Nama, kapasitas, dan nama kapten wajib diisi.' })
@@ -147,17 +110,6 @@ export default function ManajemenKapalPage() {
     }
 
     setModalLoading(true)
-    let fotoUrl = modalEdit.foto_url
-
-    try {
-      if (inputFoto) {
-        fotoUrl = await uploadFoto(inputFoto, inputNama)
-      }
-    } catch (err: any) {
-      setPesan({ tipe: 'err', teks: 'Gagal upload foto: ' + err.message })
-      setModalLoading(false)
-      return
-    }
 
     const { error } = await supabase
       .from('kapal')
@@ -168,7 +120,6 @@ export default function ManajemenKapalPage() {
         status: inputStatus,
         catatan: inputCatatan || null,
         nama_kapten: inputKapten,
-        foto_url: fotoUrl,
       })
       .eq('id', modalEdit.id)
 
@@ -181,10 +132,9 @@ export default function ManajemenKapalPage() {
 
     setPesan({ tipe: 'ok', teks: 'Kapal berhasil diupdate.' })
     setModalEdit(null)
-    await loadKapal()
+    await loadKapal(profile.id)
   }
 
-  // ==================== HAPUS ====================
   async function handleHapus(target: Kapal) {
     if (!confirm(`Yakin mau hapus kapal ${target.nama}?\n\nPeringatan: Kalau ada jadwal terkait, sistem akan menolak.`)) return
 
@@ -197,7 +147,7 @@ export default function ManajemenKapalPage() {
       return
     }
     setPesan({ tipe: 'ok', teks: 'Kapal berhasil dihapus.' })
-    await loadKapal()
+    if (profile) await loadKapal(profile.id)
   }
 
   function bukaEdit(k: Kapal) {
@@ -208,7 +158,6 @@ export default function ManajemenKapalPage() {
     setInputStatus(k.status)
     setInputCatatan(k.catatan || '')
     setInputKapten(k.nama_kapten || '')
-    setInputFoto(null)
   }
 
   const getStatusBadge = (status: string) => {
@@ -221,6 +170,19 @@ export default function ManajemenKapalPage() {
 
   return (
     <div className="min-h-screen bg-gray-50 py-8 px-4">
+      <style dangerouslySetInnerHTML={{__html: `
+        @keyframes speedboat {
+          0% { transform: translateX(-20px) scaleX(-1); opacity: 0; }
+          10% { opacity: 1; }
+          90% { opacity: 1; }
+          100% { transform: translateX(40px) scaleX(-1); opacity: 0; }
+        }
+        .animate-speedboat {
+          animation: speedboat 1.5s linear infinite;
+          display: inline-block;
+        }
+      `}} />
+
       <div className="max-w-6xl mx-auto">
         <div className="mb-6 flex items-center justify-between">
           <div>
@@ -228,10 +190,7 @@ export default function ManajemenKapalPage() {
             <p className="text-sm text-gray-500 mt-1">Kelola kapal aktif, cadangan, dan rusak.</p>
           </div>
           <div className="flex gap-3">
-            <button
-              onClick={() => setModalTambah(true)}
-              className="bg-blue-600 text-white px-4 py-2 rounded shadow hover:bg-blue-700 text-sm font-medium"
-            >
+            <button onClick={() => setModalTambah(true)} className="bg-blue-600 text-white px-4 py-2 rounded shadow hover:bg-blue-700 text-sm font-medium">
               + Tambah Kapal
             </button>
             <button onClick={() => router.push('/dashboard')} className="text-sm text-blue-600 hover:underline px-2">
@@ -250,7 +209,7 @@ export default function ManajemenKapalPage() {
           <table className="w-full text-sm">
             <thead className="bg-gray-100 text-gray-700">
               <tr>
-                <th className="text-center px-4 py-3">Foto</th>
+                <th className="text-center px-4 py-3">Ilustrasi</th>
                 <th className="text-left px-4 py-3">Nama Kapal</th>
                 <th className="text-left px-4 py-3">Nama Kapten</th>
                 <th className="text-center px-4 py-3">Kapasitas</th>
@@ -265,12 +224,9 @@ export default function ManajemenKapalPage() {
               )}
               {kapalList.map((k) => (
                 <tr key={k.id} className="border-t border-gray-100">
-                  <td className="px-4 py-3 text-center">
-                    {k.foto_url ? (
-                      <img src={k.foto_url} alt={k.nama} className="w-16 h-12 object-cover rounded mx-auto" />
-                    ) : (
-                      <span className="text-gray-400 text-xs">No Foto</span>
-                    )}
+                  <td className="px-4 py-3 text-center relative overflow-hidden w-24">
+                    {/* ANIMASI KAPAL LEWAT (KIRI KE KANAN, HADAP KANAN) */}
+                    <div className="text-4xl animate-speedboat">🛥️</div>
                   </td>
                   <td className="px-4 py-3 font-bold text-gray-800">{k.nama}</td>
                   <td className="px-4 py-3 text-gray-700">{k.nama_kapten || '-'}</td>
@@ -290,7 +246,7 @@ export default function ManajemenKapalPage() {
         </div>
       </div>
 
-      {/* ==================== MODAL TAMBAH ==================== */}
+      {/* MODAL TAMBAH */}
       {modalTambah && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-lg shadow-xl max-w-sm w-full p-6">
@@ -304,9 +260,6 @@ export default function ManajemenKapalPage() {
 
               <label className="block text-sm font-medium text-gray-700 mb-1">Kapasitas (Seat)</label>
               <input type="number" value={inputKapasitas} onChange={(e) => setInputKapasitas(e.target.value)} className="w-full border rounded px-3 py-2 mb-3 text-gray-900" placeholder="Contoh: 60" required />
-
-              <label className="block text-sm font-medium text-gray-700 mb-1">Foto Kapal</label>
-              <input type="file" accept="image/*" onChange={(e) => setInputFoto(e.target.files ? e.target.files[0] : null)} className="w-full border rounded px-3 py-2 mb-3 text-gray-900 text-sm" />
 
               <label className="block text-sm font-medium text-gray-700 mb-1">Layout Kursi</label>
               <select value={inputLayout} onChange={(e) => setInputLayout(e.target.value)} className="w-full border rounded px-3 py-2 mb-3 text-gray-900">
@@ -336,7 +289,7 @@ export default function ManajemenKapalPage() {
         </div>
       )}
 
-      {/* ==================== MODAL EDIT ==================== */}
+      {/* MODAL EDIT */}
       {modalEdit && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-lg shadow-xl max-w-sm w-full p-6">
@@ -350,12 +303,6 @@ export default function ManajemenKapalPage() {
 
               <label className="block text-sm font-medium text-gray-700 mb-1">Kapasitas (Seat)</label>
               <input type="number" value={inputKapasitas} onChange={(e) => setInputKapasitas(e.target.value)} className="w-full border rounded px-3 py-2 mb-3 text-gray-900" required />
-
-              <label className="block text-sm font-medium text-gray-700 mb-1">Ganti Foto (Opsional)</label>
-              <input type="file" accept="image/*" onChange={(e) => setInputFoto(e.target.files ? e.target.files[0] : null)} className="w-full border rounded px-3 py-2 mb-3 text-gray-900 text-sm" />
-              {modalEdit.foto_url && !inputFoto && (
-                <p className="text-xs text-gray-500 mb-3">Foto saat ini sudah terpasang.</p>
-              )}
 
               <label className="block text-sm font-medium text-gray-700 mb-1">Layout Kursi</label>
               <select value={inputLayout} onChange={(e) => setInputLayout(e.target.value)} className="w-full border rounded px-3 py-2 mb-3 text-gray-900">

@@ -14,6 +14,7 @@ type HasilPencarian = {
   kanal: string
   kursi: string
   jadwal: string
+  jadwal_singkat: string // <-- TAMBAHAN
   kapal: string
   tanggal: string
   jam: string
@@ -72,19 +73,31 @@ function CetakUlangContent() {
     }
 
     if (data && data.length > 0) {
-      const mapped = data.map((item: any) => ({
-        id: item.id,
-        nama_penumpang: item.nama_penumpang,
-        kode_tiket: item.kode_tiket,
-        kanal: item.kanal,
-        kursi: item.kursi?.nomor_kursi || '-',
-        jadwal: `${item.jadwal?.rute_asal} - ${item.jadwal?.rute_tujuan}`,
-        kapal: item.jadwal?.kapal?.nama || '-',
-        tanggal: item.jadwal?.tanggal || '-',
-        jam: item.jadwal?.jam_berangkat || '-',
-        harga: item.jadwal?.harga || 0,
-        is_balita: item.is_balita || false,
-      }))
+      // Ambil semua master_kota untuk lookup
+      const { data: kotaData } = await supabase.from('master_kota').select('nama_kota, singkatan')
+      const kotaMap = new Map(kotaData?.map((k) => [k.nama_kota, k.singkatan]) || [])
+
+      const mapped = data.map((item: any) => {
+        const asal = item.jadwal?.rute_asal || ''
+        const tujuan = item.jadwal?.rute_tujuan || ''
+        const singAsal = kotaMap.get(asal) || asal
+        const singTujuan = kotaMap.get(tujuan) || tujuan
+
+        return {
+          id: item.id,
+          nama_penumpang: item.nama_penumpang,
+          kode_tiket: item.kode_tiket,
+          kanal: item.kanal,
+          kursi: item.kursi?.nomor_kursi || '-',
+          jadwal: `${asal} - ${tujuan}`,
+          jadwal_singkat: `${singAsal} - ${singTujuan}`, // <-- SINGKATAN
+          kapal: item.jadwal?.kapal?.nama || '-',
+          tanggal: item.jadwal?.tanggal || '-',
+          jam: item.jadwal?.jam_berangkat || '-',
+          harga: item.jadwal?.harga || 0,
+          is_balita: item.is_balita || false,
+        }
+      })
       setHasil(mapped)
     } else {
       setPesan('Tiket tidak ditemukan.')
@@ -124,12 +137,13 @@ function CetakUlangContent() {
     const result = await cetakTiketThermal({
       ...detailPilih,
       jadwal: detailPilih.jadwal,
+      jadwal_singkat: detailPilih.jadwal_singkat, // <-- KIRIM SINGKATAN
       kapal: detailPilih.kapal,
       jam: detailPilih.jam,
       tanggal: detailPilih.tanggal,
       harga: detailPilih.is_balita ? 0 : detailPilih.harga,
       kursi: detailPilih.kursi,
-      petugas_nama: 'Admin / Loket', // <-- FIX ERROR REPLACE
+      petugas_nama: 'Admin / Loket',
     })
     setPesan(result.message)
   }

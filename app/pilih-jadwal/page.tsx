@@ -19,10 +19,11 @@ function PilihJadwalContent() {
   const asal = searchParams.get('asal') || ''
   const tujuan = searchParams.get('tujuan') || ''
   const tanggal = searchParams.get('tanggal') || ''
+  const operatorId = searchParams.get('operator') || ''
 
   const [loading, setLoading] = useState(true)
-  const [error, setError] = useState('')
   const [jadwalTersedia, setJadwalTersedia] = useState<JadwalItem[]>([])
+  const [showEmptyPopup, setShowEmptyPopup] = useState(false)
 
   useEffect(() => {
     async function fetchJadwal() {
@@ -32,18 +33,22 @@ function PilihJadwalContent() {
       }
 
       try {
-        // 1. AMBIL TEMPLATE JADWAL (Ditambah filter rute_tujuan)
-        const { data: templates, error: errT } = await supabase
+        // 1. AMBIL TEMPLATE
+        let queryTemplate = supabase
           .from('template_jadwal')
           .select(`*, kapal:kapal_id(kapasitas)`)
           .eq('aktif', true)
           .eq('rute_asal', asal)
           .eq('rute_tujuan', tujuan)
 
-        if (errT) throw errT
+        if (operatorId) {
+          queryTemplate = queryTemplate.eq('operator_id', operatorId)
+        }
 
-        // 2. CEK JADWAL YANG SUDAH ADA (Ditambah filter rute_tujuan)
-        let { data: jadwalData, error: errJ } = await supabase
+        const { data: templates } = await queryTemplate
+
+        // 2. AMBIL JADWAL YANG UDAH ADA
+        let queryJadwal = supabase
           .from('jadwal')
           .select('id, jam_berangkat, harga, kapal_id, status_jadwal')
           .eq('tanggal', tanggal)
@@ -51,9 +56,13 @@ function PilihJadwalContent() {
           .eq('rute_asal', asal)
           .eq('rute_tujuan', tujuan)
 
-        if (errJ) throw errJ
+        if (operatorId) {
+          queryJadwal = queryJadwal.eq('operator_id', operatorId)
+        }
 
-        // 3. AUTO-GENERATE JIKA KOSONG
+        let { data: jadwalData } = await queryJadwal
+
+        // 3. AUTO-GENERATE (KALAU ADA TEMPLATE TAPI BELUM ADA JADWAL)
         if (templates && templates.length > 0) {
           const newJadwalPayload: any[] = []
           
@@ -74,92 +83,103 @@ function PilihJadwalContent() {
                 harga: t.harga || 150000,
                 status: 'aktif',
                 status_jadwal: 'open',
+                operator_id: operatorId || t.operator_id || null,
               });
             }
           }
 
           if (newJadwalPayload.length > 0) {
-            const { data: insertedJadwal, error: insertError } = await supabase
+            await supabase
               .from('jadwal')
               .insert(newJadwalPayload, { ignoreDuplicates: true })
-              .select('id, jam_berangkat, harga, kapal_id, status_jadwal')
 
-            if (insertError) throw insertError
+            // 3b. WAJIB QUERY ULANG SETELAH INSERT
+            const { data: refreshedJadwal } = await queryJadwal
+            jadwalData = refreshedJadwal
 
-            if (insertedJadwal) {
-              jadwalData = [...(jadwalData || []), ...insertedJadwal]
-              
-              // BIKIN KURSI OTOMATIS
-              const kursiPayload: any[] = []
-              for (const j of insertedJadwal) {
-                const t = templates.find((x: any) => 
-                  x.kapal_id === j.kapal_id && 
-                  x.rute_asal === asal && 
-                  x.jam_berangkat === j.jam_berangkat
-                )
-                const kapasitas = t?.kapal?.kapasitas || 0
-                if (kapasitas > 0) {
-                  for (let i = 1; i <= kapasitas; i++) {
-                    kursiPayload.push({
-                      jadwal_id: j.id,
-                      nomor_kursi: i.toString(),
-                      status: 'kosong'
-                    })
-                  }
-                }
-              }
-              if (kursiPayload.length > 0) {
-                await supabase.from('kursi').insert(kursiPayload, { ignoreDuplicates: true })
-              }
+            // === BIKIN KURSI (HANYA KALAU BELUM ADA) ===
+            const kursiPayload: any[] = []
+            
+            for (const j of (jadwalData || [])) {
+               // CEK DULU: Apakah kursi untuk jadwal ini udah ada?
+               const { data: existingKursi } = await supabase
+                 .from('kursi')
+                 .select('id')
+                 .eq('jadwal_id', j.id)
+                 .limit(1)
+
+               // Kalau BELUM ADA, baru insert
+               if (!existingKursi || existingKursi.length === 0) {
+                 const t = templates.find((x: any) => 
+                   x.kapal_id === j.kapal_id && 
+                   x.rute_asal === asal && 
+                   x.jam_berangkat === j.jam_berangkat
+                 )
+                 const kapasitas = t?.kapal?.kapasitas || 0
+                 if (kapasitas > 0) {
+                   for (let i = 1; i <= kapasitas; i++) {
+                     kursiPayload.push({
+                       jadwal_id: j.id,
+                       nomor_kursi: i.toString(),
+                       status: 'kosong'
+                     })
+                   }
+                 }
+               }
+            }
+            if (kursiPayload.length > 0) {
+              await supabase.from('kursi').insert(kursiPayload)
             }
           }
         }
 
-        // 4. TAMPILKAN DATA
-        const { data: kapalData, error: errK } = await supabase.from('kapal').select('id, nama')
-        if (errK) throw errK
+        // 4. CEK KOSONG SETELAH QUERY ULANG
+        if (!jadwalData || jadwalData.length === 0) {
+          setShowEmptyPopup(true)
+          setLoading(false)
+          return
+        }
 
+        // 5. TAMPILKAN DATA
+        const { data: kapalData } = await supabase.from('kapal').select('id, nama')
         const kapalMap = new Map(kapalData?.map((k) => [k.id, k]) || [])
 
-        if (jadwalData) {
-          const now = new Date()
-          const witaTime = new Date(now.getTime() + (8 * 60 * 60 * 1000))
-          const hariIniWITA = witaTime.toISOString().split('T')[0]
+        const now = new Date()
+        const witaTime = new Date(now.getTime() + (8 * 60 * 60 * 1000))
+        const hariIniWITA = witaTime.toISOString().split('T')[0]
 
-          const mapped = jadwalData.map((item: any) => {
-            let isClosed = false
-            if (tanggal === hariIniWITA) {
-              const [jamB, menitB] = item.jam_berangkat.split(':').map(Number)
-              const totalMenitBerangkat = (jamB * 60) + menitB
-              const totalMenitSekarang = (witaTime.getUTCHours() * 60) + witaTime.getUTCMinutes()
-              
-              if (totalMenitBerangkat - totalMenitSekarang <= 60) {
-                isClosed = true
-              }
-            } else if (tanggal < hariIniWITA) {
+        const mapped = jadwalData.map((item: any) => {
+          let isClosed = false
+          if (tanggal === hariIniWITA) {
+            const [jamB, menitB] = item.jam_berangkat.split(':').map(Number)
+            const totalMenitBerangkat = (jamB * 60) + menitB
+            const totalMenitSekarang = (witaTime.getUTCHours() * 60) + witaTime.getUTCMinutes()
+            
+            if (totalMenitBerangkat - totalMenitSekarang <= 60) {
               isClosed = true
             }
+          } else if (tanggal < hariIniWITA) {
+            isClosed = true
+          }
 
-            return {
-              id: item.id,
-              jam_berangkat: item.jam_berangkat,
-              harga: item.harga,
-              nama_kapal: kapalMap.get(item.kapal_id)?.nama || '-',
-              isClosed
-            }
-          }).sort((a, b) => a.jam_berangkat.localeCompare(b.jam_berangkat))
+          return {
+            id: item.id,
+            jam_berangkat: item.jam_berangkat,
+            harga: item.harga,
+            nama_kapal: kapalMap.get(item.kapal_id)?.nama || '-',
+            isClosed
+          }
+        }).sort((a, b) => a.jam_berangkat.localeCompare(b.jam_berangkat))
 
-          setJadwalTersedia(mapped)
-        }
-      } catch (err: any) {
-        console.error('Gagal memuat jadwal:', err)
-        setError('Gagal memuat jadwal. Silakan coba lagi atau hubungi admin.')
+        setJadwalTersedia(mapped)
+      } catch (err) {
+        setShowEmptyPopup(true)
       } finally {
         setLoading(false)
       }
     }
     fetchJadwal()
-  }, [asal, tujuan, tanggal, router])
+  }, [asal, tujuan, tanggal, operatorId, router])
 
   const handlePilihJadwal = (jadwalId: string) => {
     router.push(`/kursi?jadwal=${jadwalId}`)
@@ -173,29 +193,13 @@ function PilihJadwalContent() {
             0% { transform: rotate(0deg); }
             100% { transform: rotate(360deg); }
           }
-          .animate-spin-custom {
-            animation: spin 1s linear infinite;
-          }
+          .animate-spin-custom { animation: spin 1s linear infinite; }
         `}} />
-        
         <div className="relative w-24 h-24 flex items-center justify-center mb-4">
           <div className="absolute w-24 h-24 rounded-full border-4 border-transparent border-t-red-500 border-r-yellow-400 border-b-green-500 border-l-blue-500 animate-spin-custom"></div>
           <div className="text-xs font-bold text-gray-500">Memuat...</div>
         </div>
         <p className="text-gray-700 font-medium text-sm">Mencari jadwal keberangkatan...</p>
-      </div>
-    )
-  }
-
-  if (error) {
-    return (
-      <div className="min-h-[100dvh] bg-gray-50 flex flex-col items-center justify-center p-4">
-        <div className="bg-white p-6 rounded-xl shadow-md text-center max-w-sm w-full">
-          <p className="text-red-600 font-bold mb-4">{error}</p>
-          <button onClick={() => router.push('/')} className="bg-blue-600 text-white px-4 py-2 rounded-lg font-medium hover:bg-blue-700 transition-colors">
-            Kembali ke Beranda
-          </button>
-        </div>
       </div>
     )
   }
@@ -245,6 +249,26 @@ function PilihJadwalContent() {
           ))}
         </div>
       </div>
+
+      {showEmptyPopup && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-2xl shadow-xl max-w-sm w-full p-6 text-center">
+            <div className="text-6xl mb-4">🚢</div>
+            <h3 className="text-xl font-bold text-gray-900 mb-2">Jadwal Tidak Ditemukan</h3>
+            <p className="text-sm text-gray-600 mb-6">
+              Mohon maaf, untuk rute <b>{asal} - {tujuan}</b> pada tanggal <b>{tanggal}</b> belum ada jadwal kapal yang tersedia.
+            </p>
+            <div className="flex flex-col gap-2">
+              <button onClick={() => router.push('/')} className="w-full bg-blue-600 text-white py-2.5 rounded-lg font-bold hover:bg-blue-700 transition">
+                Coba Tanggal Lain
+              </button>
+              <button onClick={() => setShowEmptyPopup(false)} className="w-full bg-gray-100 text-gray-700 py-2.5 rounded-lg font-bold hover:bg-gray-200 transition">
+                Tutup
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

@@ -54,13 +54,11 @@ function EtiketContent() {
 
   const tiketRefs = useRef<{ [key: string]: HTMLDivElement | null }>({})
   
-  // STATE UNTUK HIDDEN RENDER
   const [renderData, setRenderData] = useState<TiketLengkap | null>(null)
   const renderRef = useRef<HTMLDivElement>(null)
 
   const pesananIds = pesananParam ? pesananParam.split(',').filter(Boolean) : []
 
-  // BLOKIR TOMBOL BACK (SWIPE)
   useEffect(() => {
     if (loading || tiketList.length === 0) return
 
@@ -69,7 +67,6 @@ function EtiketContent() {
       ? '/' 
       : (getOperatorSession()?.role === 'terminal_keberangkatan' ? '/dashboard/keberangkatan' : (getOperatorSession()?.role === 'agen' ? '/dashboard/agen' : (getOperatorSession()?.role === 'admin_utama' ? '/dashboard' : '/dashboard/loket-menu')))
 
-    // Tambah history palsu biar swipe ga langsung keluar
     window.history.pushState(null, '', window.location.href)
 
     const handlePopState = () => {
@@ -207,7 +204,6 @@ function EtiketContent() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  // FUNGSI SIMPAN PDF 1 FILE
   async function simpanPdfSatu(pesananId: string, namaPenumpang: string) {
     const ref = tiketRefs.current[pesananId]
     if (!ref) return
@@ -233,7 +229,6 @@ function EtiketContent() {
     }
   }
 
-  // FUNGSI SIMPAN SEMUA PDF PAKAI HIDDEN RENDER
   async function simpanSemuaPdf() {
     for (let i = 0; i < tiketList.length; i++) {
       const t = tiketList[i]
@@ -324,9 +319,32 @@ function EtiketContent() {
 
   async function handleCetakThermal(t: TiketLengkap) {
     setPesanShare('Menghubungkan ke printer...')
+    
+    // === AMBIL SINGKATAN KOTA ===
+    let jadwalSingkat = `${detail?.rute_asal} - ${detail?.rute_tujuan}`
+    
+    if (detail) {
+      const { data: asalData } = await supabase
+        .from('master_kota')
+        .select('singkatan')
+        .eq('nama_kota', detail.rute_asal)
+        .maybeSingle()
+      
+      const { data: tujuanData } = await supabase
+        .from('master_kota')
+        .select('singkatan')
+        .eq('nama_kota', detail.rute_tujuan)
+        .maybeSingle()
+      
+      if (asalData?.singkatan && tujuanData?.singkatan) {
+        jadwalSingkat = `${asalData.singkatan} - ${tujuanData.singkatan}`
+      }
+    }
+
     const result = await cetakTiketThermal({
       ...t.pesanan,
       jadwal: `${detail?.rute_asal} - ${detail?.rute_tujuan}`,
+      jadwal_singkat: jadwalSingkat, // <-- KIRIM SINGKATAN
       kapal: detail?.nama_kapal || '-',
       jam: detail?.jam_berangkat || '00:00',
       tanggal: detail?.tanggal || '-',
@@ -337,17 +355,14 @@ function EtiketContent() {
     setPesanShare(result.message)
   }
 
-  // FUNGSI KEMBALI (FIX SWIPE BACK -> BERANDA)
   async function handleKembali() {
     const isOnline = tiketList[0]?.pesanan.kanal === 'online'
     
-    // KALAU ONLINE, PAKAI REPLACE BIAR GA BISA DI-SWIPE BALIK
     if (isOnline) {
       router.replace('/')
       return
     }
 
-    // KALAU OFFLINE (LOKET/AGEN), BALIK KE DASHBOARD MASING-MASING
     const sesi = getOperatorSession()
     if (sesi) {
       if (sesi.role === 'terminal_keberangkatan') {
@@ -587,7 +602,6 @@ function EtiketContent() {
         </div>
       </div>
 
-      {/* ================= KOTAK RAHASIA UNTUK HIDDEN RENDER ================= */}
       <div style={{ position: 'absolute', top: '-9999px', left: '-9999px' }}>
         {renderData && (
           <div 

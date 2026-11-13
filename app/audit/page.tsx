@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { supabase, getProfile, logout, type Profile, type AuditLog } from '@/lib/supabase'
+import { supabase, getProfile, getOperatorSession, type Profile, type AuditLog } from '@/lib/supabase'
 
 type DetailPenumpang = {
   nama: string
@@ -19,7 +19,6 @@ type DetailKonfirmasiCash = {
   jam_berangkat?: string
   nomor_hp?: string
   daftar_penumpang?: DetailPenumpang[]
-  // fallback format lama (per tiket)
   nama_penumpang?: string
   kode_tiket?: string
   jumlah?: number
@@ -37,7 +36,12 @@ export default function AuditPage() {
 
   useEffect(() => {
     async function loadData() {
-      const p = await getProfile()
+      // 1. Cek Sesi (Auth + LocalStorage)
+      let p = await getProfile()
+      if (!p) {
+        const sesiLokal = getOperatorSession()
+        if (sesiLokal) p = sesiLokal as unknown as Profile
+      }
       if (!p) {
         router.push('/login')
         return
@@ -48,17 +52,17 @@ export default function AuditPage() {
         return
       }
       setProfile(p)
-      await loadLogs()
+      await loadLogs(p.id)
       setLoading(false)
     }
     loadData()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [router])
 
-  async function loadLogs() {
+  async function loadLogs(operatorId: string) {
     const { data, error: errL } = await supabase
       .from('audit_log')
       .select('*')
+      .eq('operator_id', operatorId) // <-- DINDING PEMISAH
       .order('waktu', { ascending: false })
       .limit(500)
 
@@ -67,11 +71,6 @@ export default function AuditPage() {
       return
     }
     setLogs((data || []) as AuditLog[])
-  }
-
-  async function handleLogout() {
-    await logout()
-    router.push('/login')
   }
 
   // ==================== FORMAT ====================
@@ -83,13 +82,6 @@ export default function AuditPage() {
       hour: '2-digit',
       minute: '2-digit',
       second: '2-digit',
-    })
-  }
-
-  function formatJam(iso: string) {
-    return new Date(iso).toLocaleTimeString('id-ID', {
-      hour: '2-digit',
-      minute: '2-digit',
     })
   }
 
@@ -108,24 +100,20 @@ export default function AuditPage() {
   function renderDetail(log: AuditLog) {
     if (!log.detail) return <span className="text-gray-400">-</span>
 
-    // Khusus konfirmasi_cash
     if (log.aksi === 'konfirmasi_cash') {
       const d = log.detail as DetailKonfirmasiCash
 
-      // Format baru: per grup
       if (d.daftar_penumpang && d.daftar_penumpang.length > 0) {
         const total = d.total_bayar || 0
         const jumlahTiket = d.jumlah_tiket || d.daftar_penumpang.length
 
         return (
           <div className="space-y-3">
-            {/* Header grup */}
             <div className="text-xs text-gray-600">
               <b>{d.rute}</b> • Jam {d.jam_berangkat?.slice(0, 5) || '-'}
               {d.nomor_hp && <> • HP: {d.nomor_hp}</>}
             </div>
 
-            {/* Daftar penumpang */}
             <div className="space-y-3">
               {d.daftar_penumpang.map((p, idx) => (
                 <div key={idx} className="text-xs leading-relaxed">
@@ -141,7 +129,6 @@ export default function AuditPage() {
               ))}
             </div>
 
-            {/* Total */}
             <div className="pt-2 border-t border-gray-200 text-sm">
               <span className="text-gray-700">Total Transaksi: </span>
               <b className="text-blue-600 text-base">
@@ -153,7 +140,6 @@ export default function AuditPage() {
         )
       }
 
-      // Fallback format lama (per tiket)
       return (
         <div className="text-xs leading-relaxed space-y-1">
           <div className="text-gray-800">
@@ -168,7 +154,6 @@ export default function AuditPage() {
       )
     }
 
-    // Aksi lain (close_jadwal dll) → tampil JSON mentah seperti sebelumnya
     return (
       <pre className="whitespace-pre-wrap font-mono bg-gray-50 p-2 rounded text-xs text-gray-700 max-w-md">
         {JSON.stringify(log.detail, null, 2)}
@@ -215,11 +200,8 @@ export default function AuditPage() {
               Semua aksi finansial yang dilakukan petugas
             </p>
           </div>
-          <button
-            onClick={handleLogout}
-            className="bg-red-600 text-white px-4 py-2 rounded hover:bg-red-700 text-sm"
-          >
-            Logout
+          <button onClick={() => router.push('/dashboard')} className="text-sm text-blue-600 hover:underline px-2 font-medium">
+            ← Kembali
           </button>
         </div>
 
@@ -227,11 +209,7 @@ export default function AuditPage() {
         <div className="bg-white p-4 rounded shadow mb-4 grid grid-cols-1 md:grid-cols-3 gap-3">
           <div>
             <label className="block mb-1 text-xs font-medium text-gray-700">Aksi</label>
-            <select
-              value={filterAksi}
-              onChange={(e) => setFilterAksi(e.target.value)}
-              className="w-full border rounded px-3 py-2 text-sm text-gray-900"
-            >
+            <select value={filterAksi} onChange={(e) => setFilterAksi(e.target.value)} className="w-full border rounded px-3 py-2 text-sm text-gray-900">
               <option value="semua">Semua</option>
               {daftarAksi.map((a) => (
                 <option key={a} value={a}>{labelAksi(a)}</option>
@@ -241,11 +219,7 @@ export default function AuditPage() {
 
           <div>
             <label className="block mb-1 text-xs font-medium text-gray-700">Petugas</label>
-            <select
-              value={filterPetugas}
-              onChange={(e) => setFilterPetugas(e.target.value)}
-              className="w-full border rounded px-3 py-2 text-sm text-gray-900"
-            >
+            <select value={filterPetugas} onChange={(e) => setFilterPetugas(e.target.value)} className="w-full border rounded px-3 py-2 text-sm text-gray-900">
               <option value="semua">Semua</option>
               {daftarPetugas.map((p) => (
                 <option key={p} value={p}>{p}</option>
@@ -255,12 +229,7 @@ export default function AuditPage() {
 
           <div>
             <label className="block mb-1 text-xs font-medium text-gray-700">Tanggal</label>
-            <input
-              type="date"
-              value={filterTanggal}
-              onChange={(e) => setFilterTanggal(e.target.value)}
-              className="w-full border rounded px-3 py-2 text-sm text-gray-900"
-            />
+            <input type="date" value={filterTanggal} onChange={(e) => setFilterTanggal(e.target.value)} className="w-full border rounded px-3 py-2 text-sm text-gray-900" />
           </div>
         </div>
 
@@ -269,10 +238,7 @@ export default function AuditPage() {
           <p className="text-sm text-gray-700">
             Menampilkan <b>{filtered.length}</b> dari <b>{logs.length}</b> entri
             {(filterAksi !== 'semua' || filterPetugas !== 'semua' || filterTanggal) && (
-              <button
-                onClick={() => { setFilterAksi('semua'); setFilterPetugas('semua'); setFilterTanggal('') }}
-                className="ml-3 text-blue-600 hover:underline text-xs"
-              >
+              <button onClick={() => { setFilterAksi('semua'); setFilterPetugas('semua'); setFilterTanggal('') }} className="ml-3 text-blue-600 hover:underline text-xs">
                 Reset filter
               </button>
             )}
@@ -287,7 +253,7 @@ export default function AuditPage() {
           )}
         </div>
 
-        {/* DAFTAR LOG (KARTU, BUKAN TABEL) */}
+        {/* DAFTAR LOG */}
         <div className="space-y-3">
           {filtered.length === 0 && (
             <div className="bg-white rounded shadow p-8 text-center text-gray-400 text-sm">

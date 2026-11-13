@@ -36,7 +36,16 @@ function KursiContent() {
       return
     }
 
-    const sortedKursi = (data || []).sort((a, b) => {
+    // === FILTER UNIQUE BERDASARKAN NOMOR KURSI ===
+    const uniqueMap = new Map<string, Kursi>()
+    ;(data || []).forEach((k) => {
+      if (!uniqueMap.has(k.nomor_kursi)) {
+        uniqueMap.set(k.nomor_kursi, k)
+      }
+    })
+    const uniqueKursi = Array.from(uniqueMap.values())
+
+    const sortedKursi = uniqueKursi.sort((a, b) => {
       const numA = parseInt(a.nomor_kursi, 10)
       const numB = parseInt(b.nomor_kursi, 10)
       return numA - numB
@@ -78,7 +87,6 @@ function KursiContent() {
     init()
   }, [jadwalId])
 
-  // FUNGSI KLIK KURSI: HANYA MENYIMPAN DI STATE, TIDAK NGUNCI DATABASE
   const toggleKursi = (id: string) => {
     if (dipilih.includes(id)) {
       setDipilih(dipilih.filter((k) => k !== id))
@@ -127,7 +135,7 @@ function KursiContent() {
             <div className="grid grid-cols-2 gap-1 md:gap-2 flex-1 max-w-[40%]">
               {row.slice(0, 2).map((k) => renderKursiButton(k))}
             </div>
-            <div className="w-4 md:w-8" /> {/* Lorong */}
+            <div className="w-4 md:w-8" />
             <div className="grid grid-cols-3 gap-1 md:gap-2 flex-1 max-w-[55%]">
               {row.slice(2, 5).map((k) => renderKursiButton(k))}
             </div>
@@ -150,7 +158,7 @@ function KursiContent() {
             <div className="grid grid-cols-2 gap-1 md:gap-2 flex-1 max-w-[40%]">
               {row.slice(0, 2).map((k) => renderKursiButton(k))}
             </div>
-            <div className="w-4 md:w-8" /> {/* Lorong */}
+            <div className="w-4 md:w-8" />
             <div className="grid grid-cols-2 gap-1 md:gap-2 flex-1 max-w-[40%]">
               {row.slice(2, 4).map((k) => renderKursiButton(k))}
             </div>
@@ -176,11 +184,8 @@ function KursiContent() {
             0% { transform: rotate(0deg); }
             100% { transform: rotate(360deg); }
           }
-          .animate-spin-custom {
-            animation: spin 1s linear infinite;
-          }
+          .animate-spin-custom { animation: spin 1s linear infinite; }
         `}} />
-        
         <div className="relative w-24 h-24 flex items-center justify-center mb-4">
           <div className="absolute w-24 h-24 rounded-full border-4 border-transparent border-t-red-500 border-r-yellow-400 border-b-green-500 border-l-blue-500 animate-spin-custom"></div>
           <div className="text-xs font-bold text-gray-500">Memuat...</div>
@@ -194,8 +199,6 @@ function KursiContent() {
 
   return (
     <div className="h-[100dvh] w-full bg-gray-50 flex flex-col overflow-hidden">
-      
-      {/* HEADER (Fixed Height) */}
       <div className="flex-shrink-0 p-3 md:p-6 pb-2 md:pb-4 bg-white shadow-sm z-10">
         <div className="max-w-md mx-auto text-center md:text-left">
           <h1 className="text-lg md:text-2xl font-bold text-gray-900">Pilih Kursi</h1>
@@ -205,7 +208,6 @@ function KursiContent() {
         </div>
       </div>
 
-      {/* AREA KURSI (Mengisi sisa layar / Flex-1) */}
       <div className="flex-1 overflow-hidden p-2 md:p-4 flex flex-col max-w-md mx-auto w-full">
         <div className="bg-white p-2 md:p-6 rounded-lg shadow-sm border border-gray-200 flex-1 flex flex-col h-full overflow-hidden">
           {layout === '2-3' && renderLayout23()}
@@ -214,10 +216,8 @@ function KursiContent() {
         </div>
       </div>
 
-      {/* FOOTER (Tombol Lanjut - Tanpa Timer) */}
       <div className="flex-shrink-0 p-3 md:p-6 bg-white border-t border-gray-200 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)] z-10">
         <div className="max-w-md mx-auto">
-          
           <div className="flex justify-between items-center mb-2 md:mb-4">
             <p className="text-xs md:text-sm text-gray-800">
               Kursi dipilih:{' '}
@@ -248,10 +248,8 @@ function KursiContent() {
               ← Kembali ke Beranda
             </Link>
           </div>
-
         </div>
       </div>
-
     </div>
   )
 }
@@ -265,9 +263,7 @@ export default function KursiPage() {
             0% { transform: rotate(0deg); }
             100% { transform: rotate(360deg); }
           }
-          .animate-spin-custom {
-            animation: spin 1s linear infinite;
-          }
+          .animate-spin-custom { animation: spin 1s linear infinite; }
         `}} />
         <div className="relative w-24 h-24 flex items-center justify-center mb-4">
           <div className="absolute w-24 h-24 rounded-full border-4 border-transparent border-t-red-500 border-r-yellow-400 border-b-green-500 border-l-blue-500 animate-spin-custom"></div>

@@ -39,17 +39,13 @@ export default function PetugasPage() {
   // ==================== LOAD AWAL ====================
   useEffect(() => {
     async function init() {
-      // 1. Coba ambil dari Supabase Auth dulu (cara lama)
       let profile = await getProfile()
-
-      // 2. Jika gagal, coba ambil dari localStorage (cara baru)
       if (!profile) {
         const sesiLokal = getOperatorSession()
         if (sesiLokal) {
           profile = sesiLokal as unknown as Profile
         }
       }
-
       if (!profile) {
         router.push('/login')
         return
@@ -59,17 +55,19 @@ export default function PetugasPage() {
         return
       }
       setMe(profile)
-      await loadPetugas()
+      await loadPetugas(profile.id) // Kirim ID operator
       setLoading(false)
     }
     init()
   }, [router])
 
-  async function loadPetugas() {
+  // === DINDING PEMISAH: Filter berdasarkan operator_id ===
+  async function loadPetugas(operatorId: string) {
     const { data, error } = await supabase
       .from('profiles')
       .select('*')
-      .eq('role', 'terminal_keberangkatan') // HANYA AMBIL KEBERANGKATAN
+      .eq('role', 'terminal_keberangkatan')
+      .eq('operator_id', operatorId) // <-- TEMBOKNYA
       .order('nama', { ascending: true })
 
     if (error) {
@@ -109,13 +107,14 @@ export default function PetugasPage() {
     }
 
     setPesan({ tipe: 'ok', teks: `Akun ${target.nama} berhasil di${aksiBaru ? 'aktifkan' : 'nonaktifkan'}.` })
-    await loadPetugas()
+    await loadPetugas(me.id)
     setAksiLoading(null)
   }
 
   // ==================== TAMBAH OPERATOR ====================
   async function handleTambah(e: React.FormEvent) {
     e.preventDefault()
+    if (!me) return
     setPesan(null)
     if (!inputNama || !inputHp || !inputPass || !inputUnit) {
       setPesan({ tipe: 'err', teks: 'Semua kolom wajib diisi.' })
@@ -127,7 +126,15 @@ export default function PetugasPage() {
     const v_user_id = crypto.randomUUID()
 
     const { error } = await supabase.from('profiles').insert({
-      id: v_user_id, email: v_email, nama: inputNama, role: inputRole, lokasi: inputLokasi, unit: inputUnit, aktif: true, password_plain: inputPass
+      id: v_user_id, 
+      email: v_email, 
+      nama: inputNama, 
+      role: inputRole, 
+      lokasi: inputLokasi, 
+      unit: inputUnit, 
+      aktif: true, 
+      password_plain: inputPass,
+      operator_id: me.id // <-- DINDING PEMISAH: Petugas ini milik Wawan
     })
 
     setModalLoading(false)
@@ -139,7 +146,7 @@ export default function PetugasPage() {
     setPesan({ tipe: 'ok', teks: `Operator ${inputNama} berhasil dibuat.` })
     setModalTambah(false)
     setInputNama(''); setInputHp(''); setInputPass(''); setInputLokasi('Tarakan'); setInputUnit('')
-    await loadPetugas()
+    await loadPetugas(me.id)
   }
 
   // ==================== EDIT INLINE ====================
@@ -178,7 +185,7 @@ export default function PetugasPage() {
 
     setPesan({ tipe: 'ok', teks: `Data ${editNama} berhasil diupdate.` })
     setEditId(null)
-    await loadPetugas()
+    if (me) await loadPetugas(me.id)
   }
 
   // ==================== KIRIM WA ====================
@@ -207,7 +214,7 @@ export default function PetugasPage() {
         <div className="mb-6 flex items-center justify-between">
           <div>
             <h1 className="text-2xl font-bold text-gray-800 flex items-center gap-2">
-              Manajemen Operator Keberangkatan
+              Manajemen Petugas
               <span className="text-xs bg-green-100 text-green-700 px-2 py-1 rounded-full flex items-center gap-1 border border-green-300">
                 <span className="w-2 h-2 rounded-full bg-green-500"></span> Admin Utama: ON (Anda)
               </span>
@@ -216,7 +223,7 @@ export default function PetugasPage() {
           </div>
           <div className="flex gap-3">
             <button onClick={() => setModalTambah(true)} className="bg-green-600 text-white px-4 py-2 rounded shadow hover:bg-green-700 text-sm font-medium">
-              + Tambah Operator
+              + Tambah Petugas
             </button>
             <button onClick={() => router.push('/dashboard')} className="text-sm text-blue-600 hover:underline px-2">
               ← Kembali
@@ -232,7 +239,7 @@ export default function PetugasPage() {
 
         {/* TABEL PER LOKASI */}
         {petugasPerLokasi.length === 0 ? (
-          <div className="bg-white p-8 text-center text-gray-500 rounded shadow">Belum ada data operator keberangkatan.</div>
+          <div className="bg-white p-8 text-center text-gray-500 rounded shadow">Belum ada data petugas.</div>
         ) : (
           petugasPerLokasi.map((grup) => (
             <div key={grup.lokasi} className="mb-8 bg-white rounded-lg shadow overflow-hidden">
@@ -325,7 +332,7 @@ export default function PetugasPage() {
       {modalTambah && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-lg shadow-xl max-w-sm w-full p-6">
-            <h3 className="text-lg font-bold mb-4 text-gray-800">Tambah Operator Keberangkatan</h3>
+            <h3 className="text-lg font-bold mb-4 text-gray-800">Tambah Petugas</h3>
             <form onSubmit={handleTambah}>
               <label className="block text-sm font-medium text-gray-700 mb-1">Nama Lengkap</label>
               <input type="text" value={inputNama} onChange={(e) => setInputNama(e.target.value)} className="w-full border rounded px-3 py-2 mb-3 text-gray-900" required />

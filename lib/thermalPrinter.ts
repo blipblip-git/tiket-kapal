@@ -81,7 +81,7 @@ export async function cetakTiketThermal(tiket: any) {
       textData += '\x1B\x4A\x0A' 
       textData += '\x1B\x61\x01' 
       textData += `${tiket.kode_tiket}\n` 
-      textData += `${tiket.jadwal}\n`
+      textData += `${tiket.jadwal_singkat || tiket.jadwal}\n` // <-- PAKAI SINGKATAN
       textData += '\x1B\x61\x00' 
       textData += '--------------------------------\n'
       textData += `Nama / Kursi : ${tiket.nama_penumpang} / ${tiket.kursi}\n`
@@ -115,7 +115,6 @@ export async function cetakTiketThermal(tiket: any) {
       }
       await sendData(imageBytes)
       
-      // JEDA & CUT: Print and Feed 72 dots (0x48)
       const endData = '\x1B\x4A\x48\x1D\x56\x00' 
       await sendData(encoder.encode(endData))
 
@@ -184,7 +183,7 @@ export async function cetakTiketThermal(tiket: any) {
     textData += '\x1B\x4A\x0A' 
     textData += '\x1B\x61\x01' 
     textData += `${tiket.kode_tiket}\n` 
-    textData += `${tiket.jadwal}\n`
+    textData += `${tiket.jadwal_singkat || tiket.jadwal}\n` // <-- PAKAI SINGKATAN
     textData += '\x1B\x61\x00' 
     textData += '--------------------------------\n'
     textData += `Nama / Kursi : ${tiket.nama_penumpang} / ${tiket.kursi}\n`
@@ -207,7 +206,6 @@ export async function cetakTiketThermal(tiket: any) {
     }
     await writer.write(imageBytes)
     
-    // JEDA & CUT: Print and Feed 72 dots (0x48)
     const endData = '\x1B\x4A\x48\x1D\x56\x00' 
     await writer.write(encoder.encode(endData))
 

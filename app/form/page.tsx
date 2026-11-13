@@ -51,23 +51,46 @@ function FormContent() {
     }
 
     const fetchData = async () => {
-      const { data: jData } = await supabase
-        .from('jadwal')
-        .select(`*, kapal:kapal_id (nama)`)
-        .eq('id', jadwalId)
-        .single()
+      setLoading(true)
+      setError('')
       
-      const { data: kData } = await supabase
-        .from('kursi')
-        .select('*')
-        .in('id', kursiIds)
+      try {
+        const { data: jData, error: errJ } = await supabase
+          .from('jadwal')
+          .select(`*, kapal:kapal_id (nama)`)
+          .eq('id', jadwalId)
+          .single()
+        
+        const { data: kData, error: errK } = await supabase
+          .from('kursi')
+          .select('*')
+          .in('id', kursiIds)
 
-      if (jData && kData) {
+        if (errJ || errK) {
+          throw new Error('Gagal mengambil data jadwal atau kursi.')
+        }
+
+        // === VALIDASI: KURSI HARUS ADA ===
+        if (!jData) {
+          throw new Error('Jadwal tidak ditemukan.')
+        }
+
+        if (!kData || kData.length === 0) {
+          throw new Error('Kursi yang dipilih tidak ditemukan. Silakan pilih kursi lagi.')
+        }
+
+        if (kData.length !== kursiIds.length) {
+          throw new Error('Beberapa kursi yang dipilih tidak valid. Silakan ulangi.')
+        }
+
         setJadwal(jData)
-        setPenumpangList(kursiIds.map(() => ({ nama: '', nik: '', is_balita: false, nama_balita: '' })))
+        setPenumpangList(kData.map(() => ({ nama: '', nik: '', is_balita: false, nama_balita: '' })))
         setKursiList(kData)
+      } catch (err: any) {
+        setError(err.message)
+      } finally {
+        setLoading(false)
       }
-      setLoading(false)
     }
 
     fetchData()
@@ -92,7 +115,11 @@ function FormContent() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!jadwal || kursiList.length === 0) return
+    
+    if (!jadwal || kursiList.length === 0) {
+      setError('Data jadwal atau kursi belum siap. Silakan refresh halaman.')
+      return
+    }
     
     for (let i = 0; i < penumpangList.length; i++) {
       if (!penumpangList[i].nama) {
@@ -100,7 +127,7 @@ function FormContent() {
         return
       }
       if (penumpangList[i].nik.length !== 16) {
-        setError(`NIK penumpang #${i + 1} harus 16 digit.`)
+        setError(`NIK penumpang #${i + 1} harus 16 digit. (Saat ini: ${penumpangList[i].nik.length} digit)`)
         return
       }
       if (penumpangList[i].is_balita && !penumpangList[i].nama_balita) {
@@ -120,9 +147,15 @@ function FormContent() {
       const pesananPayload: any[] = []
 
       penumpangList.forEach((p, idx) => {
+        // === PASTIKAN KURSI_ID ADA ===
+        const kursiId = kursiList[idx]?.id
+        if (!kursiId) {
+          throw new Error(`Kursi untuk penumpang #${idx + 1} tidak ditemukan.`)
+        }
+
         pesananPayload.push({
           jadwal_id: jadwalId,
-          kursi_id: kursiList[idx].id, 
+          kursi_id: kursiId,
           nama_penumpang: toTitleCase(p.nama),
           nik: maskNik(p.nik),
           nomor_hp: noHp,
@@ -163,10 +196,12 @@ function FormContent() {
       if (insertedPesanan && insertedPesanan.length > 0) {
         const idList = insertedPesanan.map(p => p.id).join(',')
         router.push(`/pembayaran?pesanan=${idList}`)
+      } else {
+        throw new Error('Gagal insert pesanan (data kosong)')
       }
 
     } catch (err: any) {
-      console.error(err)
+      console.error('Error saat insert:', err)
       setError('Gagal memproses pesanan: ' + err.message)
       setProses(false)
     }
@@ -174,6 +209,19 @@ function FormContent() {
 
   if (loading) {
     return <div className="min-h-screen flex items-center justify-center text-gray-900">Memuat data...</div>
+  }
+
+  if (error) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50 p-4">
+        <div className="bg-white p-6 rounded-xl shadow-md text-center max-w-sm w-full">
+          <p className="text-red-600 font-bold mb-4">{error}</p>
+          <button onClick={() => router.push('/')} className="bg-blue-600 text-white px-4 py-2 rounded-lg font-medium hover:bg-blue-700 transition">
+            Kembali ke Beranda
+          </button>
+        </div>
+      </div>
+    )
   }
 
   return (
@@ -191,7 +239,8 @@ function FormContent() {
             <div key={idx} className="border-t pt-4 first:border-0 first:pt-0">
               <div className="flex justify-between items-center mb-2">
                 <p className="font-bold text-gray-900">
-                  Penumpang #{idx + 1}
+                  Penumpang #{idx + 1} 
+                  {kursiList[idx] && <span className="text-sm font-normal text-gray-500 ml-2">(Kursi {kursiList[idx].nomor_kursi})</span>}
                 </p>
               </div>
 
@@ -231,7 +280,6 @@ function FormContent() {
                   </div>
                 </div>
 
-                {/* INPUT NAMA BALITA */}
                 {p.is_balita && (
                   <div className="bg-orange-50 p-3 rounded-md border border-orange-200 mt-2">
                     <input
@@ -244,7 +292,6 @@ function FormContent() {
                   </div>
                 )}
 
-                {/* INPUT NIK (DIPINDAH KE BAWAH NAMA BALITA) */}
                 <div>
                   <label className="block text-xs font-medium text-gray-700">NIK (16 digit)</label>
                   <input
