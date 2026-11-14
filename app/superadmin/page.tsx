@@ -1,11 +1,9 @@
 'use client'
 
 import { useState } from 'react'
-import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 
 export default function SuperAdminLoginPage() {
-  const router = useRouter()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [pesan, setPesan] = useState('')
@@ -17,34 +15,42 @@ export default function SuperAdminLoginPage() {
     setLoading(true)
     setPesan('Memverifikasi...')
 
-    const { error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    })
+    try {
+      const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      })
 
-    if (error) {
-      setPesan('Akses ditolak: ' + error.message)
-      setLoading(false)
-      return
-    }
+      if (authError) throw new Error('Auth Error: ' + authError.message)
+      if (!authData.user) throw new Error('User tidak ditemukan.')
 
-    const { data: { user } } = await supabase.auth.getUser()
-    if (user) {
-      const { data: profile } = await supabase
+      const { data: profile, error: profileError } = await supabase
         .from('profiles')
         .select('role')
-        .eq('id', user.id)
+        .eq('id', authData.user.id)
         .single()
 
-      if (profile?.role !== 'admin_utama') {
-        await supabase.auth.signOut()
-        setPesan('Akses ditolak: Akun ini bukan pemilik platform.')
-        setLoading(false)
-        return
-      }
-    }
+      if (profileError) throw new Error('Profile Error: ' + profileError.message)
 
-    router.push('/dashboard-superadmin')
+      const userRole = profile?.role?.trim().toLowerCase()
+
+      if (userRole !== 'superadmin') {
+        alert(`BUKAN SUPERADMIN!\nRole yang terbaca di database: "${userRole || 'KOSONG'}"`)
+        throw new Error(`Akses ditolak. Role: "${userRole}"`)
+      }
+
+      // ==========================================
+      // JIKA LOLOS, KITA BONGKAR PAKSA DI SINI
+      // ==========================================
+      alert('LOGIN SUKSES! Role terdeteksi: "superadmin". Lanjut pindah halaman...')
+      
+      // Coba pindah halaman manual
+      window.location.href = '/dashboard-superadmin'
+
+    } catch (err: any) {
+      setPesan('Akses ditolak: ' + err.message)
+      setLoading(false)
+    }
   }
 
   return (
@@ -96,7 +102,7 @@ export default function SuperAdminLoginPage() {
           </button>
 
           {pesan && (
-            <p className={`mt-4 text-sm text-center break-words ${pesan.includes('Memverifikasi') ? 'text-gray-400' : 'text-red-400'}`}>
+            <p className={`mt-4 text-sm text-center break-words ${pesan.includes('Memverifikasi') ? 'text-gray-400' : 'text-red-400 font-bold'}`}>
               {pesan}
             </p>
           )}

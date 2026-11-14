@@ -20,7 +20,6 @@ export default function DashboardAdminPage() {
   })
   const [tanggalHariIni, setTanggalHariIni] = useState('')
 
-  // State teks default (nanti ditimpa dari database)
   const [teks, setTeks] = useState({
     judul_dashboard: 'Dashboard',
     sub_judul: 'Admin Utama',
@@ -40,7 +39,6 @@ export default function DashboardAdminPage() {
     setTanggalHariIni(today.toLocaleDateString('id-ID', { weekday: 'long', day: '2-digit', month: 'long', year: 'numeric' }))
 
     async function loadData() {
-      // 1. Ambil Teks dari Database (Mother File)
       const { data: textData } = await supabase
         .from('pengaturan_teks')
         .select('data_teks')
@@ -51,13 +49,10 @@ export default function DashboardAdminPage() {
         setTeks(textData.data_teks)
       }
 
-      // 2. Cek Sesi Login
       let p = await getProfile()
       if (!p) {
         const sesiLokal = getOperatorSession()
-        if (sesiLokal) {
-          p = sesiLokal as unknown as Profile
-        }
+        if (sesiLokal) p = sesiLokal as unknown as Profile
       }
       if (!p) {
         router.push('/login')
@@ -70,7 +65,6 @@ export default function DashboardAdminPage() {
       }
       setProfile(p)
 
-      // 3. Ambil Data Statistik (Difilter operator_id)
       const hariIni = new Date().toISOString().split('T')[0]
       const { data: kapalData } = await supabase.from('kapal').select('id').eq('operator_id', p.id)
       const kapalIds = kapalData?.map(k => k.id) || []
@@ -155,33 +149,34 @@ export default function DashboardAdminPage() {
         <div className="bg-white p-3 md:p-6 rounded shadow flex-1 flex flex-col overflow-hidden">
           <div className="grid grid-cols-2 md:grid-cols-3 gap-2 md:gap-3 flex-1 overflow-y-auto content-start">
             
-            <a href="/kapal" className="flex items-center justify-center h-16 md:h-24 p-2 border border-teal-200 bg-teal-50 rounded-lg hover:bg-teal-100 text-center transition shadow-sm">
+            <button onClick={() => router.push('/kapal')} className="flex items-center justify-center h-16 md:h-24 p-2 border border-teal-200 bg-teal-50 rounded-lg hover:bg-teal-100 text-center transition shadow-sm">
               <p className="font-bold text-xs md:text-sm text-teal-800">{teks.menu_kapal}</p>
-            </a>
+            </button>
 
-            <a href="/template-jadwal" className="flex items-center justify-center h-16 md:h-24 p-2 border border-orange-200 bg-orange-50 rounded-lg hover:bg-orange-100 text-center transition shadow-sm">
+            <button onClick={() => router.push('/template-jadwal')} className="flex items-center justify-center h-16 md:h-24 p-2 border border-orange-200 bg-orange-50 rounded-lg hover:bg-orange-100 text-center transition shadow-sm">
               <p className="font-bold text-xs md:text-sm text-orange-800">{teks.menu_jadwal}</p>
-            </a>
+            </button>
 
-            <a href="/petugas" className="flex items-center justify-center h-16 md:h-24 p-2 border border-rose-200 bg-rose-50 rounded-lg hover:bg-rose-100 text-center transition shadow-sm">
+            {/* MANAJEMEN PETUGAS DIARAHKAN KE PUSAT KONTROL */}
+            <button onClick={() => router.push('/superadmin/pusat-kontrol/admin/petugas')} className="flex items-center justify-center h-16 md:h-24 p-2 border border-rose-200 bg-rose-50 rounded-lg hover:bg-rose-100 text-center transition shadow-sm">
               <p className="font-bold text-xs md:text-sm text-rose-800">{teks.menu_petugas}</p>
-            </a>
+            </button>
 
-            <a href="/agen-tenant" className="flex items-center justify-center h-16 md:h-24 p-2 border border-purple-200 bg-purple-50 rounded-lg hover:bg-purple-100 text-center transition shadow-sm">
+            <button onClick={() => router.push('/agen-tenant')} className="flex items-center justify-center h-16 md:h-24 p-2 border border-purple-200 bg-purple-50 rounded-lg hover:bg-purple-100 text-center transition shadow-sm">
               <p className="font-bold text-xs md:text-sm text-purple-800">{teks.menu_agen}</p>
-            </a>
+            </button>
 
-            <a href="/pengaturan" className="flex items-center justify-center h-16 md:h-24 p-2 border border-gray-200 bg-gray-50 rounded-lg hover:bg-gray-100 text-center transition shadow-sm">
+            <button onClick={() => router.push('/pengaturan')} className="flex items-center justify-center h-16 md:h-24 p-2 border border-gray-200 bg-gray-50 rounded-lg hover:bg-gray-100 text-center transition shadow-sm">
               <p className="font-bold text-xs md:text-sm text-gray-800">{teks.menu_pengaturan}</p>
-            </a>
+            </button>
 
-            <a href="/laporan-penjualan-admin" className="flex items-center justify-center h-16 md:h-24 p-2 border border-blue-200 bg-blue-50 rounded-lg hover:bg-blue-100 text-center transition shadow-sm">
+            <button onClick={() => router.push('/laporan-penjualan-admin')} className="flex items-center justify-center h-16 md:h-24 p-2 border border-blue-200 bg-blue-50 rounded-lg hover:bg-blue-100 text-center transition shadow-sm">
               <p className="font-bold text-xs md:text-sm text-blue-800">{teks.menu_laporan}</p>
-            </a>
+            </button>
 
-            <a href="/audit" className="flex items-center justify-center h-16 md:h-24 p-2 border border-yellow-200 bg-yellow-50 rounded-lg hover:bg-yellow-100 text-center transition shadow-sm">
+            <button onClick={() => router.push('/audit')} className="flex items-center justify-center h-16 md:h-24 p-2 border border-yellow-200 bg-yellow-50 rounded-lg hover:bg-yellow-100 text-center transition shadow-sm">
               <p className="font-bold text-xs md:text-sm text-yellow-800">{teks.menu_audit}</p>
-            </a>
+            </button>
 
           </div>
         </div>

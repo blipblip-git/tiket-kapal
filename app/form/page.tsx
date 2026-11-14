@@ -66,22 +66,10 @@ function FormContent() {
           .select('*')
           .in('id', kursiIds)
 
-        if (errJ || errK) {
-          throw new Error('Gagal mengambil data jadwal atau kursi.')
-        }
-
-        // === VALIDASI: KURSI HARUS ADA ===
-        if (!jData) {
-          throw new Error('Jadwal tidak ditemukan.')
-        }
-
-        if (!kData || kData.length === 0) {
-          throw new Error('Kursi yang dipilih tidak ditemukan. Silakan pilih kursi lagi.')
-        }
-
-        if (kData.length !== kursiIds.length) {
-          throw new Error('Beberapa kursi yang dipilih tidak valid. Silakan ulangi.')
-        }
+        if (errJ || errK) throw new Error('Gagal mengambil data jadwal atau kursi.')
+        if (!jData) throw new Error('Jadwal tidak ditemukan.')
+        if (!kData || kData.length === 0) throw new Error('Kursi tidak ditemukan.')
+        if (kData.length !== kursiIds.length) throw new Error('Beberapa kursi tidak valid.')
 
         setJadwal(jData)
         setPenumpangList(kData.map(() => ({ nama: '', nik: '', is_balita: false, nama_balita: '' })))
@@ -117,7 +105,7 @@ function FormContent() {
     e.preventDefault()
     
     if (!jadwal || kursiList.length === 0) {
-      setError('Data jadwal atau kursi belum siap. Silakan refresh halaman.')
+      setError('Data jadwal atau kursi belum siap.')
       return
     }
     
@@ -127,7 +115,7 @@ function FormContent() {
         return
       }
       if (penumpangList[i].nik.length !== 16) {
-        setError(`NIK penumpang #${i + 1} harus 16 digit. (Saat ini: ${penumpangList[i].nik.length} digit)`)
+        setError(`NIK penumpang #${i + 1} harus 16 digit.`)
         return
       }
       if (penumpangList[i].is_balita && !penumpangList[i].nama_balita) {
@@ -147,12 +135,10 @@ function FormContent() {
       const pesananPayload: any[] = []
 
       penumpangList.forEach((p, idx) => {
-        // === PASTIKAN KURSI_ID ADA ===
         const kursiId = kursiList[idx]?.id
-        if (!kursiId) {
-          throw new Error(`Kursi untuk penumpang #${idx + 1} tidak ditemukan.`)
-        }
+        if (!kursiId) throw new Error(`Kursi untuk penumpang #${idx + 1} tidak ditemukan.`)
 
+        // DEWASA
         pesananPayload.push({
           jadwal_id: jadwalId,
           kursi_id: kursiId,
@@ -168,12 +154,13 @@ function FormContent() {
           is_balita: false,
         })
 
+        // BALITA
         if (p.is_balita && p.nama_balita) {
           pesananPayload.push({
             jadwal_id: jadwalId,
             kursi_id: null,
             nama_penumpang: toTitleCase(p.nama_balita),
-            nik: '-',
+            nik: null, // <-- PAKAI NULL, BUKAN '-'
             nomor_hp: noHp,
             kanal: 'online',
             status: 'pending',
@@ -207,9 +194,7 @@ function FormContent() {
     }
   }
 
-  if (loading) {
-    return <div className="min-h-screen flex items-center justify-center text-gray-900">Memuat data...</div>
-  }
+  if (loading) return <div className="min-h-screen flex items-center justify-center text-gray-900">Memuat data...</div>
 
   if (error) {
     return (

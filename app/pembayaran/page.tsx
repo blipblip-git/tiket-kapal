@@ -57,7 +57,6 @@ function PembayaranContent() {
           return
         }
 
-        // PENGAMAN: Jika pesanan sudah dibayar, tendang ke e-tiket atau beranda
         const sudahDibayar = p.every(item => item.status === 'paid')
         if (sudahDibayar) {
           router.replace(`/etiket?pesanan=${pesananIds.join(',')}`)
@@ -119,7 +118,7 @@ function PembayaranContent() {
     const ids = pesananList.map((p) => p.id)
 
     try {
-      console.log('1. Mulai update pesanan', ids)
+      // 1. Update status pesanan jadi PAID
       const { error: errP } = await supabase
         .from('pesanan')
         .update({
@@ -130,9 +129,15 @@ function PembayaranContent() {
         .in('id', ids)
 
       if (errP) throw new Error('Gagal update pesanan: ' + errP.message)
-      console.log('2. Selesai update pesanan')
 
-      const kursiIds = pesananList.map((p) => p.kursi_id).filter(Boolean) as string[]
+      // 2. Update status kursi jadi TERISI (Filter Unique + anti error)
+      // Ambil kursi_id yang unik aja (buang null dan duplikat)
+      const kursiIdsRaw = pesananList
+        .filter(p => !p.is_balita && p.kursi_id && p.kursi_id !== 'null')
+        .map((p) => p.kursi_id)
+      
+      const kursiIds = [...new Set(kursiIdsRaw)] as string[]
+
       if (kursiIds.length > 0) {
         const { error: errK } = await supabase
           .from('kursi')
@@ -141,8 +146,8 @@ function PembayaranContent() {
 
         if (errK) throw new Error('Gagal update kursi: ' + errK.message)
       }
-      console.log('4. Selesai update kursi')
 
+      // 3. Insert ke tabel pembayaran
       const pesananDewasa = pesananList.filter(p => !p.is_balita)
       const pembayaranData = pesananDewasa.map((p) => ({
         pesanan_id: p.id,
@@ -156,9 +161,8 @@ function PembayaranContent() {
         const { error: errPay } = await supabase.from('pembayaran').insert(pembayaranData)
         if (errPay) throw new Error('Gagal simpan pembayaran: ' + errPay.message)
       }
-      console.log('6. Selesai insert pembayaran')
 
-      // Gunakan router.replace agar halaman pembayaran tidak masuk history browser
+      // 4. Redirect ke E-Tiket
       router.replace(`/etiket?pesanan=${ids.join(',')}`)
     } catch (err: any) {
       console.error('Error di handleBayarOnline:', err)
@@ -250,7 +254,7 @@ function PembayaranContent() {
               </div>
               
               <p className="text-[10px] md:text-xs text-red-600 font-bold mt-2 md:mt-3 bg-red-50 inline-block px-3 py-1 rounded-full">
-                ⏳ Batas waktu: 10 menit
+                ⏳ Batas waktu: 5 menit
               </p>
             </div>
           )}
@@ -303,4 +307,4 @@ export default function PembayaranPage() {
       <PembayaranContent />
     </Suspense>
   )
-} 
+}

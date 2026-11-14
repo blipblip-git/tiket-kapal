@@ -27,7 +27,8 @@ export default function DashboardSuperadminPage() {
         return
       }
 
-      if (p.role !== 'admin_utama') {
+      // REVISI: Cek role harus 'superadmin', bukan 'admin_utama'
+      if (p.role !== 'superadmin') {
         await supabase.auth.signOut()
         router.push('/superadmin')
         return
@@ -66,7 +67,6 @@ export default function DashboardSuperadminPage() {
         {/* MENU KHUSUS SUPERADMIN */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           
-          {/* 1. DATA PENYEWA -> Ngarah ke /dashboard-superadmin/penyewa */}
           <button 
             onClick={() => router.push('/dashboard-superadmin/penyewa')}
             className="bg-gray-800 p-8 rounded-xl shadow-lg hover:bg-gray-700 transition border border-gray-700 text-left flex flex-col items-start h-48 justify-center group"
@@ -76,7 +76,6 @@ export default function DashboardSuperadminPage() {
             <p className="text-sm text-gray-400">Kelola Pemilik Kapal yang menggunakan platform Anda.</p>
           </button>
 
-          {/* 2. MANAJEMEN PEMILIK KAPAL */}
           <button 
             onClick={() => router.push('/dashboard-superadmin/tenant')} 
             className="bg-gray-800 p-8 rounded-xl shadow-lg hover:bg-gray-700 transition border border-gray-700 text-left flex flex-col items-start h-48 justify-center group"
@@ -86,7 +85,6 @@ export default function DashboardSuperadminPage() {
             <p className="text-sm text-gray-400">Daftarkan Admin Utama, reset password, dan kelola tenant.</p>
           </button>
 
-          {/* 3. MANAJEMEN AGEN */}
           <button 
             onClick={() => router.push('/dashboard-superadmin/agen')} 
             className="bg-gray-800 p-8 rounded-xl shadow-lg hover:bg-gray-700 transition border border-gray-700 text-left flex flex-col items-start h-48 justify-center group"
@@ -96,7 +94,6 @@ export default function DashboardSuperadminPage() {
             <p className="text-sm text-gray-400">Buat akun agen khusus untuk semua pemilik kapal.</p>
           </button>
 
-          {/* 4. PUSAT KONTROL WEBSITE -> Ngarah ke /superadmin/pusat-kontrol */}
           <button 
             onClick={() => router.push('/superadmin/pusat-kontrol')}
             className="bg-gray-800 p-8 rounded-xl shadow-lg hover:bg-gray-700 transition border border-gray-700 text-left flex flex-col items-start h-48 justify-center group"
@@ -106,7 +103,6 @@ export default function DashboardSuperadminPage() {
             <p className="text-sm text-gray-400">Atur teks & tampilan dashboard Admin, Petugas, dan Agen.</p>
           </button>
 
-          {/* 5. PUSAT KENDALI LINTASEA */}
           <button 
             onClick={() => router.push('/superadmin/pusat-kontrol/online')}
             className="bg-gray-800 p-8 rounded-xl shadow-lg hover:bg-gray-700 transition border border-gray-700 text-left flex flex-col items-start h-48 justify-center group"

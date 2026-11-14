@@ -1,4 +1,3 @@
-// app/petugas/page.tsx
 'use client'
 
 import { useEffect, useState } from 'react'
@@ -9,7 +8,7 @@ type RoleType = 'terminal_keberangkatan'
 
 const DAFTAR_LOKASI = ['Tarakan', 'Tanjung Selor', 'Malinau', 'Nunukan', 'KTT', 'Bunyu']
 
-export default function PetugasPage() {
+export default function AdminPetugasPage() {
   const router = useRouter()
   const [me, setMe] = useState<Profile | null>(null)
   const [petugas, setPetugas] = useState<Profile[]>([])
@@ -22,7 +21,7 @@ export default function PetugasPage() {
   const [inputNama, setInputNama] = useState('')
   const [inputHp, setInputHp] = useState('')
   const [inputPass, setInputPass] = useState('')
-  const [inputRole] = useState<RoleType>('terminal_keberangkatan') // Terkunci
+  const [inputRole] = useState<RoleType>('terminal_keberangkatan')
   const [inputLokasi, setInputLokasi] = useState('Tarakan')
   const [inputUnit, setInputUnit] = useState('')
   const [modalLoading, setModalLoading] = useState(false)
@@ -36,7 +35,6 @@ export default function PetugasPage() {
   const [editUnit, setEditUnit] = useState('')
   const [editLoading, setEditLoading] = useState(false)
 
-  // ==================== LOAD AWAL ====================
   useEffect(() => {
     async function init() {
       let profile = await getProfile()
@@ -47,27 +45,30 @@ export default function PetugasPage() {
         }
       }
       if (!profile) {
-        router.push('/login')
+        router.push('/superadmin')
         return
       }
-      if (profile.role !== 'admin_utama') {
-        router.push('/dashboard')
-        return
-      }
-      setMe(profile)
-      await loadPetugas(profile.id) // Kirim ID operator
+      
+      // Ambil operator_id dari URL (jika Superadmin lagi ngetes), atau dari Profil (jika Admin asli)
+      const urlParams = new URLSearchParams(window.location.search)
+      const urlOperatorId = urlParams.get('operator')
+      const targetOperatorId = urlOperatorId || profile.operator_id || profile.id
+
+      // Simulasi profil "me" biar filter jalan
+      setMe({ ...profile, operator_id: targetOperatorId, id: targetOperatorId } as Profile)
+      
+      await loadPetugas(targetOperatorId)
       setLoading(false)
     }
     init()
   }, [router])
 
-  // === DINDING PEMISAH: Filter berdasarkan operator_id ===
   async function loadPetugas(operatorId: string) {
     const { data, error } = await supabase
       .from('profiles')
       .select('*')
       .eq('role', 'terminal_keberangkatan')
-      .eq('operator_id', operatorId) // <-- TEMBOKNYA
+      .eq('operator_id', operatorId)
       .order('nama', { ascending: true })
 
     if (error) {
@@ -77,7 +78,6 @@ export default function PetugasPage() {
     setPetugas((data || []) as Profile[])
   }
 
-  // ==================== AKSI AKTIF / NONAKTIF ====================
   async function toggleAktif(target: Profile) {
     if (!me) return
     const aksiBaru = !target.aktif
@@ -111,7 +111,6 @@ export default function PetugasPage() {
     setAksiLoading(null)
   }
 
-  // ==================== TAMBAH OPERATOR ====================
   async function handleTambah(e: React.FormEvent) {
     e.preventDefault()
     if (!me) return
@@ -134,7 +133,7 @@ export default function PetugasPage() {
       unit: inputUnit, 
       aktif: true, 
       password_plain: inputPass,
-      operator_id: me.id // <-- DINDING PEMISAH: Petugas ini milik Wawan
+      operator_id: me.id
     })
 
     setModalLoading(false)
@@ -149,7 +148,6 @@ export default function PetugasPage() {
     await loadPetugas(me.id)
   }
 
-  // ==================== EDIT INLINE ====================
   function mulaiEdit(p: Profile) {
     setEditId(p.id)
     setEditNama(p.nama)
@@ -188,7 +186,6 @@ export default function PetugasPage() {
     if (me) await loadPetugas(me.id)
   }
 
-  // ==================== KIRIM WA ====================
   function kirimWA(p: Profile) {
     let noHp = p.email.replace('@petugas.local', '').replace(/\D/g, '')
     if (noHp.startsWith('0')) {
@@ -216,7 +213,7 @@ export default function PetugasPage() {
             <h1 className="text-2xl font-bold text-gray-800 flex items-center gap-2">
               Manajemen Petugas
               <span className="text-xs bg-green-100 text-green-700 px-2 py-1 rounded-full flex items-center gap-1 border border-green-300">
-                <span className="w-2 h-2 rounded-full bg-green-500"></span> Admin Utama: ON (Anda)
+                <span className="w-2 h-2 rounded-full bg-green-500"></span> Mode Pusat Kontrol
               </span>
             </h1>
             <p className="text-sm text-gray-500 mt-1">Kelola akun operator keberangkatan (Scan & Manifest) untuk kapal Anda.</p>
@@ -328,7 +325,7 @@ export default function PetugasPage() {
         )}
       </div>
 
-      {/* ==================== MODAL TAMBAH ==================== */}
+      {/* MODAL TAMBAH */}
       {modalTambah && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-lg shadow-xl max-w-sm w-full p-6">
@@ -347,9 +344,6 @@ export default function PetugasPage() {
               <select value={inputLokasi} onChange={(e) => setInputLokasi(e.target.value)} className="w-full border rounded px-3 py-2 mb-3 text-gray-900" required>
                 {DAFTAR_LOKASI.map((lok) => <option key={lok} value={lok}>{lok}</option>)}
               </select>
-
-              <label className="block text-sm font-medium text-gray-700 mb-1">Role / Jabatan</label>
-              <input type="text" value="Operator Keberangkatan" disabled className="w-full border rounded px-3 py-2 mb-3 text-gray-500 bg-gray-100" />
 
               <label className="block text-sm font-medium text-gray-700 mb-1">Password</label>
               <input type="text" value={inputPass} onChange={(e) => setInputPass(e.target.value)} className="w-full border rounded px-3 py-2 mb-4 text-gray-900" required />
