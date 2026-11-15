@@ -81,7 +81,7 @@ export async function cetakTiketThermal(tiket: any) {
       textData += '\x1B\x4A\x0A' 
       textData += '\x1B\x61\x01' 
       textData += `${tiket.kode_tiket}\n` 
-      textData += `${tiket.jadwal_singkat || tiket.jadwal}\n` // <-- PAKAI SINGKATAN
+      textData += `${tiket.jadwal_singkat || tiket.jadwal}\n`
       textData += '\x1B\x61\x00' 
       textData += '--------------------------------\n'
       textData += `Nama / Kursi : ${tiket.nama_penumpang} / ${tiket.kursi}\n`
@@ -115,7 +115,8 @@ export async function cetakTiketThermal(tiket: any) {
       }
       await sendData(imageBytes)
       
-      const endData = '\x1B\x4A\x48\x1D\x56\x00' 
+      // === REVISI MOBILE: 96 DOTS (x60) ===
+      const endData = '\x1B\x4A\x60\x1D\x56\x00' 
       await sendData(encoder.encode(endData))
 
       device.gatt.disconnect()
@@ -183,7 +184,7 @@ export async function cetakTiketThermal(tiket: any) {
     textData += '\x1B\x4A\x0A' 
     textData += '\x1B\x61\x01' 
     textData += `${tiket.kode_tiket}\n` 
-    textData += `${tiket.jadwal_singkat || tiket.jadwal}\n` // <-- PAKAI SINGKATAN
+    textData += `${tiket.jadwal_singkat || tiket.jadwal}\n`
     textData += '\x1B\x61\x00' 
     textData += '--------------------------------\n'
     textData += `Nama / Kursi : ${tiket.nama_penumpang} / ${tiket.kursi}\n`
@@ -206,6 +207,7 @@ export async function cetakTiketThermal(tiket: any) {
     }
     await writer.write(imageBytes)
     
+    // === LAPTOP TETAP 72 DOTS (x48) SESUAI SURAT WARISAN ===
     const endData = '\x1B\x4A\x48\x1D\x56\x00' 
     await writer.write(encoder.encode(endData))
 
