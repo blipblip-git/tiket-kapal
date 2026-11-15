@@ -25,7 +25,11 @@ function PembayaranSuperadminContent() {
   const searchParams = useSearchParams()
   const router = useRouter()
   const pesananParam = searchParams.get('pesanan')
-  const kanal = searchParams.get('kanal') || 'agen'
+  
+  // --- INI YANG DIPERBAIKI: Prioritas ambil dari 'dari', fallback ke 'kanal' ---
+  const dariParam = searchParams.get('dari')
+  const kanalParam = searchParams.get('kanal')
+  const kanal = dariParam || kanalParam || 'agen'
 
   const [profile, setProfile] = useState<Profile | null>(null)
   const [pesananList, setPesananList] = useState<PesananItem[]>([])

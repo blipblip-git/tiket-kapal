@@ -184,8 +184,8 @@ function FormPetugasSuperadminContent() {
 
       if (insertedPesanan && insertedPesanan.length > 0) {
         const idList = insertedPesanan.map(p => p.id).join(',')
-        // REDIRECT DENGAN PARAMETER KANAL=PETUGAS
-        router.push(`/superadmin/pusat-kontrol/pembayaran?pesanan=${idList}&kanal=petugas`)
+        // REDIRECT DENGAN PARAMETER KANAL=PETUGAS DAN DARI=PETUGAS
+        router.push(`/superadmin/pusat-kontrol/pembayaran?pesanan=${idList}&kanal=petugas&dari=petugas`)
       } else {
         throw new Error('Gagal insert pesanan (data kosong)')
       }

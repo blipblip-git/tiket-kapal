@@ -2,7 +2,7 @@
 
 import { useEffect } from 'react'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
-import { cekValidasiSesi } from '@/lib/supabase'
+import { cekValidasiSesi, supabase } from '@/lib/supabase'
 
 export default function SessionGuard() {
   const pathname = usePathname()
@@ -24,7 +24,7 @@ export default function SessionGuard() {
       '/cek-tiket', 
       '/etiket', 
       '/form', 
-      '/superadmin', 
+      '/superadmin', // Halaman login superadmin
       '/syahbandar', 
       '/kursi', 
       '/pembayaran'
@@ -34,18 +34,25 @@ export default function SessionGuard() {
       return
     }
 
-    // 3. Cek apakah ada sesi yang tersimpan di localStorage
-    const sesi = typeof window !== 'undefined' ? localStorage.getItem('petugas_session') : null
+    // 3. CEK SESSION SUPABASE (UNTUK SUPERADMIN)
+    // Kalau ada sesi Supabase Auth yang valid, berarti dia Superadmin/Admin Utama. Biarkan lewat.
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (session) return
 
-    if (sesi) {
-      return
-    }
+      // 4. JIKA TIDAK ADA SESI SUPABASE, CEK SESSION LOKAL (PETUGAS/AGEN)
+      const sesiLokal = typeof window !== 'undefined' ? localStorage.getItem('petugas_session') : null
 
-    cekValidasiSesi().then((isValid) => {
-      if (!isValid) {
-        console.log('Sesi tidak valid, mengalihkan ke login...')
-        router.push('/login')
+      if (sesiLokal) {
+        return
       }
+
+      // 5. JIKA DUA-DUANYA KOSONG, BARU CEK VALIDASI & TENDANG KE LOGIN
+      cekValidasiSesi().then((isValid) => {
+        if (!isValid) {
+          console.log('Sesi tidak valid, mengalihkan ke login...')
+          router.push('/login')
+        }
+      })
     })
 
   }, [pathname, router, searchParams])

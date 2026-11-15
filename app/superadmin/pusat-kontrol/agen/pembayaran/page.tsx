@@ -131,7 +131,8 @@ function PembayaranSuperadminContent() {
       }
 
       // 4. Arahkan ke halaman cetak/etiket
-      router.push(`/etiket?pesanan=${pesananIds.join(',')}`)
+      // --- INI YANG DIPERBAIKI (Nambahin &dari=agen) ---
+      router.push(`/etiket?pesanan=${pesananIds.join(',')}&dari=agen`)
 
     } catch (err: any) {
       setError('Gagal memproses pembayaran: ' + err.message)

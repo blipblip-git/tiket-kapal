@@ -335,7 +335,7 @@ function PetugasLaporanContent() {
                 <span>Kapal</span><span>:</span><span className="font-medium text-gray-900">{rincianAktif?.nama_kapal}</span>
                 <span>Kapten</span><span>:</span><span className="font-medium text-gray-900">{rincianAktif?.nama_kapten}</span>
                 <span>Total Penumpang</span><span>:</span><span className="font-bold">{rincianAktif?.total_terjual} Orang</span>
-                <span></span><span></span><span className="font-medium">Dewasa {totalDewasa} org | <span className="text-orange-600">Balita {totalBalita} org</span></span>
+                <span></span><span></span><span className="font-medium">Dewasa {totalDewasa} Orang | <span className="text-orange-600">Balita {totalBalita} Orang</span></span>
               </div>
             </div>
 
@@ -402,7 +402,10 @@ function PetugasLaporanContent() {
                   <span>Kapal</span><span>:</span><span>{rincianAktif.nama_kapal}</span>
                   <span>Kapten</span><span>:</span><span>{rincianAktif.nama_kapten}</span>
                   <span>Total Penumpang</span><span>:</span><span className="font-bold">{rincianAktif.total_terjual} Orang</span>
-                  <span></span><span></span><span>Dewasa {totalDewasa} org | Balita {totalBalita} org</span>
+                  
+                  {/* --- REVISI: Teks di print diubah jadi 'Orang' dan dipecah 2 baris --- */}
+                  <span></span><span></span><span className="font-bold">Dewasa {totalDewasa} Orang</span>
+                  <span></span><span></span><span className="font-bold text-orange-600">Balita {totalBalita} Orang</span>
                 </div>
 
                 <table className="w-full text-sm border-collapse border border-gray-400">

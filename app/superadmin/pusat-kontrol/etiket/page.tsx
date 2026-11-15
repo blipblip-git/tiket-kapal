@@ -68,7 +68,7 @@ function EtiketSuperadminContent() {
         if (sesiLokal) p = sesiLokal as unknown as Profile
       }
       if (!p) {
-        router.push('/superadmin')
+        router.push('/login')
         return
       }
       setProfile(p)
@@ -364,15 +364,26 @@ function EtiketSuperadminContent() {
       return
     }
 
-    // Cek jejak 'dari' agar tidak ditendang ke login superadmin
-    if (dari === 'petugas') {
-      router.replace('/superadmin/pusat-kontrol/petugas/jual-tiket')
-    } else if (dari === 'agen') {
-      router.replace('/superadmin/pusat-kontrol/agen/jual-tiket')
-    } else {
-      // JIKA TIDAK ADA JEJAK, ARAHKAN KE DASHBOARD SUPERADMIN (BUKAN PUSAT KONTROL)
-      router.replace('/dashboard-superadmin')
+    // === REVISI: CEK ROLE SIAPA YANG LOGIN, LALU ARAHKAN KE DASHBOARD YANG BENAR ===
+    const sesi = getOperatorSession()
+    
+    if (sesi) {
+      if (sesi.role === 'agen') {
+        router.replace('/dashboard/agen')
+        return
+      }
+      if (sesi.role === 'terminal_keberangkatan') {
+        router.replace('/dashboard/keberangkatan')
+        return
+      }
+      if (sesi.role === 'admin_utama') {
+        router.replace('/dashboard')
+        return
+      }
     }
+
+    // Kalau nggak ada sesi lokal (berarti Superadmin), balik ke pusat kontrol
+    router.replace('/superadmin/pusat-kontrol')
   }
 
   if (loading) return <p className="p-6 text-center text-gray-900 mt-10">Memuat e-tiket...</p>

@@ -84,14 +84,18 @@ function LoketJualSuperadminContent() {
         .select('*')
         .eq('jadwal_id', jadwalId)
 
-      // === INI OBATNYA: FILTER UNIQUE NOMOR KURSI ===
+      // === FILTER SUPER KETAT (Anti Dobel) ===
       const uniqueMap = new Map<string, Kursi>()
       ;(dataKursi || []).forEach((k) => {
-        if (!uniqueMap.has(k.nomor_kursi)) {
+        const existing = uniqueMap.get(k.nomor_kursi)
+        if (!existing) {
           uniqueMap.set(k.nomor_kursi, k)
+        } else if (existing.status !== 'kosong' && k.status === 'kosong') {
+          uniqueMap.set(k.nomor_kursi, k) // Prioritaskan yang kosong
         }
       })
       
+      // Sortir berdasarkan angka
       const sortedKursi = Array.from(uniqueMap.values()).sort((a, b) => {
         return parseInt(a.nomor_kursi) - parseInt(b.nomor_kursi)
       })
