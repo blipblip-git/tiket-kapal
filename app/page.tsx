@@ -112,6 +112,22 @@ function BerandaContent() {
         .animate-heartbeat {
           animation: heartbeat 1.5s infinite;
         }
+
+        /* Animasi Cenut-cenut (Tanpa Glow) */
+        @keyframes cenut-cenut {
+          0% { transform: scale(1); }
+          50% { transform: scale(1.3); }
+          100% { transform: scale(1); }
+        }
+        .dot-cenut {
+          animation: cenut-cenut 1.2s infinite ease-in-out;
+        }
+        .dot-delay-1 { animation-delay: 0s; }
+        .dot-delay-2 { animation-delay: 0.2s; }
+        .dot-delay-3 { animation-delay: 0.4s; }
+        .dot-delay-4 { animation-delay: 0.6s; }
+        .dot-delay-5 { animation-delay: 0.8s; }
+        .dot-delay-6 { animation-delay: 1.0s; }
       `}} />
 
       <div 
@@ -120,12 +136,12 @@ function BerandaContent() {
       >
         <h1 className="text-3xl sm:text-4xl font-serif text-gray-900 tracking-wide">LintasAir</h1>
         <div className="flex justify-center gap-1.5 mt-2 sm:mt-3">
-          <span className="w-3 h-3 sm:w-3.5 sm:h-3.5 rounded-full bg-red-500"></span>
-          <span className="w-3 h-3 sm:w-3.5 sm:h-3.5 rounded-full bg-yellow-400"></span>
-          <span className="w-3 h-3 sm:w-3.5 sm:h-3.5 rounded-full bg-green-500"></span>
-          <span className="w-3 h-3 sm:w-3.5 sm:h-3.5 rounded-full bg-blue-500"></span>
-          <span className="w-3 h-3 sm:w-3.5 sm:h-3.5 rounded-full bg-purple-500"></span>
-          <span className="w-3 h-3 sm:w-3.5 sm:h-3.5 rounded-full bg-pink-500"></span>
+          <span className="w-3 h-3 sm:w-3.5 sm:h-3.5 rounded-full bg-red-500 dot-cenut dot-delay-1"></span>
+          <span className="w-3 h-3 sm:w-3.5 sm:h-3.5 rounded-full bg-yellow-400 dot-cenut dot-delay-2"></span>
+          <span className="w-3 h-3 sm:w-3.5 sm:h-3.5 rounded-full bg-green-500 dot-cenut dot-delay-3"></span>
+          <span className="w-3 h-3 sm:w-3.5 sm:h-3.5 rounded-full bg-blue-500 dot-cenut dot-delay-4"></span>
+          <span className="w-3 h-3 sm:w-3.5 sm:h-3.5 rounded-full bg-purple-500 dot-cenut dot-delay-5"></span>
+          <span className="w-3 h-3 sm:w-3.5 sm:h-3.5 rounded-full bg-pink-500 dot-cenut dot-delay-6"></span>
         </div>
       </div>
 
