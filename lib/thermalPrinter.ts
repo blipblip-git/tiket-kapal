@@ -115,8 +115,8 @@ export async function cetakTiketThermal(tiket: any) {
       }
       await sendData(imageBytes)
       
-      // === REVISI MOBILE: 96 DOTS (x60) ===
-      const endData = '\x1B\x4A\x60\x1D\x56\x00' 
+      // === REVISI MOBILE: 120 DOTS (x78) ===
+      const endData = '\x1B\x4A\x78\x1D\x56\x00' 
       await sendData(encoder.encode(endData))
 
       device.gatt.disconnect()
@@ -207,7 +207,7 @@ export async function cetakTiketThermal(tiket: any) {
     }
     await writer.write(imageBytes)
     
-    // === LAPTOP TETAP 72 DOTS (x48) SESUAI SURAT WARISAN ===
+    // === LAPTOP TETAP 72 DOTS (x48) ===
     const endData = '\x1B\x4A\x48\x1D\x56\x00' 
     await writer.write(encoder.encode(endData))
 
