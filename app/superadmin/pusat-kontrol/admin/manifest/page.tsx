@@ -26,7 +26,7 @@ function ManifestSuperadminContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const lokasi = searchParams.get('lokasi') || 'Tarakan'
-  const operatorId = searchParams.get('operator') || ''
+  const operatorIdParam = searchParams.get('operator') || ''
 
   const [profile, setProfile] = useState<Profile | null>(null)
   const [loading, setLoading] = useState(true)
@@ -57,6 +57,12 @@ function ManifestSuperadminContent() {
       if (!profile) return
       setLoading(true)
 
+      // Tentukan target operator_id
+      let targetOperatorId = operatorIdParam
+      if (profile.role !== 'superadmin') {
+        targetOperatorId = profile.operator_id || profile.id
+      }
+
       let queryTemplate = supabase.from('template_jadwal').select('jam_berangkat').eq('rute_asal', lokasi)
       let queryJadwal = supabase.from('jadwal').select('id, jam_berangkat, kapal_id').eq('tanggal', tanggal).eq('rute_asal', lokasi)
       let queryPesanan = supabase.from('pesanan').select(`
@@ -65,10 +71,15 @@ function ManifestSuperadminContent() {
           kursi:kursi_id (nomor_kursi)
         `).eq('status', 'paid').eq('jadwal.tanggal', tanggal).eq('jadwal.rute_asal', lokasi)
 
-      if (operatorId) {
-        queryTemplate = queryTemplate.eq('operator_id', operatorId)
-        queryJadwal = queryJadwal.eq('operator_id', operatorId)
-        queryPesanan = queryPesanan.eq('jadwal.operator_id', operatorId)
+      if (targetOperatorId) {
+        queryTemplate = queryTemplate.eq('operator_id', targetOperatorId)
+        queryJadwal = queryJadwal.eq('operator_id', targetOperatorId)
+        queryPesanan = queryPesanan.eq('jadwal.operator_id', targetOperatorId)
+      } else if (profile.role !== 'superadmin') {
+        // Kalau bukan superadmin tapi nggak punya operator_id, jangan tampilkan apa-apa
+        setLaporan([])
+        setLoading(false)
+        return
       }
 
       const { data: templateData } = await queryTemplate
@@ -118,7 +129,7 @@ function ManifestSuperadminContent() {
       setLoading(false)
     }
     fetchData()
-  }, [profile, tanggal, lokasi, operatorId])
+  }, [profile, tanggal, lokasi, operatorIdParam])
 
   const handlePrint = () => { setTimeout(() => window.print(), 100) }
   
