@@ -85,16 +85,22 @@ function LaporanContent() {
         .from('template_jadwal')
         .select('jam_berangkat')
         .eq('rute_asal', lokasiTarget)
+        .eq('operator_id', profile.id) // KUNCI OPERATOR
       
       let query = supabase
         .from('pesanan')
         .select(`
           id, nama_penumpang, kode_tiket, kanal, status, status_boarding, waktu_boarding, petugas_jual, is_balita,
-          jadwal:jadwal_id (rute_asal, rute_tujuan, harga, tanggal, jam_berangkat, status_jadwal, kapal_id),
+          jadwal:jadwal_id (rute_asal, rute_tujuan, harga, tanggal, jam_berangkat, status_jadwal, kapal_id, operator_id),
           kursi:kursi_id (nomor_kursi)
         `)
         .eq('status', 'paid')
         .eq('jadwal.tanggal', tanggal)
+
+      // FILTER MULTI-TENANT
+      if (profile.role !== 'superadmin') {
+        query = query.eq('jadwal.operator_id', profile.id)
+      }
 
       if (!isAdmin) {
         query = query.eq('jadwal.rute_asal', lokasiTarget)
@@ -130,10 +136,16 @@ function LaporanContent() {
 
         // === PERBAIKAN: Tarik semua agen/petugas, cocokkan nomor HP & email ===
         const petugasMap = new Map()
-        const { data: profilesData } = await supabase
+        let queryProfiles = supabase
           .from('profiles')
           .select('email, nomor_hp, nama')
           .in('role', ['agen', 'terminal_keberangkatan'])
+
+        if (profile.role !== 'superadmin') {
+          queryProfiles = queryProfiles.eq('operator_id', profile.id)
+        }
+
+        const { data: profilesData } = await queryProfiles
 
         profilesData?.forEach((p: any) => {
           if (p.email) petugasMap.set(p.email, p.nama)
