@@ -114,9 +114,9 @@ export async function cetakTiketThermal(tiket: any) {
       }
       await sendData(imageBytes)
       
-      // === MOBILE: PAKAI ESC d (PRINT AND FEED n LINES) ===
-      // \x1B\x64\x08 = ESC d 8 (8 lines feed)
-      const endData = '\x1B\x4A\x0A\x1B\x64\x08\x1D\x56\x00' 
+      // === MOBILE: PAKAI ESC d (PRINT AND FEED 5 LINES) ===
+      // \x1B\x64\x05 = ESC d 5 (5 lines feed)
+      const endData = '\x1B\x4A\x0A\x1B\x64\x05\x1D\x56\x00' 
       await sendData(encoder.encode(endData))
 
       device.gatt.disconnect()
