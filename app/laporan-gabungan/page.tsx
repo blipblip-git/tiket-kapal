@@ -23,12 +23,10 @@ export default function LaporanGabunganPage() {
   const [error, setError] = useState('')
   const [laporan, setLaporan] = useState<GabunganPerJam[]>([])
   
-  // Tanggal dikosongin dulu, nanti diisi di useEffect
   const [tanggal, setTanggal] = useState('')
   const [tanggalFormatHeader, setTanggalFormatHeader] = useState('')
 
   useEffect(() => {
-    // Set tanggal di dalam useEffect biar aman dari error Next.js 16
     const today = new Date()
     const offset = today.getTimezoneOffset() * 60000
     const localDate = new Date(today.getTime() - offset).toISOString().split('T')[0]
@@ -53,29 +51,47 @@ export default function LaporanGabunganPage() {
       if (!profile || !tanggal) return
       setLoading(true)
       
-      const { data: templateData } = await supabase
+      // FILTER TEMPLATE
+      let queryTemplate = supabase
         .from('template_jadwal')
         .select('jam_berangkat, rute_asal')
+      
+      if (profile.role !== 'superadmin') {
+        queryTemplate = queryTemplate.eq('operator_id', profile.id)
+      }
+      
+      const { data: templateData } = await queryTemplate
       
       const jamSet = new Set<string>()
       if (templateData) {
         templateData.forEach((t: any) => jamSet.add(t.jam_berangkat.substring(0, 5)))
       }
 
-      const { data: pesananData, error } = await supabase
+      // FILTER PESANAN
+      let queryPesanan = supabase
         .from('pesanan')
         .select(`
-          id, jadwal:jadwal_id (rute_asal, rute_tujuan, harga, tanggal, jam_berangkat, kapal_id)
+          id, jadwal:jadwal_id (rute_asal, rute_tujuan, harga, tanggal, jam_berangkat, kapal_id, operator_id)
         `)
         .eq('status', 'paid')
         .eq('jadwal.tanggal', tanggal)
+
+      if (profile.role !== 'superadmin') {
+        queryPesanan = queryPesanan.eq('jadwal.operator_id', profile.id)
+      }
+
+      const { data: pesananData, error } = await queryPesanan
 
       if (error) { setError('Gagal memuat laporan: ' + error.message); setLoading(false); return }
 
       const kapalIds = [...new Set(pesananData?.map((p: any) => p.jadwal?.kapal_id).filter(Boolean) || [])]
       const kapalMap = new Map()
       if (kapalIds.length > 0) {
-        const { data: kapalData } = await supabase.from('kapal').select('id, nama').in('id', kapalIds)
+        let queryKapal = supabase.from('kapal').select('id, nama').in('id', kapalIds)
+        if (profile.role !== 'superadmin') {
+          queryKapal = queryKapal.eq('operator_id', profile.id)
+        }
+        const { data: kapalData } = await queryKapal
         kapalData?.forEach((k: any) => kapalMap.set(k.id, k.nama))
       }
 
@@ -156,7 +172,6 @@ export default function LaporanGabunganPage() {
 
       <div className="max-w-4xl w-full mx-auto flex flex-col h-full">
         
-        {/* HEADER BARU */}
         <div className="flex justify-between items-start mb-3 bg-white p-3 rounded shadow-sm border border-gray-200 print-hidden flex-shrink-0">
           <div>
             <h1 className="text-sm md:text-xl font-bold text-gray-900 leading-tight">Rekap Laporan Gabungan</h1>
@@ -168,13 +183,11 @@ export default function LaporanGabunganPage() {
           </div>
         </div>
 
-        {/* FILTER TANGGAL */}
         <div className="bg-white p-2 md:p-3 rounded shadow mb-3 flex items-center gap-2 print-hidden flex-shrink-0">
           <label className="text-[10px] md:text-sm font-medium text-gray-700">Pilih Tanggal:</label>
           <input type="date" value={tanggal} onChange={(e) => setTanggal(e.target.value)} className="border rounded px-2 py-1 text-[10px] md:text-sm text-gray-900" />
         </div>
 
-        {/* TABEL GABUNGAN (DIKUNCI 1 LAYAR) */}
         <div className="bg-white rounded shadow border border-gray-200 overflow-hidden flex-1 flex flex-col min-h-0 print:border-none print:shadow-none">
           <div className="overflow-y-auto flex-1">
             <table className="w-full table-fixed border-collapse text-gray-900">
@@ -222,7 +235,6 @@ export default function LaporanGabunganPage() {
           </div>
         </div>
 
-        {/* TAMPILAN PRINT KHUSUS LAPORAN GABUNGAN */}
         <div className="hidden print:block mt-8">
           <h1 className="text-xl font-bold text-center mb-6">REKAP LAPORAN GABUNGAN</h1>
           <div className="mb-4 text-sm grid grid-cols-[100px_10px_1fr] gap-y-1">
