@@ -3,11 +3,10 @@ import QRCode from 'qrcode'
 export async function cetakTiketThermal(tiket: any) {
   const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)
   
-  // Ambil teks loket yang udah diformat dari halaman etiket
   const teksFooter = `Perlihatkan e-tiket ke petugas\n${tiket.teks_loket || '-'}\n`
 
   // =========================================================
-  // MODE HP: WEB BLUETOOTH (TANPA APLIKASI TAMBAHAN)
+  // MODE HP: WEB BLUETOOTH
   // =========================================================
   if (isMobile || !('serial' in navigator)) {
     if (!('bluetooth' in navigator)) {
@@ -115,9 +114,8 @@ export async function cetakTiketThermal(tiket: any) {
       }
       await sendData(imageBytes)
       
-      // === MOBILE: KEMBALI KE SETTINGAN FINAL (72 DOTS) ===
-      // \x1B\x4A\x48 = ESC J 72
-      const endData = '\x1B\x4A\x0A\x1B\x4A\x48\x1D\x56\x00' 
+      // === MOBILE: FEED 150 DOTS AGAR BARCODE AMAN ===
+      const endData = '\x1B\x4A\x0A\x1B\x4A\x96\x1D\x56\x00' 
       await sendData(encoder.encode(endData))
 
       device.gatt.disconnect()
@@ -131,7 +129,7 @@ export async function cetakTiketThermal(tiket: any) {
   }
 
   // =========================================================
-  // MODE LAPTOP: WEB SERIAL (KABEL)
+  // MODE LAPTOP: WEB SERIAL
   // =========================================================
   try {
     const qrUrlForPrint = await QRCode.toDataURL(tiket.kode_tiket, { width: 200, margin: 1 })
@@ -208,9 +206,8 @@ export async function cetakTiketThermal(tiket: any) {
     }
     await writer.write(imageBytes)
     
-    // === LAPTOP: KEMBALI KE SETTINGAN FINAL (72 DOTS) ===
-    // \x1B\x4A\x48 = ESC J 72
-    const endData = '\x1B\x4A\x48\x1D\x56\x00' 
+    // === LAPTOP: FEED 150 DOTS AGAR BARCODE AMAN ===
+    const endData = '\x1B\x4A\x96\x1D\x56\x00' 
     await writer.write(encoder.encode(endData))
 
     writer.releaseLock()
