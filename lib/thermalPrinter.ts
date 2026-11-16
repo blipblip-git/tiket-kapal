@@ -115,8 +115,9 @@ export async function cetakTiketThermal(tiket: any) {
       }
       await sendData(imageBytes)
       
-      // === MOBILE: TAMBAH FEED 10 DOTS SEBELUM CUT 72 DOTS ===
-      const endData = '\x1B\x4A\x0A\x1B\x4A\x48\x1D\x56\x00' 
+      // === MOBILE: FEED LEBIH PANJANG (150 DOTS) SEBELUM CUT ===
+      // \x1B\x4A\x96 = ESC J 150 (biar kertas narik lebih panjang)
+      const endData = '\x1B\x4A\x0A\x1B\x4A\x96\x1D\x56\x00' 
       await sendData(encoder.encode(endData))
 
       device.gatt.disconnect()
@@ -207,8 +208,9 @@ export async function cetakTiketThermal(tiket: any) {
     }
     await writer.write(imageBytes)
     
-    // === LAPTOP TETAP 72 DOTS (x48) ===
-    const endData = '\x1B\x4A\x48\x1D\x56\x00' 
+    // === LAPTOP: FEED LEBIH PANJANG (150 DOTS) SEBELUM CUT ===
+    // \x1B\x4A\x96 = ESC J 150
+    const endData = '\x1B\x4A\x96\x1D\x56\x00' 
     await writer.write(encoder.encode(endData))
 
     writer.releaseLock()
