@@ -185,7 +185,6 @@ function EtiketSuperadminContent() {
           
           const bersihHp = nomorHpMurni.replace(/\D/g, '')
 
-          // PERBAIKAN: Cek tipe data dan bandingkan dengan aman
           const profilPenjual = allProfiles?.find(
             (prof: any) => {
               const profHp = prof.nomor_hp ? String(prof.nomor_hp).replace(/\D/g, '') : ''
@@ -200,14 +199,13 @@ function EtiketSuperadminContent() {
               singkatanKota = kotaMap.get(profilPenjual.lokasi) || ''
             }
 
-            if (profilPenjual.role === 'agen') {
-              const teksGabung = singkatanKota ? `Agen : ${profilPenjual.nama} - ${singkatanKota}` : `Agen : ${profilPenjual.nama}`
-              teksLoketLayar = teksGabung
-              teksLoketPrint = teksGabung
-            } else {
-              teksLoketLayar = `Petugas : ${profilPenjual.nama}`
-              teksLoketPrint = `Petugas : ${profilPenjual.nama}`
-            }
+            // === PERBAIKAN: Semua role (Agen/Petugas/Admin) dapat format Nama - Singkatan ===
+            const labelRole = profilPenjual.role === 'agen' ? 'Agen' : 'Petugas'
+            const teksGabung = singkatanKota ? `${labelRole} : ${profilPenjual.nama} - ${singkatanKota}` : `${labelRole} : ${profilPenjual.nama}`
+            
+            teksLoketLayar = teksGabung
+            teksLoketPrint = teksGabung
+
           } else {
             teksLoketLayar = `Petugas : ${nomorHpMurni}`
             teksLoketPrint = `Petugas : ${nomorHpMurni}`
