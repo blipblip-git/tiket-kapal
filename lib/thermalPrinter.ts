@@ -114,8 +114,9 @@ export async function cetakTiketThermal(tiket: any) {
       }
       await sendData(imageBytes)
       
-      // === MOBILE: ESC J 10 + ESC d 2 + GS V 0 ===
-      const endData = '\x1B\x4A\x0A\x1B\x64\x02\x1D\x56\x00' 
+      // === MOBILE: FEED AWAL 10 DOTS + FEED SEBELUM CUT 72 DOTS ===
+      // \x1B\x4A\x0A = ESC J 10 | \x1B\x4A\x48 = ESC J 72
+      const endData = '\x1B\x4A\x0A\x1B\x4A\x48\x1D\x56\x00' 
       await sendData(encoder.encode(endData))
 
       device.gatt.disconnect()
@@ -206,7 +207,8 @@ export async function cetakTiketThermal(tiket: any) {
     }
     await writer.write(imageBytes)
     
-    // === LAPTOP: ESC J 72 + GS V 0 (SESUAI SURAT WARISAN) ===
+    // === LAPTOP: FEED SEBELUM CUT 72 DOTS ===
+    // \x1B\x4A\x48 = ESC J 72
     const endData = '\x1B\x4A\x48\x1D\x56\x00' 
     await writer.write(encoder.encode(endData))
 
