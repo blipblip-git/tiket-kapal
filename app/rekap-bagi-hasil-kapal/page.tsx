@@ -60,10 +60,8 @@ function RekapBagiHasilKapalContent() {
 
   useEffect(() => {
     async function init() {
-      // 1. Coba ambil dari Supabase Auth dulu
       let p = await getProfile()
 
-      // 2. Jika gagal, coba ambil dari localStorage
       if (!p) {
         const sesiLokal = getOperatorSession()
         if (sesiLokal) {
@@ -71,24 +69,26 @@ function RekapBagiHasilKapalContent() {
         }
       }
 
-      // 3. Jika dua-duanya kosong, baru tendang ke login
       if (!p) {
         router.push('/login')
         return
       }
       
       setProfile(p)
-      await fetchLaporanBulanan()
+      await fetchLaporanBulanan(p)
       setLoading(false)
     }
     init()
   }, [router])
 
-  async function fetchLaporanBulanan() {
+  async function fetchLaporanBulanan(p: Profile) {
+    const operatorId = p.operator_id || p.id
+
     const { data: pesananData, error: errPesanan } = await supabase
       .from('pesanan')
-      .select('id, jadwal:jadwal_id(tanggal)')
+      .select('id, jadwal:jadwal_id(tanggal, operator_id)')
       .eq('status', 'paid')
+      .eq('jadwal.operator_id', operatorId) // KUNCI MULTI-TENANT
 
     if (errPesanan) {
       setError('Gagal memuat data: ' + errPesanan.message)
@@ -99,9 +99,9 @@ function RekapBagiHasilKapalContent() {
     const groupedByMonth: { [key: string]: LaporanBulanan } = {}
 
     if (pesananData) {
-      pesananData.forEach((p: any) => {
-        if (!p.jadwal || !p.jadwal.tanggal) return
-        const tgl = p.jadwal.tanggal
+      pesananData.forEach((pItem: any) => {
+        if (!pItem.jadwal || !pItem.jadwal.tanggal) return
+        const tgl = pItem.jadwal.tanggal
         
         if (tgl > batasTanggal) return
 
@@ -121,13 +121,17 @@ function RekapBagiHasilKapalContent() {
   }
 
   async function handleLihatBulan(bulan: string) {
+    if (!profile) return
     setBulanDipilih(bulan)
     setTanggalDipilih(null)
+
+    const operatorId = profile.operator_id || profile.id
 
     const { data: pesananData } = await supabase
       .from('pesanan')
       .select('id, jadwal:jadwal_id(tanggal)')
       .eq('status', 'paid')
+      .eq('jadwal.operator_id', operatorId) // KUNCI MULTI-TENANT
 
     const groupedByDate: { [key: string]: LaporanHarian } = {}
     const batasTanggal = getBatasTanggal()
@@ -159,17 +163,22 @@ function RekapBagiHasilKapalContent() {
   }
 
   async function handleLihatTanggal(tanggal: string) {
+    if (!profile) return
     setTanggalDipilih(tanggal)
     
+    const operatorId = profile.operator_id || profile.id
+
     const { data: templateData } = await supabase
       .from('template_jadwal')
       .select('jam_berangkat, rute_asal, rute_tujuan')
       .eq('aktif', true)
+      .eq('operator_id', operatorId) // KUNCI MULTI-TENANT
 
     const { data: pesananData } = await supabase
       .from('pesanan')
       .select('id, jadwal:jadwal_id(jam_berangkat, tanggal, rute_asal, rute_tujuan)')
       .eq('status', 'paid')
+      .eq('jadwal.operator_id', operatorId) // KUNCI MULTI-TENANT
 
     const grouped: { [key: string]: RincianPerJam } = {}
 

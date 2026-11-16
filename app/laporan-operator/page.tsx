@@ -48,22 +48,43 @@ function LaporanOperatorContent() {
   useEffect(() => {
     async function fetchLaporan() {
       if (!profile) return
-      const { data: templateData } = await supabase.from('template_jadwal').select('jam_berangkat').eq('rute_asal', profile.lokasi)
       
-      const { data: jadwalData } = await supabase.from('jadwal').select('id, jam_berangkat, kapal_id').eq('tanggal', tanggal).eq('rute_asal', profile.lokasi)
+      const operatorId = profile.role !== 'superadmin' ? (profile.operator_id || profile.id) : null
+
+      let queryTemplate = supabase.from('template_jadwal').select('jam_berangkat').eq('rute_asal', profile.lokasi)
+      let queryJadwal = supabase.from('jadwal').select('id, jam_berangkat, kapal_id').eq('tanggal', tanggal).eq('rute_asal', profile.lokasi)
+
+      if (operatorId) {
+        queryTemplate = queryTemplate.eq('operator_id', operatorId)
+        queryJadwal = queryJadwal.eq('operator_id', operatorId)
+      }
+
+      const { data: templateData } = await queryTemplate
+      const { data: jadwalData } = await queryJadwal
+      
       const kapalIdsFromJadwal = [...new Set(jadwalData?.map((j: any) => j.kapal_id).filter(Boolean) || [])]
       
       let kapalMap = new Map()
       if (kapalIdsFromJadwal.length > 0) {
-        const { data: kapalData } = await supabase.from('kapal').select('id, nama, nama_kapten').in('id', kapalIdsFromJadwal)
+        let queryKapal = supabase.from('kapal').select('id, nama, nama_kapten').in('id', kapalIdsFromJadwal)
+        if (operatorId) {
+          queryKapal = queryKapal.eq('operator_id', operatorId)
+        }
+        const { data: kapalData } = await queryKapal
         kapalData?.forEach((k: any) => kapalMap.set(k.id, k))
       }
 
-      const { data, error } = await supabase.from('pesanan').select(`
+      let queryPesanan = supabase.from('pesanan').select(`
           id, nama_penumpang, kode_tiket, kanal, status, status_boarding, waktu_boarding,
-          jadwal:jadwal_id (rute_asal, rute_tujuan, harga, tanggal, jam_berangkat, status_jadwal, kapal_id),
+          jadwal:jadwal_id (rute_asal, rute_tujuan, harga, tanggal, jam_berangkat, status_jadwal, kapal_id, operator_id),
           kursi:kursi_id (nomor_kursi)
         `).eq('status', 'paid').eq('jadwal.tanggal', tanggal)
+
+      if (operatorId) {
+        queryPesanan = queryPesanan.eq('jadwal.operator_id', operatorId)
+      }
+
+      const { data, error } = await queryPesanan
 
       if (error) { setError('Gagal memuat laporan: ' + error.message); return }
 
@@ -148,13 +169,8 @@ function LaporanOperatorContent() {
             height: auto !important;
             overflow: visible !important;
           }
-          /* Sembunyikan semua elemen */
           body * { visibility: hidden; }
-          
-          /* Tampilkan HANYA print container */
           .print-container, .print-container * { visibility: visible; }
-          
-          /* Posisi print container nempel atas kiri */
           .print-container {
             position: absolute;
             left: 0;
@@ -168,7 +184,6 @@ function LaporanOperatorContent() {
         }
       `}} />
 
-      {/* ================= TAMPILAN UTAMA (SCREEN ONLY) ================= */}
       <div className="screen-only min-h-screen bg-gray-100 p-6">
         <div className="max-w-5xl mx-auto">
           <div className="flex justify-between items-center mb-6 bg-white p-4 rounded shadow-sm border border-gray-200">
@@ -181,7 +196,6 @@ function LaporanOperatorContent() {
             <input type="date" value={tanggal} onChange={(e) => setTanggal(e.target.value)} className="border rounded px-3 py-1 text-gray-900" />
           </div>
 
-          {/* MANIFEST */}
           <div className="mb-8">
             <h2 className="text-lg font-bold text-gray-800 mb-3 border-b pb-2">Jadwal Belum Closing</h2>
             {laporanBelumClosed.length === 0 ? (
@@ -228,7 +242,6 @@ function LaporanOperatorContent() {
             )}
           </div>
 
-          {/* LAYAR: MANIFEST RINCIAN */}
           {expandedJam && rincianAktif && (
             <div className="mt-8">
               <div className="bg-white rounded shadow border-2 border-blue-400 overflow-hidden">
@@ -282,7 +295,6 @@ function LaporanOperatorContent() {
         </div>
       </div>
 
-      {/* ================= AREA KHUSUS PRINT (TERPISAH TOTAL DARI SCREEN) ================= */}
       {rincianAktif && (
         <div className="print-container" style={{ display: 'none' }}>
           <style>{`

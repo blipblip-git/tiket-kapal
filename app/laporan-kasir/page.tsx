@@ -77,10 +77,34 @@ export default function LaporanKasirPage() {
     async function fetchLaporan() {
       if (!profile || !tanggal) return
       
+      const operatorId = profile.operator_id || profile.id
+
+      // 1. Ambil jadwal milik operator ini dulu (untuk tanggal ini)
+      const { data: jadwalData, error: errJadwal } = await supabase
+        .from('jadwal')
+        .select('id, harga, tanggal, jam_berangkat, rute_asal, rute_tujuan, kapal_id')
+        .eq('tanggal', tanggal)
+        .eq('rute_asal', profile.lokasi)
+        .eq('operator_id', operatorId) // KUNCI MULTI-TENANT
+
+      if (errJadwal) {
+        setError('Gagal memuat jadwal: ' + errJadwal.message)
+        return
+      }
+
+      if (!jadwalData || jadwalData.length === 0) {
+        setLaporan([])
+        return
+      }
+
+      const jadwalIds = jadwalData.map(j => j.id)
+
+      // 2. Ambil pesanan yang jadwal_id-nya ada di daftar jadwal di atas
       const { data: pesananData, error: errPesanan } = await supabase
         .from('pesanan')
         .select('id, nama_penumpang, kode_tiket, jadwal_id, kursi_id, kanal, petugas_jual')
         .eq('status', 'paid')
+        .in('jadwal_id', jadwalIds) // KUNCI: Hanya pesanan dari jadwal milik operator ini
 
       if (errPesanan) {
         setError('Gagal memuat pesanan: ' + errPesanan.message)
@@ -101,20 +125,7 @@ export default function LaporanKasirPage() {
       const metodeMap = new Map()
       pembayaranData?.forEach((p: any) => metodeMap.set(p.pesanan_id, p.metode))
 
-      const jadwalIds = [...new Set(pesananData.map((p: any) => p.jadwal_id))]
-      const { data: jadwalData, error: errJadwal } = await supabase
-        .from('jadwal')
-        .select('id, harga, tanggal, jam_berangkat, rute_asal, rute_tujuan, kapal_id')
-        .in('id', jadwalIds)
-        .eq('tanggal', tanggal)
-        .eq('rute_asal', profile.lokasi)
-
-      if (errJadwal) {
-        setError('Gagal memuat jadwal: ' + errJadwal.message)
-        return
-      }
-
-      const kursiIds = pesananData.map((p: any) => p.kursi_id)
+      const kursiIds = pesananData.map((p: any) => p.kursi_id).filter(Boolean)
       const { data: kursiData } = await supabase
         .from('kursi')
         .select('id, nomor_kursi')
@@ -222,7 +233,6 @@ export default function LaporanKasirPage() {
     return `${day}/${month}/${year}`
   }
 
-  // Tentukan teks rute untuk print
   const asal = profile?.lokasi || 'Tarakan'
   const tujuan = asal === 'Tarakan' ? 'Tanjung Selor' : 'Tarakan'
   const teksRute = `${asal} - ${tujuan}`
@@ -267,7 +277,6 @@ export default function LaporanKasirPage() {
           />
         </div>
 
-        {/* ================= TAMPILAN LAYAR ================= */}
         <div className="print-hidden">
           
           {!jamTerpilih && (
@@ -277,7 +286,6 @@ export default function LaporanKasirPage() {
               ) : (
                 <>
                   <div className="bg-blue-600 px-4 py-3 flex justify-between items-center">
-                    {/* TAMBAHAN TEKS RUTE DI HEADER LAYAR */}
                     <div className="flex items-center gap-3">
                       <h2 className="text-white font-bold">Rekapan Laporan Penjualan</h2>
                       <span className="text-white font-medium text-sm">{teksRute}</span>
@@ -331,7 +339,6 @@ export default function LaporanKasirPage() {
           {jamTerpilih && dataTerpilih && (
             <div className="bg-white rounded shadow overflow-hidden">
               <div className="bg-blue-600 px-4 py-3 flex justify-between items-center">
-                {/* TAMBAHAN TEKS RUTE DI HEADER RINCIAN */}
                 <div className="flex items-center gap-3">
                   <h2 className="text-white font-bold">Rincian Laporan Penjualan - Jam {jamTerpilih}</h2>
                   <span className="text-white font-medium text-sm">{teksRute}</span>
@@ -383,8 +390,6 @@ export default function LaporanKasirPage() {
           )}
         </div>
 
-        {/* ================= TAMPILAN PRINT ================= */}
-        
         <div className="hidden print-rekap-only">
           <div className="text-center mb-6">
             <h1 className="text-xl font-bold text-gray-900">Rekapan Laporan Penjualan {teksRute}</h1>

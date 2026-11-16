@@ -2,13 +2,14 @@
 
 import { useEffect, useState, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { supabase, getProfile, getOperatorSession } from '@/lib/supabase'
+import { supabase, getProfile, getOperatorSession, type Profile } from '@/lib/supabase'
 
 function LaporanKeuanganContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const view = searchParams.get('view') // 'tarakan' atau 'tanjung'
   
+  const [profile, setProfile] = useState<Profile | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [data, setData] = useState<any[]>([])
@@ -23,13 +24,21 @@ function LaporanKeuanganContent() {
 
   useEffect(() => {
     async function init() {
-      const sesi = getOperatorSession()
-      const admin = await getProfile()
-
-      if (!sesi && (!admin || admin.role !== 'admin_utama')) {
+      let p = await getProfile()
+      if (!p) {
+        const sesiLokal = getOperatorSession()
+        if (sesiLokal) p = sesiLokal as unknown as Profile
+      }
+      if (!p) {
         router.push('/login')
         return
       }
+      if (p.role !== 'admin_utama' && p.role !== 'superadmin') {
+        setError('Anda tidak punya akses')
+        setLoading(false)
+        return
+      }
+      setProfile(p)
       setLoading(false)
     }
     init()
@@ -37,20 +46,26 @@ function LaporanKeuanganContent() {
 
   useEffect(() => {
     async function fetchData() {
-      if (!view || loading) return
+      if (!view || loading || !profile) return
 
       const asalRute = view === 'tarakan' ? 'Tarakan' : 'Tanjung Selor'
 
-      const { data: pesananData, error: errP } = await supabase
+      let query = supabase
         .from('pesanan')
         .select(`
           id, nama_penumpang, kode_tiket, kanal, status_boarding,
-          jadwal:jadwal_id (rute_asal, rute_tujuan, jam_berangkat, harga, tanggal, status_jadwal, kapal:kapal_id(nama)),
+          jadwal:jadwal_id (rute_asal, rute_tujuan, jam_berangkat, harga, tanggal, status_jadwal, operator_id, kapal:kapal_id(nama)),
           kursi:kursi_id (nomor_kursi)
         `)
         .eq('status', 'paid')
         .eq('jadwal.tanggal', tanggal)
         .eq('jadwal.rute_asal', asalRute)
+
+      if (profile.role !== 'superadmin') {
+        query = query.eq('jadwal.operator_id', profile.id) // KUNCI MULTI-TENANT
+      }
+
+      const { data: pesananData, error: errP } = await query
 
       if (errP) {
         setError('Gagal memuat: ' + errP.message)
@@ -64,10 +79,11 @@ function LaporanKeuanganContent() {
     }
 
     fetchData()
-  }, [view, tanggal, loading])
+  }, [view, tanggal, loading, profile])
 
   if (loading) return <p className="p-6 text-center text-gray-600">Memuat...</p>
   if (error) return <p className="p-6 text-center text-red-600">{error}</p>
+  if (!profile) return null
 
   if (!view) {
     return (

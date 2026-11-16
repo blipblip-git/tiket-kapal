@@ -58,18 +58,27 @@ export default function LaporanPenjualanKeberangkatanPage() {
     if (!profile) return
     setLoading(true)
 
-    const { data, error } = await supabase
+    const identitasPenjual = profile.nomor_hp || profile.email
+    const operatorId = profile.operator_id || profile.id
+
+    let query = supabase
       .from('pesanan')
       .select(`
         id, nama_penumpang, kode_tiket, is_balita, created_at,
-        jadwal:jadwal_id (harga, rute_asal, rute_tujuan, jam_berangkat, tanggal),
+        jadwal:jadwal_id (harga, rute_asal, rute_tujuan, jam_berangkat, tanggal, operator_id),
         kursi:kursi_id (nomor_kursi),
         pembayaran:pembayaran (metode)
       `)
       .eq('status', 'paid')
       .eq('kanal', 'keberangkatan')
-      .eq('petugas_jual', profile.email)
+      .eq('petugas_jual', identitasPenjual)
       .order('created_at', { ascending: true })
+
+    if (operatorId) {
+      query = query.eq('jadwal.operator_id', operatorId)
+    }
+
+    const { data, error } = await query
 
     if (error) {
       console.error('Gagal load laporan:', error)
