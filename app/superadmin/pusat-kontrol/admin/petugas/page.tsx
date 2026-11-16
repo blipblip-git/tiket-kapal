@@ -94,7 +94,7 @@ export default function AdminPetugasPage() {
       update.dinonaktifkan_oleh = null
       update.waktu_dinonaktifkan = null
     } else {
-      update.dinonaktifkan_oleh = me.email
+      update.dinonaktifkan_oleh = me.nama
       update.waktu_dinonaktifkan = new Date().toISOString()
     }
 
@@ -121,12 +121,13 @@ export default function AdminPetugasPage() {
     }
 
     setModalLoading(true)
-    const v_email = inputHp + '@petugas.local'
     const v_user_id = crypto.randomUUID()
 
+    // PERBAIKAN: Tidak pakai email lagi, email diset null
     const { error } = await supabase.from('profiles').insert({
       id: v_user_id, 
-      email: v_email, 
+      email: null, 
+      nomor_hp: inputHp,
       nama: inputNama, 
       role: inputRole, 
       lokasi: inputLokasi, 
@@ -151,7 +152,7 @@ export default function AdminPetugasPage() {
   function mulaiEdit(p: Profile) {
     setEditId(p.id)
     setEditNama(p.nama)
-    setEditHp(p.email.replace('@petugas.local', ''))
+    setEditHp(p.nomor_hp || '')
     setEditPass(p.password_plain || '')
     setEditLokasi((p as any).lokasi || 'Tarakan')
     setEditUnit((p as any).unit || '')
@@ -169,10 +170,15 @@ export default function AdminPetugasPage() {
     }
 
     setEditLoading(true)
-    const v_email = editHp + '@petugas.local'
 
+    // PERBAIKAN: Update email jadi null, pakai nomor_hp
     const { error } = await supabase.from('profiles').update({
-      nama: editNama, email: v_email, lokasi: editLokasi, unit: editUnit, password_plain: editPass
+      nama: editNama, 
+      nomor_hp: editHp,
+      email: null,
+      lokasi: editLokasi, 
+      unit: editUnit, 
+      password_plain: editPass
     }).eq('id', id)
 
     setEditLoading(false)
@@ -187,12 +193,18 @@ export default function AdminPetugasPage() {
   }
 
   function kirimWA(p: Profile) {
-    let noHp = p.email.replace('@petugas.local', '').replace(/\D/g, '')
-    if (noHp.startsWith('0')) {
-      noHp = '62' + noHp.slice(1)
+    // PERBAIKAN: Ambil nomor dari nomor_hp, fallback ke email kalau ada
+    let noHpMurni = p.nomor_hp ? p.nomor_hp.replace(/\D/g, '') : ''
+    if (!noHpMurni && p.email) {
+      noHpMurni = p.email.replace('@petugas.local', '').replace(/\D/g, '')
     }
-    const pesan = `Halo ${p.nama}, ini pesan dari Admin. Berikut informasi akun Anda:\n\nNo HP: ${p.email.replace('@petugas.local', '')}\nPassword: ${p.password_plain || '(belum di-set)'}\nRole: Operator Keberangkatan\nUnit: ${(p as any).unit || '-'}\nLokasi: ${(p as any).lokasi}\n\nSilakan login dan jangan bagikan password ini.`
-    const url = `https://wa.me/${noHp}?text=${encodeURIComponent(pesan)}`
+    
+    if (noHpMurni.startsWith('0')) {
+      noHpMurni = '62' + noHpMurni.slice(1)
+    }
+    
+    const pesan = `Halo ${p.nama}, ini pesan dari Admin. Berikut informasi akun Anda:\n\nNo HP: ${p.nomor_hp || noHpMurni}\nPassword: ${p.password_plain || '(belum di-set)'}\nRole: Operator Keberangkatan\nUnit: ${(p as any).unit || '-'}\nLokasi: ${(p as any).lokasi}\n\nSilakan login dan jangan bagikan password ini.`
+    const url = `https://wa.me/${noHpMurni}?text=${encodeURIComponent(pesan)}`
     window.open(url, '_blank')
   }
 
@@ -294,7 +306,8 @@ export default function AdminPetugasPage() {
                         <td className="px-4 py-3 font-bold text-blue-700">{(p as any).unit || '-'}</td>
                         <td className="px-4 py-3 text-gray-600">Operator Keberangkatan</td>
                         <td className="px-4 py-3 text-gray-600">
-                          <div>{p.email.replace('@petugas.local', '')}</div>
+                          {/* PERBAIKAN: Pake nomor_hp, bukan email */}
+                          <div>{p.nomor_hp || '-'}</div>
                           <div className="text-xs text-gray-400">{p.password_plain || '-'}</div>
                         </td>
                         <td className="px-4 py-3 text-center">

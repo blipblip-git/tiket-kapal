@@ -179,12 +179,19 @@ function EtiketSuperadminContent() {
           teksLoketLayar = 'Online'
           teksLoketPrint = 'Online'
         } else if (psn.petugas_jual) {
+          // Ambil nomor HP murni dari string email/nomor
           const nomorHpMurni = psn.petugas_jual.includes('@') 
             ? psn.petugas_jual.split('@')[0] 
             : psn.petugas_jual;
+          
+          // Bersihkan dari karakter non-angka
+          const bersihHp = nomorHpMurni.replace(/\D/g, '')
 
           const profilPenjual = allProfiles?.find(
-            (prof: any) => prof.nomor_hp === nomorHpMurni || prof.email === psn.petugas_jual
+            (prof: any) => {
+              const profHp = prof.nomor_hp ? String(prof.nomor_hp).replace(/\D/g, '') : ''
+              return profHp === bersihHp || prof.email === psn.petugas_jual
+            }
           )
           
           if (profilPenjual) {
@@ -194,7 +201,6 @@ function EtiketSuperadminContent() {
             }
 
             if (profilPenjual.role === 'agen') {
-              // PERBAIKAN: Format sejajar tanpa enter
               const teksGabung = singkatanKota ? `Agen : ${profilPenjual.nama} - ${singkatanKota}` : `Agen : ${profilPenjual.nama}`
               teksLoketLayar = teksGabung
               teksLoketPrint = teksGabung
@@ -419,6 +425,8 @@ function EtiketSuperadminContent() {
   const isOnline = tiketList[0]?.pesanan.kanal === 'online'
   const t = tiketList[activeTiketIndex]
 
+  const modeText = profile?.role === 'agen' ? 'Agen' : profile?.role === 'terminal_keberangkatan' ? 'Petugas' : 'Superadmin'
+
   const TiketCard = ({ tiket }: { tiket: TiketLengkap }) => {
     let labelMetode = 'Cash';
     if (tiket.pesanan.metode_bayar === 'simulasi_online' || tiket.pesanan.kanal === 'online') labelMetode = 'Qris';
@@ -509,7 +517,7 @@ function EtiketSuperadminContent() {
           </button>
           <div className="text-right">
             <h1 className="text-base md:text-xl font-bold text-gray-900">E-Tiket</h1>
-            <p className="text-[10px] md:text-xs text-gray-600">Mode {isOnline ? 'Online' : 'Superadmin'} | Total {tiketList.length} tiket</p>
+            <p className="text-[10px] md:text-xs text-gray-600">Mode {isOnline ? 'Online' : modeText} | Total {tiketList.length} tiket</p>
           </div>
         </div>
       </div>

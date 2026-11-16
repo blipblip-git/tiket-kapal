@@ -85,7 +85,8 @@ function TemplateJadwalContent() {
     let qKapal = supabase.from('kapal').select('id, nama, kapasitas').order('nama')
     if (p.role !== 'superadmin') qKapal = qKapal.eq('operator_id', p.id)
     const { data: kData } = await qKapal
-    setKapalList(kData || [])
+    const kList = kData || []
+    setKapalList(kList)
 
     // Fetch Master Rute
     let qRute = supabase.from('master_rute').select('*').order('rute_asal')
@@ -94,11 +95,19 @@ function TemplateJadwalContent() {
     setRuteList(rData || [])
 
     // Fetch Template Jadwal
-    let qTemplate = supabase.from('template_jadwal').select('*, kapal:kapal_id(nama, kapasitas)').order('jam_berangkat')
+    let qTemplate = supabase.from('template_jadwal').select('*').order('jam_berangkat')
     if (p.role !== 'superadmin') qTemplate = qTemplate.eq('operator_id', p.id)
     const { data: tData } = await qTemplate
-    setTemplateList(tData || [])
-
+    
+    const tDataWithKapal = (tData || []).map(t => {
+      const kapal = kList.find(k => k.id === t.kapal_id)
+      return {
+        ...t,
+        kapal: kapal ? { nama: kapal.nama, kapasitas: kapal.kapasitas } : null
+      }
+    })
+    
+    setTemplateList(tDataWithKapal)
     setLoading(false)
   }
 
@@ -196,7 +205,6 @@ function TemplateJadwalContent() {
     try {
       const hrg = parseInt(massalHarga)
       
-      // Update semua jadwal di rute tersebut
       const { error: errUpdate } = await supabase
         .from('template_jadwal')
         .update({ harga: hrg })
@@ -206,7 +214,6 @@ function TemplateJadwalContent() {
 
       if (errUpdate) throw errUpdate
 
-      // Update juga di master_rute agar sinkron
       await supabase
         .from('master_rute')
         .update({ harga: hrg })
@@ -406,7 +413,7 @@ function TemplateJadwalContent() {
                       <th className="px-4 py-3">Jam</th>
                       <th className="px-4 py-3">Kapal</th>
                       <th className="px-4 py-3">Kapasitas</th>
-                      <th className="px-4 py-3">Harga Spesifik</th>
+                      <th className="px-4 py-3">Harga</th>
                       <th className="px-4 py-3">Status</th>
                       <th className="px-4 py-3 text-right">Aksi</th>
                     </tr>
@@ -415,9 +422,9 @@ function TemplateJadwalContent() {
                     {list.map(t => (
                       <tr key={t.id} className="hover:bg-gray-50">
                         <td className="px-4 py-3 font-bold text-gray-900">{t.jam_berangkat.substring(0,5)}</td>
-                        <td className="px-4 py-3">{t.kapal?.nama || '-'}</td>
-                        <td className="px-4 py-3">{t.kapasitas || t.kapal?.kapasitas} Kursi</td>
-                        <td className="px-4 py-3">Rp {t.harga.toLocaleString('id-ID')}</td>
+                        <td className="px-4 py-3 text-gray-900">{t.kapal?.nama || '-'}</td>
+                        <td className="px-4 py-3 text-gray-900">{t.kapasitas || t.kapal?.kapasitas || 0} Kursi</td>
+                        <td className="px-4 py-3 text-gray-900">Rp {t.harga.toLocaleString('id-ID')}</td>
                         <td className="px-4 py-3">
                           <span className={`text-[10px] px-2 py-1 rounded-full font-bold ${t.aktif ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
                             {t.aktif ? 'AKTIF' : 'NONAKTIF'}

@@ -11,7 +11,7 @@ type RincianPenumpang = {
   status_boarding: string
   waktu_boarding: string | null
   is_balita: boolean
-  grup_transaksi_id: string | null // TAMBAHAN
+  grup_transaksi_id: string | null
 }
 
 type LaporanPerJam = {
@@ -44,8 +44,10 @@ function SyahbandarContent() {
         const sesiLokal = getOperatorSession()
         if (sesiLokal) p = sesiLokal as unknown as Profile
       }
-      if (!p) { router.push('/login'); return }
-      setProfile(p)
+      
+      if (p) {
+        setProfile(p)
+      }
       setLoading(false)
     }
     init()
@@ -53,7 +55,6 @@ function SyahbandarContent() {
 
   useEffect(() => {
     async function fetchData() {
-      if (!profile) return
       setLoading(true)
 
       const { data: templateData } = await supabase.from('template_jadwal').select('jam_berangkat').eq('rute_asal', lokasi)
@@ -66,7 +67,6 @@ function SyahbandarContent() {
         kapalData?.forEach((k: any) => kapalMap.set(k.id, k))
       }
 
-      // TAMBAHAN: grup_transaksi_id
       const { data: pesananData } = await supabase.from('pesanan').select(`
           id, nama_penumpang, status_boarding, waktu_boarding, is_balita, grup_transaksi_id,
           jadwal:jadwal_id (jam_berangkat, rute_asal, kapal_id),
@@ -101,7 +101,7 @@ function SyahbandarContent() {
           status_boarding: item.status_boarding || 'belum',
           waktu_boarding: item.waktu_boarding || null,
           is_balita: item.is_balita || false,
-          grup_transaksi_id: item.grup_transaksi_id || null // TAMBAHAN
+          grup_transaksi_id: item.grup_transaksi_id || null
         })
       })
 
@@ -109,11 +109,10 @@ function SyahbandarContent() {
       setLoading(false)
     }
     fetchData()
-  }, [profile, tanggal, lokasi])
+  }, [tanggal, lokasi])
 
   const handlePrint = () => { setTimeout(() => window.print(), 100) }
   
-  // ================= LOGIKA BARU: TEMPELKAN BALITA KE ORTU =================
   const urutkanBerdasarkanScan = (rincian: RincianPenumpang[]) => {
     const grupMap = new Map<string, RincianPenumpang[]>()
     
@@ -145,10 +144,8 @@ function SyahbandarContent() {
 
     return grupArray.flat()
   }
-  // ========================================================================
 
   if (loading) return <p className="p-6 text-center text-gray-600">Memuat...</p>
-  if (!profile) return null
 
   const now = new Date()
   const hariIniStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
@@ -345,7 +342,6 @@ function SyahbandarContent() {
       {rincianAktif && (
         <div className="hidden print:block w-full">
           {halamanData.map((halaman, pageIdx) => {
-            const isLastPage = pageIdx === halamanData.length - 1
             const startNo = pageIdx * barisPerHalaman + 1
             const nomorHalaman = pageIdx + 1
 
@@ -384,13 +380,6 @@ function SyahbandarContent() {
                         </td>
                       </tr>
                     ))}
-                    
-                    {isLastPage && (
-                      <tr className="font-bold bg-gray-300 text-center text-gray-900">
-                        <td colSpan={2} className="border border-gray-400 px-2 py-1 text-center">TOTAL PENUMPANG</td>
-                        <td className="border border-gray-400 px-2 py-1 text-center">{rincianAktif.total_terjual}</td>
-                      </tr>
-                    )}
                   </tbody>
                 </table>
 

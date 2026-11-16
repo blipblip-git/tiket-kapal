@@ -20,6 +20,8 @@ type HasilPencarian = {
   jam: string
   harga: number
   is_balita: boolean
+  teks_loket_layar: string
+  teks_loket_print: string
 }
 
 function CetakUlangSuperadminContent() {
@@ -66,7 +68,7 @@ function CetakUlangSuperadminContent() {
     let query = supabase
       .from('pesanan')
       .select(`
-        id, nama_penumpang, kode_tiket, kanal, is_balita,
+        id, nama_penumpang, kode_tiket, kanal, is_balita, petugas_jual,
         jadwal:jadwal_id (rute_asal, rute_tujuan, tanggal, jam_berangkat, harga, operator_id, kapal:kapal_id(nama)),
         kursi:kursi_id (nomor_kursi)
       `)
@@ -90,15 +92,58 @@ function CetakUlangSuperadminContent() {
     }
 
     if (data && data.length > 0) {
-      // Ambil semua master_kota untuk lookup
+      // Ambil semua master_kota & profiles untuk lookup
       const { data: kotaData } = await supabase.from('master_kota').select('nama_kota, singkatan')
       const kotaMap = new Map(kotaData?.map((k) => [k.nama_kota, k.singkatan]) || [])
+
+      const { data: allProfiles } = await supabase.from('profiles').select('email, nomor_hp, nama, lokasi, role')
 
       const mapped = data.map((item: any) => {
         const asal = item.jadwal?.rute_asal || ''
         const tujuan = item.jadwal?.rute_tujuan || ''
         const singAsal = kotaMap.get(asal) || asal
         const singTujuan = kotaMap.get(tujuan) || tujuan
+
+        // CARI NAMA PENJUAL ASLI
+        let teksLoketLayar = '-'
+        let teksLoketPrint = '-'
+
+        if (item.kanal === 'online') {
+          teksLoketLayar = 'Online'
+          teksLoketPrint = 'Online'
+        } else if (item.petugas_jual) {
+          const nomorHpMurni = item.petugas_jual.includes('@') 
+            ? item.petugas_jual.split('@')[0] 
+            : item.petugas_jual;
+          
+          const bersihHp = nomorHpMurni.replace(/\D/g, '')
+
+          const profilPenjual = allProfiles?.find(
+            (prof: any) => {
+              const profHp = prof.nomor_hp ? String(prof.nomor_hp).replace(/\D/g, '') : ''
+              return profHp === bersihHp || prof.email === item.petugas_jual
+            }
+          )
+
+          if (profilPenjual) {
+            let singkatanKota = ''
+            if (profilPenjual.lokasi) {
+              singkatanKota = kotaMap.get(profilPenjual.lokasi) || ''
+            }
+
+            if (profilPenjual.role === 'agen') {
+              const teksGabung = singkatanKota ? `Agen : ${profilPenjual.nama} - ${singkatanKota}` : `Agen : ${profilPenjual.nama}`
+              teksLoketLayar = teksGabung
+              teksLoketPrint = teksGabung
+            } else {
+              teksLoketLayar = `Petugas : ${profilPenjual.nama}`
+              teksLoketPrint = `Petugas : ${profilPenjual.nama}`
+            }
+          } else {
+            teksLoketLayar = `Petugas : ${nomorHpMurni}`
+            teksLoketPrint = `Petugas : ${nomorHpMurni}`
+          }
+        }
 
         return {
           id: item.id,
@@ -113,6 +158,8 @@ function CetakUlangSuperadminContent() {
           jam: item.jadwal?.jam_berangkat || '-',
           harga: item.jadwal?.harga || 0,
           is_balita: item.is_balita || false,
+          teks_loket_layar: teksLoketLayar,
+          teks_loket_print: teksLoketPrint
         }
       })
       setHasil(mapped)
@@ -160,7 +207,7 @@ function CetakUlangSuperadminContent() {
       tanggal: detailPilih.tanggal,
       harga: detailPilih.is_balita ? 0 : detailPilih.harga,
       kursi: detailPilih.kursi,
-      petugas_nama: 'Admin / Loket',
+      teks_loket: detailPilih.teks_loket_print,
     })
     setPesan(result.message)
   }
@@ -331,7 +378,7 @@ function CetakUlangSuperadminContent() {
                 
                 <div className="mt-3 text-center text-[9px] md:text-xs text-gray-400 border-t pt-2">
                   Perlihatkan e-tiket ke petugas<br/>
-                  Loket : Admin / Loket
+                  {detailPilih.teks_loket_layar}
                 </div>
               </div>
             </div>
