@@ -10,6 +10,7 @@ type ProfilePetugas = {
   role: string
   lokasi: string
   email: string
+  nomor_hp?: string
 }
 
 type KursiInfo = {
@@ -232,17 +233,20 @@ function JualKeberangkatanContent() {
     const kanalPesanan = metodeBayar === 'cash' ? 'loket' : 'online'
     const metodePembayaran = metodeBayar === 'cash' ? 'cash_loket' : 'simulasi_online'
 
+    const identitasPenjual = profile.nomor_hp || profile.email || profile.nama
+
     const pesananData = penumpangList.map((p, idx) => ({
       jadwal_id: jadwal.id,
       kursi_id: kursiDipilih[idx],
       nama_penumpang: p.nama,
       nik: maskNik(p.nik),
       nomor_hp: noHp,
-      kanal: kanalPesanan,
+      kanal: 'keberangkatan',
       status: 'paid',
       kode_tiket: generateKodeTiket(idx),
       waktu_bayar: waktuKonfirmasi,
-      petugas_konfirmasi: profile.email,
+      petugas_jual: identitasPenjual,
+      petugas_konfirmasi: identitasPenjual,
       waktu_konfirmasi: waktuKonfirmasi,
       grup_transaksi_id: grupId,
       jam_transaksi: jamTransaksi,
@@ -286,7 +290,6 @@ function JualKeberangkatanContent() {
     })
 
     const ids = inserted.map((p) => p.id).join(',')
-    // PERBAIKAN: Arahkan ke e-tiket dengan penanda PDF
     router.push(`/etiket?pesanan=${ids}&mode=pdf`)
   }
 

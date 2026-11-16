@@ -199,7 +199,6 @@ function EtiketSuperadminContent() {
               singkatanKota = kotaMap.get(profilPenjual.lokasi) || ''
             }
 
-            // === PERBAIKAN: Semua role (Agen/Petugas/Admin) dapat format Nama - Singkatan ===
             const labelRole = profilPenjual.role === 'agen' ? 'Agen' : 'Petugas'
             const teksGabung = singkatanKota ? `${labelRole} : ${profilPenjual.nama} - ${singkatanKota}` : `${labelRole} : ${profilPenjual.nama}`
             

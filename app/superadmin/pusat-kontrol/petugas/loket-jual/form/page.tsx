@@ -152,7 +152,7 @@ function FormPetugasSuperadminContent() {
           waktu_pesan: waktuSekarang,
           waktu_expired: waktuExpired,
           is_balita: false,
-          petugas_jual: profile.email,
+          petugas_jual: profile.nomor_hp || profile.email,
         })
 
         // BALITA (Tanpa NIK)
@@ -170,7 +170,7 @@ function FormPetugasSuperadminContent() {
             waktu_pesan: waktuSekarang,
             waktu_expired: waktuExpired,
             is_balita: true,
-            petugas_jual: profile.email,
+            petugas_jual: profile.nomor_hp || profile.email,
           })
         }
       })
