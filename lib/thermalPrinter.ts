@@ -3,8 +3,8 @@ import QRCode from 'qrcode'
 export async function cetakTiketThermal(tiket: any) {
   const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)
   
-  const namaPenjual = tiket.petugas_nama || 'Admin'
-  const teksFooter = `Perlihatkan e-tiket ke petugas\nLoket : ${namaPenjual}\n`
+  // Ambil teks loket yang udah diformat dari halaman etiket
+  const teksFooter = `Perlihatkan e-tiket ke petugas\n${tiket.teks_loket || '-'}\n`
 
   // =========================================================
   // MODE HP: WEB BLUETOOTH (TANPA APLIKASI TAMBAHAN)

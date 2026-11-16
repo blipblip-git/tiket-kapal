@@ -103,7 +103,7 @@ function LaporanContent() {
       }
 
       if (profile.role === 'agen' || profile.role === 'terminal_keberangkatan') {
-        query = query.eq('petugas_jual', profile.email)
+        query = query.eq('petugas_jual', profile.nomor_hp)
       }
 
       const { data, error } = await query
@@ -128,13 +128,17 @@ function LaporanContent() {
         const metodeMap = new Map()
         pembayaranData?.forEach((p: any) => metodeMap.set(p.pesanan_id, p.metode))
 
-        const emails = [...new Set(filtered.map((item: any) => item.petugas_jual).filter(Boolean))]
+        // === PERBAIKAN: Tarik semua agen/petugas, cocokkan nomor HP & email ===
         const petugasMap = new Map()
-        if (emails.length > 0) {
-          const { data: profilesData } = await supabase
-            .from('profiles').select('email, nama').in('email', emails)
-          profilesData?.forEach((p: any) => petugasMap.set(p.email, p.nama))
-        }
+        const { data: profilesData } = await supabase
+          .from('profiles')
+          .select('email, nomor_hp, nama')
+          .in('role', ['agen', 'terminal_keberangkatan'])
+
+        profilesData?.forEach((p: any) => {
+          if (p.email) petugasMap.set(p.email, p.nama)
+          if (p.nomor_hp) petugasMap.set(p.nomor_hp, p.nama)
+        })
 
         const jamSet = new Set<string>()
         if (templateData) {
@@ -195,7 +199,11 @@ function LaporanContent() {
           else if (labelMetode === 'QRIS') group.total_qris += hargaAktual
 
           const dataKapal = kapalMap.get(item.jadwal.kapal_id)
-          const namaPetugas = item.petugas_jual ? (petugasMap.get(item.petugas_jual) || item.petugas_jual.split('@')[0]) : 'ONLINE'
+          
+          let namaPetugas = 'ONLINE'
+          if (item.petugas_jual) {
+            namaPetugas = petugasMap.get(item.petugas_jual) || item.petugas_jual
+          }
 
           group.rincian.push({
             id: item.id,

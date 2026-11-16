@@ -22,18 +22,17 @@ function LoginContent() {
     setPesan('Memeriksa data...')
 
     const inputLogin = noHp.trim()
-    let emailCek = inputLogin;
     
-    if (!inputLogin.includes('@')) {
-      const bersihHp = inputLogin.replace(/\D/g, '')
-      emailCek = `${bersihHp}@petugas.local`
-    } 
-
+    // LOGIKA BARU: Cari berdasarkan nomor_hp ATAU email (tanpa nambahin @petugas.local)
     try {
-      const { data, error } = await supabase.from('profiles').select('*').eq('email', emailCek).single()
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('*')
+        .or(`nomor_hp.eq.${inputLogin},email.eq.${inputLogin}`)
+        .maybeSingle()
       
       if (error || !data) { 
-        setPesan('Akun tidak terdaftar.'); 
+        setPesan('Akun tidak terdaftar. Pastikan Nomor HP benar.'); 
         setLoading(false); 
         return 
       }
@@ -65,7 +64,7 @@ function LoginContent() {
       await supabase.from('profiles').update({ sesi_aktif: true, updated_at: new Date().toISOString() }).eq('id', data.id);
 
       localStorage.setItem('petugas_session', JSON.stringify({
-        id: data.id, nama: data.nama, role: data.role, lokasi: data.lokasi, unit: data.unit, email: data.email
+        id: data.id, nama: data.nama, role: data.role, lokasi: data.lokasi, unit: data.unit, email: data.email, nomor_hp: data.nomor_hp
       }))
 
       setPesan('Login berhasil, mengalihkan...');

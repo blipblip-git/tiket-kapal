@@ -20,7 +20,6 @@ type Pesanan = {
   kanal: string
   petugas_jual: string | null
   metode_bayar?: string
-  nama_penjual_asli?: string
   is_balita: boolean
 }
 
@@ -34,7 +33,10 @@ type Detail = {
 }
 
 type TiketLengkap = {
-  pesanan: Pesanan
+  pesanan: Pesanan & {
+    teks_loket_layar: string
+    teks_loket_print: string
+  }
   nomor_kursi: string
   qrUrl: string
 }
@@ -146,6 +148,12 @@ function EtiketSuperadminContent() {
         }
       }
 
+      const { data: allProfiles } = await supabase.from('profiles').select('email, nomor_hp, nama, lokasi, role')
+      const { data: allKota } = await supabase.from('master_kota').select('nama_kota, singkatan')
+      
+      const kotaMap = new Map()
+      allKota?.forEach(k => kotaMap.set(k.nama_kota, k.singkatan))
+
       const tiketLengkap: TiketLengkap[] = []
       for (const psn of sorted) {
         let nomorKursi = '-'
@@ -164,20 +172,39 @@ function EtiketSuperadminContent() {
           .eq('pesanan_id', psn.id)
           .maybeSingle()
 
-        let namaPenjual = '-'
+        let teksLoketLayar = '-'
+        let teksLoketPrint = '-'
+
         if (psn.kanal === 'online') {
-          namaPenjual = 'Online'
+          teksLoketLayar = 'Online'
+          teksLoketPrint = 'Online'
         } else if (psn.petugas_jual) {
-          const { data: profilPenjual } = await supabase
-            .from('profiles')
-            .select('nama')
-            .eq('email', psn.petugas_jual)
-            .maybeSingle()
+          const nomorHpMurni = psn.petugas_jual.includes('@') 
+            ? psn.petugas_jual.split('@')[0] 
+            : psn.petugas_jual;
+
+          const profilPenjual = allProfiles?.find(
+            (prof: any) => prof.nomor_hp === nomorHpMurni || prof.email === psn.petugas_jual
+          )
           
           if (profilPenjual) {
-            namaPenjual = profilPenjual.nama
+            let singkatanKota = ''
+            if (profilPenjual.lokasi) {
+              singkatanKota = kotaMap.get(profilPenjual.lokasi) || ''
+            }
+
+            if (profilPenjual.role === 'agen') {
+              // PERBAIKAN: Format sejajar tanpa enter
+              const teksGabung = singkatanKota ? `Agen : ${profilPenjual.nama} - ${singkatanKota}` : `Agen : ${profilPenjual.nama}`
+              teksLoketLayar = teksGabung
+              teksLoketPrint = teksGabung
+            } else {
+              teksLoketLayar = `Petugas : ${profilPenjual.nama}`
+              teksLoketPrint = `Petugas : ${profilPenjual.nama}`
+            }
           } else {
-            namaPenjual = psn.petugas_jual.split('@')[0]
+            teksLoketLayar = `Petugas : ${nomorHpMurni}`
+            teksLoketPrint = `Petugas : ${nomorHpMurni}`
           }
         }
 
@@ -190,7 +217,8 @@ function EtiketSuperadminContent() {
           pesanan: { 
             ...psn, 
             metode_bayar: pmb?.metode || 'cash_loket',
-            nama_penjual_asli: namaPenjual
+            teks_loket_layar: teksLoketLayar,
+            teks_loket_print: teksLoketPrint
           },
           nomor_kursi: nomorKursi,
           qrUrl: qrDataUrl,
@@ -352,7 +380,7 @@ function EtiketSuperadminContent() {
       tanggal: detail?.tanggal || '-',
       harga: t.pesanan.is_balita ? 0 : (detail?.harga || 0),
       kursi: t.nomor_kursi,
-      petugas_nama: t.pesanan.nama_penjual_asli,
+      teks_loket: t.pesanan.teks_loket_print 
     })
     setPesanShare(result.message)
   }
@@ -364,7 +392,6 @@ function EtiketSuperadminContent() {
       return
     }
 
-    // === REVISI: CEK ROLE SIAPA YANG LOGIN, LALU ARAHKAN KE DASHBOARD YANG BENAR ===
     const sesi = getOperatorSession()
     
     if (sesi) {
@@ -382,7 +409,6 @@ function EtiketSuperadminContent() {
       }
     }
 
-    // Kalau nggak ada sesi lokal (berarti Superadmin), balik ke pusat kontrol
     router.replace('/superadmin/pusat-kontrol')
   }
 
@@ -441,7 +467,7 @@ function EtiketSuperadminContent() {
         
         <div className="mt-2 md:mt-4 text-center text-[9px] md:text-xs text-gray-400 border-t pt-1 md:pt-2 thermal-text">
           Perlihatkan e-tiket ke petugas<br/>
-          Loket : {tiket.pesanan.nama_penjual_asli}
+          {tiket.pesanan.teks_loket_layar}
         </div>
       </div>
     )

@@ -121,7 +121,6 @@ function AgenTenantContent() {
       }
 
       if (editId) {
-        // Jika edit, kita hapus ID dari payload agar nggak nimpa ID lama
         const { id, ...updatePayload } = payload 
         const { error: errUpd } = await supabase.from('profiles').update(updatePayload).eq('id', editId)
         if (errUpd) throw errUpd
@@ -231,7 +230,8 @@ function AgenTenantContent() {
                   <tr key={a.id} className="hover:bg-gray-50">
                     <td className="px-4 py-3 font-bold text-gray-900">{a.nama}</td>
                     <td className="px-4 py-3 text-gray-900">{a.nomor_hp}</td>
-                    <td className="px-4 py-3">{a.lokasi}</td>
+                    {/* PERBAIKAN: Warna teks lokasi digelapin */}
+                    <td className="px-4 py-3 font-medium text-gray-900">{a.lokasi}</td>
                     <td className="px-4 py-3">
                       <span className={`text-[10px] px-2 py-1 rounded-full font-bold ${a.aktif ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
                         {a.aktif ? 'AKTIF' : 'NONAKTIF'}
