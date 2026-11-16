@@ -14,12 +14,14 @@ type HasilPencarian = {
   kanal: string
   kursi: string
   jadwal: string
-  jadwal_singkat: string // <-- TAMBAHAN
+  jadwal_singkat: string
   kapal: string
   tanggal: string
   jam: string
   harga: number
   is_balita: boolean
+  teks_loket_layar: string
+  teks_loket_print: string
 }
 
 function CetakUlangContent() {
@@ -59,7 +61,7 @@ function CetakUlangContent() {
     const { data, error } = await supabase
       .from('pesanan')
       .select(`
-        id, nama_penumpang, kode_tiket, kanal, is_balita,
+        id, nama_penumpang, kode_tiket, kanal, is_balita, petugas_jual,
         jadwal:jadwal_id (rute_asal, rute_tujuan, tanggal, jam_berangkat, harga, kapal:kapal_id(nama)),
         kursi:kursi_id (nomor_kursi)
       `)
@@ -73,15 +75,63 @@ function CetakUlangContent() {
     }
 
     if (data && data.length > 0) {
-      // Ambil semua master_kota untuk lookup
+      // Ambil semua master_kota & profiles untuk lookup
       const { data: kotaData } = await supabase.from('master_kota').select('nama_kota, singkatan')
       const kotaMap = new Map(kotaData?.map((k) => [k.nama_kota, k.singkatan]) || [])
+
+      const { data: allProfiles } = await supabase.from('profiles').select('email, nomor_hp, nama, lokasi, role')
 
       const mapped = data.map((item: any) => {
         const asal = item.jadwal?.rute_asal || ''
         const tujuan = item.jadwal?.rute_tujuan || ''
         const singAsal = kotaMap.get(asal) || asal
         const singTujuan = kotaMap.get(tujuan) || tujuan
+
+        // CARI NAMA PENJUAL ASLI
+        let teksLoketLayar = '-'
+        let teksLoketPrint = '-'
+
+        if (item.kanal === 'online') {
+          teksLoketLayar = 'Online'
+          teksLoketPrint = 'Online'
+        } else if (item.petugas_jual) {
+          const nomorHpMurni = item.petugas_jual.includes('@') 
+            ? item.petugas_jual.split('@')[0] 
+            : item.petugas_jual;
+          
+          const bersihHp = nomorHpMurni.replace(/\D/g, '')
+
+          const profilPenjual = allProfiles?.find(
+            (prof: any) => {
+              const profHp = prof.nomor_hp ? String(prof.nomor_hp).replace(/\D/g, '') : ''
+              return profHp === bersihHp || prof.email === item.petugas_jual
+            }
+          )
+
+          if (profilPenjual) {
+            let singkatanKota = ''
+            if (profilPenjual.lokasi) {
+              singkatanKota = kotaMap.get(profilPenjual.lokasi) || ''
+            }
+
+            if (profilPenjual.role === 'agen') {
+              const teksGabung = singkatanKota ? `Agen : ${profilPenjual.nama} - ${singkatanKota}` : `Agen : ${profilPenjual.nama}`
+              teksLoketLayar = teksGabung
+              teksLoketPrint = teksGabung
+            } else {
+              const teksGabung = singkatanKota ? `Petugas : ${profilPenjual.nama} - ${singkatanKota}` : `Petugas : ${profilPenjual.nama}`
+              teksLoketLayar = teksGabung
+              teksLoketPrint = teksGabung
+            }
+          } else {
+            teksLoketLayar = `Petugas : ${nomorHpMurni}`
+            teksLoketPrint = `Petugas : ${nomorHpMurni}`
+          }
+        } else {
+          // Fallback kalau petugas_jual kosong tapi kanal bukan online
+          teksLoketLayar = 'Loket'
+          teksLoketPrint = 'Loket'
+        }
 
         return {
           id: item.id,
@@ -90,12 +140,14 @@ function CetakUlangContent() {
           kanal: item.kanal,
           kursi: item.kursi?.nomor_kursi || '-',
           jadwal: `${asal} - ${tujuan}`,
-          jadwal_singkat: `${singAsal} - ${singTujuan}`, // <-- SINGKATAN
+          jadwal_singkat: `${singAsal} - ${singTujuan}`,
           kapal: item.jadwal?.kapal?.nama || '-',
           tanggal: item.jadwal?.tanggal || '-',
           jam: item.jadwal?.jam_berangkat || '-',
           harga: item.jadwal?.harga || 0,
           is_balita: item.is_balita || false,
+          teks_loket_layar: teksLoketLayar,
+          teks_loket_print: teksLoketPrint
         }
       })
       setHasil(mapped)
@@ -137,13 +189,13 @@ function CetakUlangContent() {
     const result = await cetakTiketThermal({
       ...detailPilih,
       jadwal: detailPilih.jadwal,
-      jadwal_singkat: detailPilih.jadwal_singkat, // <-- KIRIM SINGKATAN
+      jadwal_singkat: detailPilih.jadwal_singkat,
       kapal: detailPilih.kapal,
       jam: detailPilih.jam,
       tanggal: detailPilih.tanggal,
       harga: detailPilih.is_balita ? 0 : detailPilih.harga,
       kursi: detailPilih.kursi,
-      petugas_nama: 'Admin / Loket',
+      teks_loket: detailPilih.teks_loket_print,
     })
     setPesan(result.message)
   }
@@ -317,7 +369,7 @@ function CetakUlangContent() {
                 
                 <div className="mt-3 text-center text-[9px] md:text-xs text-gray-400 border-t pt-2">
                   Perlihatkan e-tiket ke petugas<br/>
-                  Loket : Admin / Loket
+                  {detailPilih.teks_loket_layar}
                 </div>
               </div>
             </div>
