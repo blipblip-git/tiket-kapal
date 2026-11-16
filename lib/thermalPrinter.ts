@@ -115,8 +115,8 @@ export async function cetakTiketThermal(tiket: any) {
       }
       await sendData(imageBytes)
       
-      // === MOBILE KEMBALI KE 72 DOTS (x48) ===
-      const endData = '\x1B\x4A\x48\x1D\x56\x00' 
+      // === MOBILE: TAMBAH FEED 10 DOTS SEBELUM CUT 72 DOTS ===
+      const endData = '\x1B\x4A\x0A\x1B\x4A\x48\x1D\x56\x00' 
       await sendData(encoder.encode(endData))
 
       device.gatt.disconnect()

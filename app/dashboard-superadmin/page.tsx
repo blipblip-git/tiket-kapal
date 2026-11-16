@@ -27,7 +27,6 @@ export default function DashboardSuperadminPage() {
         return
       }
 
-      // REVISI: Cek role harus 'superadmin', bukan 'admin_utama'
       if (p.role !== 'superadmin') {
         await supabase.auth.signOut()
         router.push('/superadmin')
@@ -74,24 +73,6 @@ export default function DashboardSuperadminPage() {
             <div className="text-5xl mb-4 group-hover:scale-110 transition">🔑</div>
             <h2 className="text-xl font-bold text-white mb-2">Data Penyewa</h2>
             <p className="text-sm text-gray-400">Kelola Pemilik Kapal yang menggunakan platform Anda.</p>
-          </button>
-
-          <button 
-            onClick={() => router.push('/dashboard-superadmin/tenant')} 
-            className="bg-gray-800 p-8 rounded-xl shadow-lg hover:bg-gray-700 transition border border-gray-700 text-left flex flex-col items-start h-48 justify-center group"
-          >
-            <div className="text-5xl mb-4 group-hover:scale-110 transition">🏢</div>
-            <h2 className="text-xl font-bold text-white mb-2">Manajemen Pemilik Kapal</h2>
-            <p className="text-sm text-gray-400">Daftarkan Admin Utama, reset password, dan kelola tenant.</p>
-          </button>
-
-          <button 
-            onClick={() => router.push('/dashboard-superadmin/agen')} 
-            className="bg-gray-800 p-8 rounded-xl shadow-lg hover:bg-gray-700 transition border border-gray-700 text-left flex flex-col items-start h-48 justify-center group"
-          >
-            <div className="text-5xl mb-4 group-hover:scale-110 transition">🤝</div>
-            <h2 className="text-xl font-bold text-white mb-2">Manajemen Agen</h2>
-            <p className="text-sm text-gray-400">Buat akun agen khusus untuk semua pemilik kapal.</p>
           </button>
 
           <button 
