@@ -179,18 +179,18 @@ function EtiketSuperadminContent() {
           teksLoketLayar = 'Online'
           teksLoketPrint = 'Online'
         } else if (psn.petugas_jual) {
-          // Ambil nomor HP murni dari string email/nomor
           const nomorHpMurni = psn.petugas_jual.includes('@') 
             ? psn.petugas_jual.split('@')[0] 
             : psn.petugas_jual;
           
-          // Bersihkan dari karakter non-angka
           const bersihHp = nomorHpMurni.replace(/\D/g, '')
 
+          // PERBAIKAN: Cek tipe data dan bandingkan dengan aman
           const profilPenjual = allProfiles?.find(
             (prof: any) => {
               const profHp = prof.nomor_hp ? String(prof.nomor_hp).replace(/\D/g, '') : ''
-              return profHp === bersihHp || prof.email === psn.petugas_jual
+              const profEmail = prof.email ? String(prof.email) : ''
+              return profHp === bersihHp || profEmail === psn.petugas_jual || profEmail === nomorHpMurni
             }
           )
           
