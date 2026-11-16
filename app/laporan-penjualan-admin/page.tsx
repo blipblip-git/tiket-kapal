@@ -56,7 +56,7 @@ function LaporanPenjualanAdminContent() {
       label: 'Manifest Kapal',
       deskripsi: 'Daftar penumpang dan status boarding',
       color: 'bg-orange-50 border-orange-200 text-orange-800 hover:bg-orange-100',
-      link: '/laporan-manifest'
+      link: '/superadmin/pusat-kontrol/admin/manifest' // UBAH LINK KE SINI
     }
   ]
 
