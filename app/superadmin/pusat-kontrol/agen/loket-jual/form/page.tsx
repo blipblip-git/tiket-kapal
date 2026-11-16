@@ -131,6 +131,8 @@ function FormAgenSuperadminContent() {
       const waktuSekarang = new Date().toISOString()
       const waktuExpired = new Date(Date.now() + 5 * 60 * 1000).toISOString()
 
+      const identitasPenjual = profile.nomor_hp || profile.email || profile.nama
+
       const pesananPayload: any[] = []
 
       penumpangList.forEach((p, idx) => {
@@ -151,7 +153,7 @@ function FormAgenSuperadminContent() {
           waktu_pesan: waktuSekarang,
           waktu_expired: waktuExpired,
           is_balita: false,
-          petugas_jual: profile.email,
+          petugas_jual: identitasPenjual,
         })
 
         // BALITA
@@ -169,7 +171,7 @@ function FormAgenSuperadminContent() {
             waktu_pesan: waktuSekarang,
             waktu_expired: waktuExpired,
             is_balita: true,
-            petugas_jual: profile.email,
+            petugas_jual: identitasPenjual,
           })
         }
       })
