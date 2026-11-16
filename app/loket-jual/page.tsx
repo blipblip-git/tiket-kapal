@@ -10,6 +10,7 @@ type ProfilePetugas = {
   role: string
   lokasi: string
   email: string
+  nomor_hp?: string
 }
 
 type KursiInfo = {
@@ -273,6 +274,8 @@ function LoketJualContent() {
       if (profile.role === 'petugas_mobile') kanalPesanan = 'mobile'
       if (profile.role === 'terminal_keberangkatan') kanalPesanan = 'keberangkatan'
 
+      const identitasPenjual = profile.nomor_hp || profile.email || profile.nama
+
       const pesananData: any[] = []
 
       penumpangList.forEach((p, idx) => {
@@ -286,11 +289,11 @@ function LoketJualContent() {
           status: 'paid',
           kode_tiket: generateKodeTiket(idx, false),
           waktu_bayar: waktuKonfirmasi,
-          petugas_konfirmasi: profile.email,
+          petugas_konfirmasi: identitasPenjual,
           waktu_konfirmasi: waktuKonfirmasi,
           grup_transaksi_id: grupId,
           jam_transaksi: jamTransaksi,
-          petugas_jual: profile.email,
+          petugas_jual: identitasPenjual,
           is_balita: false,
         })
 
@@ -304,11 +307,11 @@ function LoketJualContent() {
             status: 'paid',
             kode_tiket: 'BALITA-' + Date.now() + '-L' + idx,
             waktu_bayar: waktuKonfirmasi,
-            petugas_konfirmasi: profile.email,
+            petugas_konfirmasi: identitasPenjual,
             waktu_konfirmasi: waktuKonfirmasi,
             grup_transaksi_id: grupId,
             jam_transaksi: jamTransaksi,
-            petugas_jual: profile.email,
+            petugas_jual: identitasPenjual,
             is_balita: true,
           })
         }
