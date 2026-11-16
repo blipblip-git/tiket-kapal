@@ -69,11 +69,10 @@ function EtiketSuperadminContent() {
         const sesiLokal = getOperatorSession()
         if (sesiLokal) p = sesiLokal as unknown as Profile
       }
-      if (!p) {
-        router.push('/login')
-        return
+      // HAPUS PENGECEKAN LOGIN PAKSA
+      if (p) {
+        setProfile(p)
       }
-      setProfile(p)
     }
     init()
   }, [router])
@@ -232,9 +231,7 @@ function EtiketSuperadminContent() {
       setLoading(false)
     }
 
-    if (profile) {
-      fetchData()
-    }
+    fetchData()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [profile])
 
