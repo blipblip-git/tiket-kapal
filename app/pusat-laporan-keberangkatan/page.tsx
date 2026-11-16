@@ -17,7 +17,7 @@ type RincianPenumpang = {
   nama_kapten: string
   rute: string
   is_balita: boolean
-  grup_transaksi_id: string | null // TAMBAHAN
+  grup_transaksi_id: string | null
 }
 
 type LaporanPerJam = {
@@ -77,23 +77,43 @@ function PusatLaporanContent() {
 
   async function fetchManifest() {
     if (!profile || !tanggal) return
-    const { data: templateData } = await supabase.from('template_jadwal').select('jam_berangkat').eq('rute_asal', profile.lokasi)
+
+    const operatorId = profile.role !== 'superadmin' ? profile.id : null
+
+    let queryTemplate = supabase.from('template_jadwal').select('jam_berangkat').eq('rute_asal', profile.lokasi)
+    let queryJadwal = supabase.from('jadwal').select('id, jam_berangkat, kapal_id').eq('tanggal', tanggal).eq('rute_asal', profile.lokasi)
     
-    const { data: jadwalData } = await supabase.from('jadwal').select('id, jam_berangkat, kapal_id').eq('tanggal', tanggal).eq('rute_asal', profile.lokasi)
+    if (operatorId) {
+      queryTemplate = queryTemplate.eq('operator_id', operatorId)
+      queryJadwal = queryJadwal.eq('operator_id', operatorId)
+    }
+
+    const { data: templateData } = await queryTemplate
+    const { data: jadwalData } = await queryJadwal
+    
     const kapalIdsFromJadwal = [...new Set(jadwalData?.map((j: any) => j.kapal_id).filter(Boolean) || [])]
     
     let kapalMap = new Map()
     if (kapalIdsFromJadwal.length > 0) {
-      const { data: kapalData } = await supabase.from('kapal').select('id, nama, nama_kapten').in('id', kapalIdsFromJadwal)
+      let queryKapal = supabase.from('kapal').select('id, nama, nama_kapten').in('id', kapalIdsFromJadwal)
+      if (operatorId) {
+        queryKapal = queryKapal.eq('operator_id', operatorId)
+      }
+      const { data: kapalData } = await queryKapal
       kapalData?.forEach((k: any) => kapalMap.set(k.id, k))
     }
 
-    // TAMBAHAN: grup_transaksi_id
-    const { data, error } = await supabase.from('pesanan').select(`
+    let queryPesanan = supabase.from('pesanan').select(`
         id, nama_penumpang, kode_tiket, kanal, status, status_boarding, waktu_boarding, is_balita, grup_transaksi_id,
         jadwal:jadwal_id (rute_asal, rute_tujuan, harga, tanggal, jam_berangkat, status_jadwal, kapal_id),
         kursi:kursi_id (nomor_kursi)
       `).eq('status', 'paid').eq('jadwal.tanggal', tanggal)
+
+    if (operatorId) {
+      queryPesanan = queryPesanan.eq('jadwal.operator_id', operatorId)
+    }
+
+    const { data, error } = await queryPesanan
 
     if (error) { setError('Gagal memuat laporan: ' + error.message); return }
 
@@ -141,7 +161,7 @@ function PusatLaporanContent() {
         nama_kapten: group.nama_kapten, 
         rute: `${item.jadwal.rute_asal} - ${item.jadwal.rute_tujuan}`, 
         is_balita: item.is_balita || false,
-        grup_transaksi_id: item.grup_transaksi_id || null // TAMBAHAN
+        grup_transaksi_id: item.grup_transaksi_id || null
       })
     })
     setLaporan(Object.values(groupedByJam).sort((a, b) => a.jam.localeCompare(b.jam)))
@@ -173,9 +193,7 @@ function PusatLaporanContent() {
   
   const rincianAktif = expandedJam ? laporan.find(l => l.jam === expandedJam) : null
 
-  // ================= LOGIKA BARU: TEMPELKAN BALITA KE ORTU =================
   const urutkanBerdasarkanScan = (rincian: RincianPenumpang[]) => {
-    // 1. Kelompokkan berdasarkan grup_transaksi_id (atau id unik kalau grup kosong)
     const grupMap = new Map<string, RincianPenumpang[]>()
     
     rincian.forEach(p => {
@@ -184,9 +202,7 @@ function PusatLaporanContent() {
       grupMap.get(key)!.push(p)
     })
 
-    // 2. Urutkan orang dewasa di setiap grup, lalu tempel balita di bawahnya
     const grupArray = Array.from(grupMap.values()).map(grup => {
-      // Pisahkan dewasa dan balita dalam 1 grup
       const dewasa = grup.filter(p => !p.is_balita).sort((a, b) => {
         if (!a.waktu_boarding && !b.waktu_boarding) return 0;
         if (!a.waktu_boarding) return 1;
@@ -195,11 +211,9 @@ function PusatLaporanContent() {
       })
       const balita = grup.filter(p => p.is_balita)
       
-      // Gabungkan: Dewasa duluan, baru Balita
       return [...dewasa, ...balita]
     })
 
-    // 3. Urutkan grup berdasarkan waktu scan orang dewasa pertama di grup itu
     grupArray.sort((grupA, grupB) => {
       const waktuA = grupA[0]?.waktu_boarding
       const waktuB = grupB[0]?.waktu_boarding
@@ -209,10 +223,8 @@ function PusatLaporanContent() {
       return new Date(waktuA).getTime() - new Date(waktuB).getTime();
     })
 
-    // 4. Ratakan kembali jadi 1 array
     return grupArray.flat()
   }
-  // ========================================================================
 
   const potongKode = (kode: string) => kode.length > 6 ? kode.slice(-6) : kode
 
