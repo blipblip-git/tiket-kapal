@@ -13,8 +13,16 @@ export async function POST(request: Request) {
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
     const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
 
-    if (!supabaseUrl || !serviceKey) {
-      return NextResponse.json({ error: 'Konfigurasi Server belum diisi' }, { status: 500 })
+    if (!supabaseUrl) {
+      return NextResponse.json({ error: 'NEXT_PUBLIC_SUPABASE_URL belum diset di server' }, { status: 500 })
+    }
+
+    if (!serviceKey) {
+      // Env var ini wajib ada di Environment Variables Vercel, bukan cuma di .env.local lokal.
+      console.error('tambah-penyewa: SUPABASE_SERVICE_ROLE_KEY kosong di server')
+      return NextResponse.json({
+        error: 'SUPABASE_SERVICE_ROLE_KEY belum diset di server (Vercel -> Settings -> Environment Variables)'
+      }, { status: 500 })
     }
 
     const supabaseAdmin = createClient(supabaseUrl, serviceKey, {
