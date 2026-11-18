@@ -433,9 +433,9 @@ function LoketJualContent() {
       )
     }
 
-    if (layout === '2-3' || layout === '2-2') {
-      const kiriCount = layout === '2-3' ? 2 : 2
-      const kananCount = layout === '2-3' ? 3 : 2
+    if (layout === '2-3' || layout === '2-2' || layout === '3-2') {
+      const kiriCount = layout === '2-3' ? 2 : layout === '3-2' ? 3 : 2
+      const kananCount = layout === '2-3' ? 3 : layout === '3-2' ? 2 : 2
       const perBaris = kiriCount + kananCount
       const baris: KursiInfo[][] = []
       for (let i = 0; i < kursiList.length; i += perBaris) {
@@ -446,11 +446,11 @@ function LoketJualContent() {
         <div className="flex flex-col h-full justify-between gap-1">
           {baris.map((row, idx) => (
             <div key={idx} className="flex items-stretch flex-1 gap-2">
-              <div className="grid grid-cols-2 gap-1 md:gap-2 flex-1 max-w-[40%]">
+              <div className={`grid ${kiriCount === 3 ? 'grid-cols-3 max-w-[55%]' : 'grid-cols-2 max-w-[40%]'} gap-1 md:gap-2 flex-1`}>
                 {row.slice(0, kiriCount).map(renderKotak)}
               </div>
               <div className="w-4" /> {/* Lorong */}
-              <div className="grid grid-cols-3 gap-1 md:gap-2 flex-1 max-w-[55%]">
+              <div className={`grid ${kananCount === 3 ? 'grid-cols-3 max-w-[55%]' : 'grid-cols-2 max-w-[40%]'} gap-1 md:gap-2 flex-1`}>
                 {row.slice(kiriCount).map(renderKotak)}
               </div>
             </div>

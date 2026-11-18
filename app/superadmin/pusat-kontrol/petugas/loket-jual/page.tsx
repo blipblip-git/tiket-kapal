@@ -186,6 +186,28 @@ function LoketJualPetugasSuperadminContent() {
     )
   }
 
+  function renderLayout32() {
+    const baris: Kursi[][] = []
+    for (let i = 0; i < kursi.length; i += 5) {
+      baris.push(kursi.slice(i, i + 5))
+    }
+    return (
+      <div className="flex flex-col h-full justify-between gap-1 md:gap-2">
+        {baris.map((row, idx) => (
+          <div key={idx} className="flex justify-center items-stretch gap-2 md:gap-4 flex-1">
+            <div className="grid grid-cols-3 gap-1 md:gap-2 flex-1 max-w-[55%]">
+              {row.slice(0, 3).map((k) => renderKursiButton(k))}
+            </div>
+            <div className="w-4 md:w-8" />
+            <div className="grid grid-cols-2 gap-1 md:gap-2 flex-1 max-w-[40%]">
+              {row.slice(3, 5).map((k) => renderKursiButton(k))}
+            </div>
+          </div>
+        ))}
+      </div>
+    )
+  }
+
   function renderLayoutTanpa() {
     return (
       <div className="grid grid-cols-6 md:grid-cols-8 gap-1 md:gap-2 h-full w-full">
@@ -242,7 +264,8 @@ function LoketJualPetugasSuperadminContent() {
         <div className="bg-white p-2 md:p-6 rounded-lg shadow-sm border border-gray-200 flex-1 flex flex-col h-full overflow-hidden">
           {layout === '2-3' && renderLayout23()}
           {layout === '2-2' && renderLayout22()}
-          {layout !== '2-3' && layout !== '2-2' && renderLayoutTanpa()}
+          {layout === '3-2' && renderLayout32()}
+          {layout !== '2-3' && layout !== '2-2' && layout !== '3-2' && renderLayoutTanpa()}
         </div>
       </div>
 

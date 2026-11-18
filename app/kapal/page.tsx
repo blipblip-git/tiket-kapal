@@ -16,6 +16,14 @@ type Kapal = {
   nama_abk: string[] | null
 }
 
+// Pesan bila Supabase menolak simpan (update/insert 0 baris) — biasanya hak akses tabel kapal.
+const SQL_IZIN_KAPAL = `Data TIDAK tersimpan (Supabase menolak perubahan). Jalankan SQL ini di Supabase lalu simpan ulang:
+
+alter table public.kapal enable row level security;
+drop policy if exists "kapal_all" on public.kapal;
+create policy "kapal_all" on public.kapal for all to anon, authenticated using (true) with check (true);
+grant select, insert, update, delete on public.kapal to anon, authenticated;`
+
 function KapalContent() {
   const router = useRouter()
   const [profile, setProfile] = useState<Profile | null>(null)
@@ -153,15 +161,26 @@ function KapalContent() {
       }
 
       if (editId) {
-        const { error: errUpd } = await supabase.from('kapal').update(payload).eq('id', editId)
+        const { data: hasilUpd, error: errUpd } = await supabase
+          .from('kapal')
+          .update(payload)
+          .eq('id', editId)
+          .select('id')
+
         if (errUpd) throw errUpd
+        if (!hasilUpd || hasilUpd.length === 0) throw new Error(SQL_IZIN_KAPAL)
       } else {
         const finalPayload = {
           ...payload,
           operator_id: profile.id
         }
-        const { error: errIns } = await supabase.from('kapal').insert(finalPayload)
+        const { data: hasilIns, error: errIns } = await supabase
+          .from('kapal')
+          .insert(finalPayload)
+          .select('id')
+
         if (errIns) throw errIns
+        if (!hasilIns || hasilIns.length === 0) throw new Error(SQL_IZIN_KAPAL)
       }
 
       setShowForm(false)
@@ -266,6 +285,7 @@ function KapalContent() {
                   <select value={layout} onChange={e => setLayout(e.target.value)} className="w-full border rounded-md px-3 py-2 text-gray-900 focus:ring-blue-500 focus:border-blue-500">
                     <option value="tanpa_layout">Tanpa Layout (Grid)</option>
                     <option value="2-3">2 - 3 (Kiri 2, Kanan 3)</option>
+                    <option value="3-2">3 - 2 (Kiri 3, Kanan 2)</option>
                     <option value="2-2">2 - 2 (Kiri 2, Kanan 2)</option>
                   </select>
                 </div>
@@ -288,7 +308,7 @@ function KapalContent() {
                 <textarea value={catatan} onChange={e => setCatatan(e.target.value)} className="w-full border rounded-md px-3 py-2 text-gray-900 focus:ring-blue-500 focus:border-blue-500" rows={2}></textarea>
               </div>
 
-              {error && <p className="text-red-500 text-sm">{error}</p>}
+              {error && <p className="text-red-500 text-sm whitespace-pre-line">{error}</p>}
 
               <div className="flex justify-end gap-2">
                 <button type="button" onClick={() => setShowForm(false)} className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-md">Batal</button>

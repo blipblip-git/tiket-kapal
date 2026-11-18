@@ -337,15 +337,13 @@ function PetugasLaporanContent() {
             </div>
 
             <div className="flex-shrink-0 bg-blue-50 p-4 border-b border-blue-200">
-              <div className="max-w-md mx-auto text-[11px] grid grid-cols-[100px_10px_1fr] gap-y-1.5 text-gray-700">
+              <div className="max-w-md mx-auto text-[11px] grid grid-cols-[110px_10px_1fr] gap-y-1.5 text-gray-700">
                 <span>Tanggal</span><span>:</span><span>{tanggalFormatHeader}</span>
                 <span>Rute</span><span>:</span><span>{rincianAktif?.rute || `${filterLokasi} - -`}</span>
                 <span>Kapal</span><span>:</span><span className="font-medium text-gray-900">{rincianAktif?.nama_kapal}</span>
-                <span className="col-span-3 flex flex-wrap gap-x-6 gap-y-1">
-                  <span><span className="font-medium">Nama Kapten</span> : {rincianAktif?.nama_kapten || '-'}</span>
-                  <span><span className="font-medium">ABK</span> : {formatDaftarAbk(rincianAktif?.nama_abk)}</span>
-                </span>
-                <span className="col-span-3 font-bold">Total Penumpang : {rincianAktif?.total_terjual} Orang / Dewasa {totalDewasa} Orang + Balita {totalBalita} Orang</span>
+                <span className="font-medium">Nama Kapten</span><span>:</span><span>{rincianAktif?.nama_kapten || '-'}</span>
+                <span className="font-medium">ABK</span><span>:</span><span className="break-words">{formatDaftarAbk(rincianAktif?.nama_abk)}</span>
+                <span className="font-bold">Total Penumpang</span><span className="font-bold">:</span><span className="font-bold">{rincianAktif?.total_terjual} Orang / Dewasa {totalDewasa} Orang + Balita {totalBalita} Orang</span>
               </div>
             </div>
 
@@ -406,15 +404,13 @@ function PetugasLaporanContent() {
                 <div className="text-center mb-4">
                   <h1 className="text-xl font-bold text-gray-900">LAPORAN MANIFEST PENUMPANG JAM {expandedJam}</h1>
                 </div>
-                <div className="mb-4 text-sm grid grid-cols-[150px_10px_1fr] gap-y-1">
+                <div className="mb-4 text-sm grid grid-cols-[160px_10px_1fr] gap-y-1">
                   <span>Tanggal</span><span>:</span><span>{tanggalFormatHeader}</span>
                   <span>Rute</span><span>:</span><span>{rincianAktif.rute || `${filterLokasi} - -`}</span>
                   <span>Kapal</span><span>:</span><span>{rincianAktif.nama_kapal}</span>
-                  <span className="col-span-3 flex flex-wrap gap-x-8 gap-y-1">
-                    <span><span className="font-medium">Nama Kapten</span> : {rincianAktif.nama_kapten || '-'}</span>
-                    <span><span className="font-medium">ABK</span> : {formatDaftarAbk(rincianAktif.nama_abk)}</span>
-                  </span>
-                  <span className="col-span-3 font-bold">Total Penumpang : {rincianAktif.total_terjual} Orang / Dewasa {totalDewasa} Orang + Balita {totalBalita} Orang</span>
+                  <span className="font-medium">Nama Kapten</span><span>:</span><span>{rincianAktif.nama_kapten || '-'}</span>
+                  <span className="font-medium">ABK</span><span>:</span><span className="break-words">{formatDaftarAbk(rincianAktif.nama_abk)}</span>
+                  <span className="font-bold">Total Penumpang</span><span className="font-bold">:</span><span className="font-bold">{rincianAktif.total_terjual} Orang / Dewasa {totalDewasa} Orang + Balita {totalBalita} Orang</span>
                 </div>
 
                 <table className="w-full text-sm border-collapse border border-gray-400">
