@@ -325,6 +325,7 @@ function LoketJualContent() {
           if (!namaRapiBalita) return
 
           pesananData.push({
+            id: generateUuid(),
             jadwal_id: jadwal.id,
             kursi_id: null,
             nama_penumpang: namaRapiBalita,

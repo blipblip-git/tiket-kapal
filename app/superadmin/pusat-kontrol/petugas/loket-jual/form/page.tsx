@@ -184,6 +184,7 @@ function FormPetugasSuperadminContent() {
           if (!namaRapiBalita) return
 
           pesananPayload.push({
+            id: crypto.randomUUID(),
             jadwal_id: jadwalId,
             kursi_id: null,
             nama_penumpang: namaRapiBalita,
