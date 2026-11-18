@@ -25,7 +25,8 @@ type RincianPenumpang = {
 
 type LaporanPerJam = {
   jam: string
-  total_terjual: number
+  total_dewasa: number
+  total_balita: number
   total_pendapatan: number
   total_cash: number
   total_qris: number
@@ -80,13 +81,8 @@ function LaporanContent() {
       
       const isAdmin = profile.role === 'admin_utama'
       const lokasiTarget = isAdmin ? (lokasiParam || profile.lokasi) : profile.lokasi
+      const operatorId = profile.role !== 'superadmin' ? (profile.operator_id || profile.id) : null
 
-      const { data: templateData } = await supabase
-        .from('template_jadwal')
-        .select('jam_berangkat')
-        .eq('rute_asal', lokasiTarget)
-        .eq('operator_id', profile.id) // KUNCI OPERATOR
-      
       let query = supabase
         .from('pesanan')
         .select(`
@@ -97,11 +93,6 @@ function LaporanContent() {
         .eq('status', 'paid')
         .eq('jadwal.tanggal', tanggal)
 
-      // FILTER MULTI-TENANT
-      if (profile.role !== 'superadmin') {
-        query = query.eq('jadwal.operator_id', profile.id)
-      }
-
       if (!isAdmin) {
         query = query.eq('jadwal.rute_asal', lokasiTarget)
       } else if (lokasiParam) {
@@ -109,7 +100,7 @@ function LaporanContent() {
       }
 
       if (profile.role === 'agen' || profile.role === 'terminal_keberangkatan') {
-        query = query.eq('petugas_jual', profile.nomor_hp)
+        query = query.ilike('petugas_jual', `%${profile.nomor_hp}%`)
       }
 
       const { data, error } = await query
@@ -118,6 +109,14 @@ function LaporanContent() {
       if (data) {
         const filtered = data.filter((item: any) => {
           if (!item.jadwal) return false;
+          
+          // FILTER MULTI-TENANT
+          let cocokOperator = true
+          if (operatorId && item.jadwal.operator_id) {
+            cocokOperator = item.jadwal.operator_id === operatorId
+          }
+          if (!cocokOperator) return false;
+
           if (isAdmin) {
             if (lokasiParam) return item.jadwal.rute_asal === lokasiParam;
             return true;
@@ -134,7 +133,6 @@ function LaporanContent() {
         const metodeMap = new Map()
         pembayaranData?.forEach((p: any) => metodeMap.set(p.pesanan_id, p.metode))
 
-        // === PERBAIKAN: Tarik semua agen/petugas, cocokkan nomor HP & email ===
         const petugasMap = new Map()
         let queryProfiles = supabase
           .from('profiles')
@@ -142,7 +140,7 @@ function LaporanContent() {
           .in('role', ['agen', 'terminal_keberangkatan'])
 
         if (profile.role !== 'superadmin') {
-          queryProfiles = queryProfiles.eq('operator_id', profile.id)
+          queryProfiles = queryProfiles.eq('operator_id', operatorId)
         }
 
         const { data: profilesData } = await queryProfiles
@@ -153,16 +151,15 @@ function LaporanContent() {
         })
 
         const jamSet = new Set<string>()
-        if (templateData) {
-          templateData.forEach((t: any) => jamSet.add(t.jam_berangkat.substring(0, 5)))
-        }
-        
+        filtered.forEach((item: any) => jamSet.add(item.jadwal.jam_berangkat.substring(0, 5)))
+
         const groupedByJam: { [key: string]: LaporanPerJam } = {}
 
         jamSet.forEach(jam => {
           groupedByJam[jam] = {
             jam: jam,
-            total_terjual: 0,
+            total_dewasa: 0,
+            total_balita: 0,
             total_pendapatan: 0,
             total_cash: 0,
             total_qris: 0,
@@ -185,7 +182,8 @@ function LaporanContent() {
           if (!groupedByJam[jam]) {
             groupedByJam[jam] = {
               jam: jam,
-              total_terjual: 0,
+              total_dewasa: 0,
+              total_balita: 0,
               total_pendapatan: 0,
               total_cash: 0,
               total_qris: 0,
@@ -197,8 +195,10 @@ function LaporanContent() {
 
           const group = groupedByJam[jam]
           
-          if (!item.is_balita) {
-            group.total_terjual += 1
+          if (item.is_balita) {
+            group.total_balita += 1
+          } else {
+            group.total_dewasa += 1
           }
 
           const hargaAktual = item.is_balita ? 0 : (item.jadwal.harga || 0)
@@ -282,12 +282,16 @@ function LaporanContent() {
   const getRekapPetugas = (jam: string) => {
     const dataJam = laporan.find(l => l.jam === jam)
     if (!dataJam) return []
-    const petugasMap: { [key: string]: { nama: string, total: number, cash: number, qris: number, jumlah: number } } = {}
+    const petugasMap: { [key: string]: { nama: string, total: number, cash: number, qris: number, dewasa: number, balita: number } } = {}
     dataJam.rincian.forEach(p => {
-      if (!petugasMap[p.nama_petugas]) petugasMap[p.nama_petugas] = { nama: p.nama_petugas, total: 0, cash: 0, qris: 0, jumlah: 0 }
+      if (!petugasMap[p.nama_petugas]) petugasMap[p.nama_petugas] = { nama: p.nama_petugas, total: 0, cash: 0, qris: 0, dewasa: 0, balita: 0 }
       const pt = petugasMap[p.nama_petugas]
       
-      if (!p.is_balita) pt.jumlah += 1
+      if (p.is_balita) {
+        pt.balita += 1
+      } else {
+        pt.dewasa += 1
+      }
       
       pt.total += p.harga
       if (p.metode_bayar === 'Cash') pt.cash += p.harga
@@ -304,7 +308,8 @@ function LaporanContent() {
   const totalPenjualanHarian = laporan.reduce((sum, item) => sum + item.total_pendapatan, 0)
   const totalCashHarian = laporan.reduce((sum, item) => sum + item.total_cash, 0)
   const totalQrisHarian = laporan.reduce((sum, item) => sum + item.total_qris, 0)
-  const totalPenumpang = laporan.reduce((sum, item) => sum + item.total_terjual, 0)
+  const totalDewasa = laporan.reduce((sum, item) => sum + item.total_dewasa, 0)
+  const totalBalita = laporan.reduce((sum, item) => sum + item.total_balita, 0)
   const totalBoarding = laporan.reduce((sum, item) => sum + item.rincian.filter(p => p.status_boarding === 'sudah').length, 0)
 
   const isOperator = profile.role === 'terminal_keberangkatan' || profile.role === 'agen'
@@ -390,7 +395,7 @@ function LaporanContent() {
                           <th className="border p-1 text-[9px] md:text-xs w-[12%]" rowSpan={2}>Aksi</th>
                         </tr>
                         <tr className="bg-gray-200 border-b">
-                          <th className="border p-1 text-[9px] md:text-xs w-[10%] whitespace-nowrap">Kursi</th>
+                          <th className="border p-1 text-[9px] md:text-xs w-[14%] whitespace-nowrap">Kursi Dewasa/Balita</th>
                           <th className="border p-1 text-[9px] md:text-xs w-[16%]">Cash</th>
                           <th className="border p-1 text-[9px] md:text-xs w-[16%]">Qris</th>
                           <th className="border p-1 text-[9px] md:text-xs w-[16%]">Jual</th>
@@ -408,7 +413,7 @@ function LaporanContent() {
                                 </>
                               )}
                             </td>
-                            <td className="border p-1 text-[9px] md:text-xs font-bold text-blue-600 whitespace-nowrap">{l.total_terjual}</td>
+                            <td className="border p-1 text-[9px] md:text-xs font-bold text-blue-600 whitespace-nowrap">{l.total_dewasa}/{l.total_balita}</td>
                             <td className="border p-1 text-[9px] md:text-xs font-medium">Rp {l.total_cash.toLocaleString('id-ID')}</td>
                             <td className="border p-1 text-[9px] md:text-xs font-medium">Rp {l.total_qris.toLocaleString('id-ID')}</td>
                             <td className="border p-1 text-[9px] md:text-xs font-bold">Rp {l.total_pendapatan.toLocaleString('id-ID')}</td>
@@ -421,7 +426,7 @@ function LaporanContent() {
                       <tfoot className="bg-blue-600 text-white font-bold text-center">
                         <tr>
                           <td colSpan={2} className="p-1 border text-[9px] md:text-xs">TOTAL</td>
-                          <td className="p-1 border text-[9px] md:text-xs whitespace-nowrap">{totalPenumpang}</td>
+                          <td className="p-1 border text-[9px] md:text-xs whitespace-nowrap">{totalDewasa}/{totalBalita}</td>
                           <td className="p-1 border text-[9px] md:text-xs">Rp {totalCashHarian.toLocaleString('id-ID')}</td>
                           <td className="p-1 border text-[9px] md:text-xs">Rp {totalQrisHarian.toLocaleString('id-ID')}</td>
                           <td className="p-1 border text-[9px] md:text-xs">Rp {totalPenjualanHarian.toLocaleString('id-ID')}</td>
@@ -453,7 +458,7 @@ function LaporanContent() {
                           <th className="border p-1 text-[9px] md:text-xs w-[12%]" rowSpan={2}>Aksi</th>
                         </tr>
                         <tr className="bg-gray-200 border-b">
-                          <th className="border p-1 text-[9px] md:text-xs w-[10%] whitespace-nowrap">Kursi</th>
+                          <th className="border p-1 text-[9px] md:text-xs w-[14%] whitespace-nowrap">Kursi Dewasa/Balita</th>
                           <th className="border p-1 text-[9px] md:text-xs w-[16%]">Cash</th>
                           <th className="border p-1 text-[9px] md:text-xs w-[16%]">Qris</th>
                           <th className="border p-1 text-[9px] md:text-xs w-[16%]">Jual</th>
@@ -464,7 +469,7 @@ function LaporanContent() {
                           <tr key={pt.nama} className="hover:bg-gray-50 text-center">
                             <td className="border p-1 text-[9px] md:text-xs">{idx + 1}</td>
                             <td className="border p-1 text-[9px] md:text-xs font-bold text-left leading-tight">{pt.nama}</td>
-                            <td className="border p-1 text-[9px] md:text-xs font-bold text-blue-600 whitespace-nowrap">{pt.jumlah}</td>
+                            <td className="border p-1 text-[9px] md:text-xs font-bold text-blue-600 whitespace-nowrap">{pt.dewasa}/{pt.balita}</td>
                             <td className="border p-1 text-[9px] md:text-xs font-medium">Rp {pt.cash.toLocaleString('id-ID')}</td>
                             <td className="border p-1 text-[9px] md:text-xs font-medium">Rp {pt.qris.toLocaleString('id-ID')}</td>
                             <td className="border p-1 text-[9px] md:text-xs font-bold">Rp {pt.total.toLocaleString('id-ID')}</td>
@@ -477,14 +482,15 @@ function LaporanContent() {
                       <tfoot className="bg-blue-600 text-white font-bold text-center">
                         {(() => {
                           const dataPt = getRekapPetugas(selectedJam);
-                          const tJumlah = dataPt.reduce((s, x) => s + x.jumlah, 0);
+                          const tDewasa = dataPt.reduce((s, x) => s + x.dewasa, 0);
+                          const tBalita = dataPt.reduce((s, x) => s + x.balita, 0);
                           const tCash = dataPt.reduce((s, x) => s + x.cash, 0);
                           const tQris = dataPt.reduce((s, x) => s + x.qris, 0);
                           const tTotal = dataPt.reduce((s, x) => s + x.total, 0);
                           return (
                             <tr>
                               <td colSpan={2} className="p-1 border text-[9px] md:text-xs">TOTAL</td>
-                              <td className="p-1 border text-[9px] md:text-xs whitespace-nowrap">{tJumlah}</td>
+                              <td className="p-1 border text-[9px] md:text-xs whitespace-nowrap">{tDewasa}/{tBalita}</td>
                               <td className="p-1 border text-[9px] md:text-xs">Rp {tCash.toLocaleString('id-ID')}</td>
                               <td className="p-1 border text-[9px] md:text-xs">Rp {tQris.toLocaleString('id-ID')}</td>
                               <td className="p-1 border text-[9px] md:text-xs">Rp {tTotal.toLocaleString('id-ID')}</td>
@@ -575,7 +581,7 @@ function LaporanContent() {
           {view === 'boarding' && (
             <div className="space-y-4 overflow-y-auto">
               <div>
-                <h2 className="text-sm md:text-lg font-bold text-gray-800 mb-2 border-b pb-1">OPEN SCHEDULE</h2>
+                <h2 className="text-sm md:text-lg font-bold text-gray-800 mb-2 border-b pb-1">JADWAL BELUM CLOSING</h2>
                 {laporanBelumClosed.length === 0 ? (
                   <p className="text-gray-500 bg-white p-3 rounded shadow text-xs md:text-sm">Belum ada jadwal untuk waktu yang akan datang.</p>
                 ) : (
@@ -589,7 +595,7 @@ function LaporanContent() {
                               <span className="font-bold text-xs md:text-sm text-gray-900">Scan Boarding Jam {l.jam}</span>
                               <span className="text-[9px] md:text-xs bg-blue-200 text-blue-800 px-1.5 py-0.5 rounded">Berjalan</span>
                             </div>
-                            <span className="text-[10px] md:text-sm font-bold text-blue-600">{boardingList.length} / {l.total_terjual} Boarding</span>
+                            <span className="text-[10px] md:text-sm font-bold text-blue-600">{boardingList.length} / {l.total_dewasa + l.total_balita} Boarding</span>
                           </div>
                           <div className="overflow-x-auto">
                             <table className="w-full border-collapse text-gray-900">
@@ -637,7 +643,7 @@ function LaporanContent() {
 
               <div>
                 <div className="flex justify-between items-center border-b pb-1 mb-2">
-                  <h2 className="text-sm md:text-lg font-bold text-gray-800">CLOSING SCHEDULE</h2>
+                  <h2 className="text-sm md:text-lg font-bold text-gray-800">JADWAL SUDAH CLOSING</h2>
                   <button onClick={() => handlePrint('rekap-boarding')} className="bg-blue-600 text-white px-2 py-1 rounded text-[10px] md:text-sm hover:bg-blue-700">🖨️ Cetak</button>
                 </div>
                 {laporanSudahClosed.length === 0 ? (
@@ -657,7 +663,7 @@ function LaporanContent() {
                               <span className="text-[9px] md:text-xs bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded">Closed</span>
                             </div>
                             <div className="flex items-center gap-2 md:gap-4">
-                              <span className="text-[10px] md:text-sm font-bold text-blue-600">{boardingList.length} / {l.total_terjual} Boarding</span>
+                              <span className="text-[10px] md:text-sm font-bold text-blue-600">{boardingList.length} / {l.total_dewasa + l.total_balita} Boarding</span>
                               <span className="text-blue-600 text-[10px]">{expandedJam === l.jam ? '▲' : '▼'}</span>
                             </div>
                           </button>
@@ -731,7 +737,7 @@ function LaporanContent() {
             <thead>
               <tr className="bg-gray-200 text-center text-gray-900">
                 <th className="border border-gray-400 px-2 py-2" rowSpan={2}>Jam</th>
-                <th className="border border-gray-400 px-2 py-2" rowSpan={2}>Total Penumpang</th>
+                <th className="border border-gray-400 px-2 py-2" rowSpan={2}>Kursi Dewasa/Balita</th>
                 <th className="border border-gray-400 px-2 py-2" colSpan={3}>Penjualan</th>
               </tr>
               <tr className="bg-gray-200 text-center text-gray-900">
@@ -744,7 +750,7 @@ function LaporanContent() {
               {[...laporanBelumClosed, ...laporanSudahClosed].sort((a,b)=>a.jam.localeCompare(b.jam)).map((l) => (
                 <tr key={l.jam} className="text-center text-gray-900">
                   <td className="border border-gray-400 px-2 py-1 font-bold">{l.jam}</td>
-                  <td className="border border-gray-400 px-2 py-1">{l.total_terjual}</td>
+                  <td className="border border-gray-400 px-2 py-1">{l.total_dewasa}/{l.total_balita}</td>
                   <td className="border border-gray-400 px-2 py-1 text-right">Rp {l.total_cash.toLocaleString('id-ID')}</td>
                   <td className="border border-gray-400 px-2 py-1 text-right">Rp {l.total_qris.toLocaleString('id-ID')}</td>
                   <td className="border border-gray-400 px-2 py-1 text-right font-bold">Rp {l.total_pendapatan.toLocaleString('id-ID')}</td>
@@ -773,7 +779,7 @@ function LaporanContent() {
               <thead>
                 <tr className="bg-gray-200 text-center text-gray-900">
                   <th className="border border-gray-400 px-2 py-2">Petugas</th>
-                  <th className="border border-gray-400 px-2 py-2">Total Penumpang</th>
+                  <th className="border border-gray-400 px-2 py-2">Kursi Dewasa/Balita</th>
                   <th className="border border-gray-400 px-2 py-2">Cash</th>
                   <th className="border border-gray-400 px-2 py-2">Qris</th>
                   <th className="border border-gray-400 px-2 py-2">Total</th>
@@ -783,7 +789,7 @@ function LaporanContent() {
                 {getRekapPetugas(selectedJam).map((pt) => (
                   <tr key={pt.nama} className="text-center text-gray-900">
                     <td className="border border-gray-400 px-2 py-1 font-bold text-center">{pt.nama}</td>
-                    <td className="border border-gray-400 px-2 py-1">{pt.jumlah}</td>
+                    <td className="border border-gray-400 px-2 py-1">{pt.dewasa}/{pt.balita}</td>
                     <td className="border border-gray-400 px-2 py-1 text-right">Rp {pt.cash.toLocaleString('id-ID')}</td>
                     <td className="border border-gray-400 px-2 py-1 text-right">Rp {pt.qris.toLocaleString('id-ID')}</td>
                     <td className="border border-gray-400 px-2 py-1 text-right font-bold">Rp {pt.total.toLocaleString('id-ID')}</td>
@@ -791,14 +797,15 @@ function LaporanContent() {
                 ))}
                 {(() => {
                   const dataPt = getRekapPetugas(selectedJam);
-                  const tJumlah = dataPt.reduce((s, x) => s + x.jumlah, 0);
+                  const tDewasa = dataPt.reduce((s, x) => s + x.dewasa, 0);
+                  const tBalita = dataPt.reduce((s, x) => s + x.balita, 0);
                   const tCash = dataPt.reduce((s, x) => s + x.cash, 0);
                   const tQris = dataPt.reduce((s, x) => s + x.qris, 0);
                   const tTotal = dataPt.reduce((s, x) => s + x.total, 0);
                   return (
                     <tr className="font-bold bg-gray-300 text-center text-gray-900">
                       <td className="border border-gray-400 px-2 py-1 text-center">TOTAL</td>
-                      <td className="border border-gray-400 px-2 py-1">{tJumlah}</td>
+                      <td className="border border-gray-400 px-2 py-1">{tDewasa}/{tBalita}</td>
                       <td className="border border-gray-400 px-2 py-1 text-right">Rp {tCash.toLocaleString('id-ID')}</td>
                       <td className="border border-gray-400 px-2 py-1 text-right">Rp {tQris.toLocaleString('id-ID')}</td>
                       <td className="border border-gray-400 px-2 py-1 text-right">Rp {tTotal.toLocaleString('id-ID')}</td>
@@ -815,7 +822,6 @@ function LaporanContent() {
             <div className="text-center mb-6">
               <h1 className="text-xl font-bold text-gray-900">Rincian Laporan Penjualan - {selectedPetugas}</h1>
               
-              {/* PERBAIKAN: TABLE INFO PRINT RATA KIRI */}
               <table className="text-sm text-left mt-4" style={{ borderCollapse: 'collapse', tableLayout: 'fixed', width: '300px' }}>
                 <tbody>
                   <tr>
@@ -904,7 +910,7 @@ function LaporanContent() {
             <span>Rute</span><span>:</span><span>{ruteLengkap}</span>
             <span>Kapal</span><span>:</span><span>{laporan.find(l => l.jam === selectedJam)?.nama_kapal || '-'}</span>
             <span>Kapten</span><span>:</span><span>{laporan.find(l => l.jam === selectedJam)?.rincian[0]?.nama_kapten || '-'}</span>
-            <span>Jumlah Penumpang</span><span>:</span><span>{laporan.find(l => l.jam === selectedJam)?.total_terjual || 0} Orang</span>
+            <span>Jumlah Penumpang</span><span>:</span><span>{laporan.find(l => l.jam === selectedJam)?.total_dewasa + (laporan.find(l => l.jam === selectedJam)?.total_balita || 0)} Orang</span>
           </div>
           <table className="w-full text-sm border-collapse border border-gray-400">
             <thead>
@@ -931,7 +937,7 @@ function LaporanContent() {
               ))}
               <tr className="font-bold bg-gray-300 text-center text-gray-900">
                 <td colSpan={3} className="border border-gray-400 px-2 py-1 text-center">TOTAL PENUMPANG</td>
-                <td className="border border-gray-400 px-2 py-1 text-center">{laporan.find(l => l.jam === selectedJam)?.total_terjual || 0}</td>
+                <td className="border border-gray-400 px-2 py-1 text-center">{(laporan.find(l => l.jam === selectedJam)?.total_dewasa || 0) + (laporan.find(l => l.jam === selectedJam)?.total_balita || 0)}</td>
               </tr>
             </tbody>
           </table>
@@ -957,14 +963,14 @@ function LaporanContent() {
                 return (
                   <tr key={l.jam} className="text-center text-gray-900">
                     <td className="border border-gray-400 px-2 py-1">{l.jam}</td>
-                    <td className="border border-gray-400 px-2 py-1">{l.total_terjual}</td>
+                    <td className="border border-gray-400 px-2 py-1">{l.total_dewasa + l.total_balita}</td>
                     <td className="border border-gray-400 px-2 py-1">{boardingCount}</td>
                   </tr>
                 )
               })}
               <tr className="font-bold bg-gray-300 text-center text-gray-900">
                 <td className="border border-gray-400 px-2 py-1 text-center">TOTAL</td>
-                <td className="border border-gray-400 px-2 py-1 text-center">{totalPenumpang}</td>
+                <td className="border border-gray-400 px-2 py-1 text-center">{totalDewasa + totalBalita}</td>
                 <td className="border border-gray-400 px-2 py-1 text-center">{totalBoarding}</td>
               </tr>
             </tbody>

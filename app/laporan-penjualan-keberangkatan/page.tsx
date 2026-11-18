@@ -61,6 +61,7 @@ export default function LaporanPenjualanKeberangkatanPage() {
     const identitasPenjual = profile.nomor_hp || profile.email
     const operatorId = profile.operator_id || profile.id
 
+    // Pakai ilike biar nemu yang ada @petugas.local atau yang murni nomor HP
     let query = supabase
       .from('pesanan')
       .select(`
@@ -71,12 +72,8 @@ export default function LaporanPenjualanKeberangkatanPage() {
       `)
       .eq('status', 'paid')
       .eq('kanal', 'keberangkatan')
-      .eq('petugas_jual', identitasPenjual)
+      .ilike('petugas_jual', `%${identitasPenjual}%`)
       .order('created_at', { ascending: true })
-
-    if (operatorId) {
-      query = query.eq('jadwal.operator_id', operatorId)
-    }
 
     const { data, error } = await query
 
@@ -89,7 +86,14 @@ export default function LaporanPenjualanKeberangkatanPage() {
     const filteredData = data.filter((item: any) => {
       const cocokTanggal = item.jadwal?.tanggal === tanggal
       const cocokLokasi = item.jadwal?.rute_asal === profile.lokasi
-      return cocokTanggal && cocokLokasi
+      
+      // FILTER MULTI-TENANT (AMAN UNTUK DATA LAMA YANG NULL)
+      let cocokOperator = true
+      if (operatorId && item.jadwal?.operator_id) {
+        cocokOperator = item.jadwal.operator_id === operatorId
+      }
+      
+      return cocokTanggal && cocokLokasi && cocokOperator
     })
 
     const grouped: Record<string, LaporanJam> = {}

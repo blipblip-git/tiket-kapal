@@ -4,9 +4,11 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase, getProfile, getOperatorSession, type Profile } from '@/lib/supabase'
 
-type Statistik = {
-  total_pesanan_hari_ini: number
-  total_pendapatan_hari_ini: number
+type StatistikRute = {
+  rute: string
+  dewasa: number
+  balita: number
+  pendapatan: number
 }
 
 export default function DashboardAdminPage() {
@@ -14,10 +16,7 @@ export default function DashboardAdminPage() {
   const [profile, setProfile] = useState<Profile | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
-  const [stat, setStat] = useState<Statistik>({
-    total_pesanan_hari_ini: 0,
-    total_pendapatan_hari_ini: 0,
-  })
+  const [statPerRute, setStatPerRute] = useState<StatistikRute[]>([])
   const [tanggalHariIni, setTanggalHariIni] = useState('')
 
   const [teks, setTeks] = useState({
@@ -65,34 +64,50 @@ export default function DashboardAdminPage() {
       }
       setProfile(p)
 
-      const hariIni = new Date().toISOString().split('T')[0]
-      const { data: kapalData } = await supabase.from('kapal').select('id').eq('operator_id', p.id)
-      const kapalIds = kapalData?.map(k => k.id) || []
-
-      if (kapalIds.length === 0) {
-        setStat({ total_pesanan_hari_ini: 0, total_pendapatan_hari_ini: 0 })
-        setLoading(false)
-        return
-      }
-
+      // Gunakan WITA (UTC+8) untuk tanggal hari ini
+      const now = new Date()
+      const witaTime = new Date(now.getTime() + (8 * 60 * 60 * 1000))
+      const hariIni = witaTime.toISOString().split('T')[0]
+      
       const { data: pesananHariIni } = await supabase
         .from('pesanan')
-        .select('id, jadwal:jadwal_id ( tanggal, harga, kapal_id )')
+        .select(`
+          id, is_balita,
+          jadwal:jadwal_id ( tanggal, harga, rute_asal, rute_tujuan, operator_id )
+        `)
         .eq('status', 'paid')
-        .in('jadwal.kapal_id', kapalIds)
+        .eq('jadwal.tanggal', hariIni)
 
-      let pesananCount = 0
-      let pendapatan = 0
+      const operatorId = p.operator_id || p.id
+      
+      const ruteMap: Record<string, StatistikRute> = {}
+
       if (pesananHariIni) {
-        for (const p of pesananHariIni) {
-          const jadwalData = p.jadwal as any
-          if (jadwalData && jadwalData.tanggal === hariIni) {
-            pesananCount++
-            pendapatan += jadwalData.harga || 0
+        pesananHariIni.forEach((item: any) => {
+          if (!item.jadwal) return;
+          
+          let cocokOperator = true
+          if (operatorId && item.jadwal.operator_id) {
+            cocokOperator = item.jadwal.operator_id === operatorId
           }
-        }
+          if (!cocokOperator) return;
+
+          const namaRute = `${item.jadwal.rute_asal} - ${item.jadwal.rute_tujuan}`
+          
+          if (!ruteMap[namaRute]) {
+            ruteMap[namaRute] = { rute: namaRute, dewasa: 0, balita: 0, pendapatan: 0 }
+          }
+
+          if (item.is_balita) {
+            ruteMap[namaRute].balita += 1
+          } else {
+            ruteMap[namaRute].dewasa += 1
+            ruteMap[namaRute].pendapatan += (item.jadwal.harga || 0)
+          }
+        })
       }
-      setStat({ total_pesanan_hari_ini: pesananCount, total_pendapatan_hari_ini: pendapatan })
+
+      setStatPerRute(Object.values(ruteMap).sort((a, b) => b.pendapatan - a.pendapatan))
       setLoading(false)
     }
     loadData()
@@ -115,6 +130,10 @@ export default function DashboardAdminPage() {
   if (error) return <p className="p-6 text-red-600">Error: {error}</p>
   if (!profile) return null
 
+  const totalDewasa = statPerRute.reduce((sum, item) => sum + item.dewasa, 0)
+  const totalBalita = statPerRute.reduce((sum, item) => sum + item.balita, 0)
+  const totalPendapatanKeseluruhan = statPerRute.reduce((sum, item) => sum + item.pendapatan, 0)
+
   return (
     <div className="h-[100dvh] w-full bg-gray-100 p-3 md:p-6 flex flex-col overflow-hidden">
       <div className="max-w-4xl w-full mx-auto flex flex-col h-full">
@@ -136,13 +155,36 @@ export default function DashboardAdminPage() {
           </div>
         </div>
 
-        {/* KARTU PENJUALAN */}
+        {/* KARTU PENJUALAN PER RUTE */}
         <div className="bg-white rounded-xl shadow-md p-4 md:p-6 mb-4 md:mb-6 flex-shrink-0 border border-gray-200">
-          <p className="text-xs md:text-sm text-gray-500 mb-1">Penjualan {tanggalHariIni}</p>
-          <div className="flex justify-between items-end">
-            <p className="text-2xl md:text-4xl font-bold text-gray-900">{stat.total_pesanan_hari_ini} <span className="text-sm md:text-lg font-medium text-gray-600">Tiket</span></p>
-            <p className="text-xl md:text-3xl font-bold text-blue-600">{formatRupiah(stat.total_pendapatan_hari_ini)}</p>
-          </div>
+          <p className="text-xs md:text-sm text-gray-500 mb-3 font-bold">Penjualan {tanggalHariIni}</p>
+          
+          {statPerRute.length === 0 ? (
+            <p className="text-gray-400 text-sm italic text-center py-4">Belum ada penjualan hari ini.</p>
+          ) : (
+            <div className="space-y-3">
+              {statPerRute.map((rute, idx) => (
+                <div key={idx} className="flex flex-col md:flex-row md:justify-between md:items-center border-b border-gray-100 pb-2 last:border-0 last:pb-0 gap-1 md:gap-0">
+                  <p className="font-bold text-gray-700 text-sm md:text-base w-full md:w-1/2">{rute.rute}</p>
+                  <div className="flex justify-between md:justify-end md:gap-8 w-full md:w-1/2">
+                    <p className="text-blue-600 font-bold text-sm md:text-base">Dewasa {rute.dewasa}, Balita {rute.balita}</p>
+                    <p className="text-gray-900 font-bold text-sm md:text-lg">{formatRupiah(rute.pendapatan)}</p>
+                  </div>
+                </div>
+              ))}
+              
+              {/* GARIS PEMISAH TOTAL */}
+              <div className="pt-2 mt-2 border-t-2 border-gray-300 border-dashed">
+                <div className="flex flex-col md:flex-row md:justify-between md:items-center gap-1 md:gap-0">
+                  <p className="font-extrabold text-gray-900 text-base md:text-lg w-full md:w-1/2">TOTAL</p>
+                  <div className="flex justify-between md:justify-end md:gap-8 w-full md:w-1/2">
+                    <p className="text-blue-700 font-extrabold text-base md:text-lg">Dewasa {totalDewasa}, Balita {totalBalita}</p>
+                    <p className="text-blue-700 font-extrabold text-base md:text-xl">{formatRupiah(totalPendapatanKeseluruhan)}</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* MENU GRID */}
@@ -157,7 +199,6 @@ export default function DashboardAdminPage() {
               <p className="font-bold text-xs md:text-sm text-orange-800">{teks.menu_jadwal}</p>
             </button>
 
-            {/* MANAJEMEN PETUGAS DIARAHKAN KE PUSAT KONTROL */}
             <button onClick={() => router.push('/superadmin/pusat-kontrol/admin/petugas')} className="flex items-center justify-center h-16 md:h-24 p-2 border border-rose-200 bg-rose-50 rounded-lg hover:bg-rose-100 text-center transition shadow-sm">
               <p className="font-bold text-xs md:text-sm text-rose-800">{teks.menu_petugas}</p>
             </button>

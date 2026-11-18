@@ -5,7 +5,8 @@ import { useRouter } from 'next/navigation'
 import { supabase, getProfile, getOperatorSession, type Profile } from '@/lib/supabase'
 
 type DataRute = {
-  total_penumpang: number
+  dewasa: number
+  balita: number
   total_pendapatan: number
 }
 
@@ -25,6 +26,9 @@ export default function LaporanGabunganPage() {
   
   const [tanggal, setTanggal] = useState('')
   const [tanggalFormatHeader, setTanggalFormatHeader] = useState('')
+  
+  const [singkatanAsal, setSingkatanAsal] = useState('TRK')
+  const [singkatanTujuan, setSingkatanTujuan] = useState('TJS')
 
   useEffect(() => {
     const today = new Date()
@@ -41,6 +45,15 @@ export default function LaporanGabunganPage() {
       }
       if (!currentProfile) { router.push('/login'); return }
       setProfile(currentProfile)
+      
+      const { data: kotaData } = await supabase.from('master_kota').select('nama_kota, singkatan')
+      if (kotaData) {
+        const trk = kotaData.find((k: any) => k.nama_kota === 'Tarakan')
+        const tjs = kotaData.find((k: any) => k.nama_kota === 'Tanjung Selor')
+        if (trk) setSingkatanAsal(trk.singkatan)
+        if (tjs) setSingkatanTujuan(tjs.singkatan)
+      }
+      
       setLoading(false)
     }
     init()
@@ -51,49 +64,41 @@ export default function LaporanGabunganPage() {
       if (!profile || !tanggal) return
       setLoading(true)
       
-      // FILTER TEMPLATE
-      let queryTemplate = supabase
-        .from('template_jadwal')
-        .select('jam_berangkat, rute_asal')
-      
-      if (profile.role !== 'superadmin') {
-        queryTemplate = queryTemplate.eq('operator_id', profile.id)
-      }
-      
-      const { data: templateData } = await queryTemplate
-      
-      const jamSet = new Set<string>()
-      if (templateData) {
-        templateData.forEach((t: any) => jamSet.add(t.jam_berangkat.substring(0, 5)))
-      }
+      const operatorId = profile.role !== 'superadmin' ? (profile.operator_id || profile.id) : null
 
-      // FILTER PESANAN
       let queryPesanan = supabase
         .from('pesanan')
         .select(`
-          id, jadwal:jadwal_id (rute_asal, rute_tujuan, harga, tanggal, jam_berangkat, kapal_id, operator_id)
+          id, is_balita, jadwal:jadwal_id (rute_asal, rute_tujuan, harga, tanggal, jam_berangkat, kapal_id, operator_id)
         `)
         .eq('status', 'paid')
         .eq('jadwal.tanggal', tanggal)
-
-      if (profile.role !== 'superadmin') {
-        queryPesanan = queryPesanan.eq('jadwal.operator_id', profile.id)
-      }
 
       const { data: pesananData, error } = await queryPesanan
 
       if (error) { setError('Gagal memuat laporan: ' + error.message); setLoading(false); return }
 
-      const kapalIds = [...new Set(pesananData?.map((p: any) => p.jadwal?.kapal_id).filter(Boolean) || [])]
+      const filteredPesanan = (pesananData || []).filter((item: any) => {
+        if (!item.jadwal) return false;
+        
+        let cocokOperator = true
+        if (operatorId && item.jadwal.operator_id) {
+          cocokOperator = item.jadwal.operator_id === operatorId
+        }
+        
+        return cocokOperator;
+      })
+
+      const kapalIds = [...new Set(filteredPesanan.map((p: any) => p.jadwal?.kapal_id).filter(Boolean) || [])]
       const kapalMap = new Map()
       if (kapalIds.length > 0) {
         let queryKapal = supabase.from('kapal').select('id, nama').in('id', kapalIds)
-        if (profile.role !== 'superadmin') {
-          queryKapal = queryKapal.eq('operator_id', profile.id)
-        }
         const { data: kapalData } = await queryKapal
         kapalData?.forEach((k: any) => kapalMap.set(k.id, k.nama))
       }
+
+      const jamSet = new Set<string>()
+      filteredPesanan.forEach((item: any) => jamSet.add(item.jadwal.jam_berangkat.substring(0, 5)))
 
       const grouped: { [key: string]: GabunganPerJam } = {}
       
@@ -101,37 +106,42 @@ export default function LaporanGabunganPage() {
         grouped[jam] = {
           jam,
           nama_kapal: '-',
-          tarakan: { total_penumpang: 0, total_pendapatan: 0 },
-          tanjungSelor: { total_penumpang: 0, total_pendapatan: 0 }
+          tarakan: { dewasa: 0, balita: 0, total_pendapatan: 0 },
+          tanjungSelor: { dewasa: 0, balita: 0, total_pendapatan: 0 }
         }
       })
 
-      if (pesananData) {
-        pesananData.forEach((item: any) => {
-          if (!item.jadwal) return;
-          const jam = item.jadwal.jam_berangkat.substring(0, 5)
-          if (!grouped[jam]) {
-            grouped[jam] = {
-              jam,
-              nama_kapal: '-',
-              tarakan: { total_penumpang: 0, total_pendapatan: 0 },
-              tanjungSelor: { total_penumpang: 0, total_pendapatan: 0 }
-            }
+      filteredPesanan.forEach((item: any) => {
+        const jam = item.jadwal.jam_berangkat.substring(0, 5)
+        if (!grouped[jam]) {
+          grouped[jam] = {
+            jam,
+            nama_kapal: '-',
+            tarakan: { dewasa: 0, balita: 0, total_pendapatan: 0 },
+            tanjungSelor: { dewasa: 0, balita: 0, total_pendapatan: 0 }
           }
+        }
 
-          if (item.jadwal.kapal_id && kapalMap.has(item.jadwal.kapal_id)) {
-            grouped[jam].nama_kapal = kapalMap.get(item.jadwal.kapal_id)
-          }
+        if (item.jadwal.kapal_id && kapalMap.has(item.jadwal.kapal_id)) {
+          grouped[jam].nama_kapal = kapalMap.get(item.jadwal.kapal_id)
+        }
 
-          if (item.jadwal.rute_asal === 'Tarakan') {
-            grouped[jam].tarakan.total_penumpang += 1
-            grouped[jam].tarakan.total_pendapatan += item.jadwal.harga || 0
-          } else if (item.jadwal.rute_asal === 'Tanjung Selor') {
-            grouped[jam].tanjungSelor.total_penumpang += 1
-            grouped[jam].tanjungSelor.total_pendapatan += item.jadwal.harga || 0
+        if (item.jadwal.rute_asal === 'Tarakan') {
+          if (item.is_balita) {
+            grouped[jam].tarakan.balita += 1
+          } else {
+            grouped[jam].tarakan.dewasa += 1
+            grouped[jam].tarakan.total_pendapatan += (item.jadwal.harga || 0)
           }
-        })
-      }
+        } else if (item.jadwal.rute_asal === 'Tanjung Selor') {
+          if (item.is_balita) {
+            grouped[jam].tanjungSelor.balita += 1
+          } else {
+            grouped[jam].tanjungSelor.dewasa += 1
+            grouped[jam].tanjungSelor.total_pendapatan += (item.jadwal.harga || 0)
+          }
+        }
+      })
 
       const laporanArray = Object.values(grouped).sort((a, b) => a.jam.localeCompare(b.jam))
       setLaporan(laporanArray)
@@ -149,9 +159,12 @@ export default function LaporanGabunganPage() {
   if (error) return <p className="p-6 text-center text-red-600">{error}</p>
   if (!profile) return null
 
-  const totalPenumpangTarakan = laporan.reduce((sum, item) => sum + item.tarakan.total_penumpang, 0)
+  const totalDewasaTarakan = laporan.reduce((sum, item) => sum + item.tarakan.dewasa, 0)
+  const totalBalitaTarakan = laporan.reduce((sum, item) => sum + item.tarakan.balita, 0)
   const totalPendapatanTarakan = laporan.reduce((sum, item) => sum + item.tarakan.total_pendapatan, 0)
-  const totalPenumpangTjSelor = laporan.reduce((sum, item) => sum + item.tanjungSelor.total_penumpang, 0)
+  
+  const totalDewasaTjSelor = laporan.reduce((sum, item) => sum + item.tanjungSelor.dewasa, 0)
+  const totalBalitaTjSelor = laporan.reduce((sum, item) => sum + item.tanjungSelor.balita, 0)
   const totalPendapatanTjSelor = laporan.reduce((sum, item) => sum + item.tanjungSelor.total_pendapatan, 0)
   
   const grandTotalPendapatan = totalPendapatanTarakan + totalPendapatanTjSelor
@@ -193,14 +206,17 @@ export default function LaporanGabunganPage() {
             <table className="w-full table-fixed border-collapse text-gray-900">
               <thead className="bg-gray-100 border-b sticky top-0 z-10">
                 <tr>
-                  <th className="border p-1 text-[9px] md:text-xs w-[9%] text-center" rowSpan={2}>Jam</th>
-                  <th className="border p-1 text-[9px] md:text-xs w-[22%] text-center" rowSpan={2}>Kapal</th>
-                  <th className="border p-1 text-[9px] md:text-xs text-center" colSpan={2}>Rute</th>
-                  <th className="border p-1 text-[9px] md:text-xs w-[20%] text-center align-middle" rowSpan={2}>Total Penjualan</th>
+                  <th className="border p-1 text-[9px] md:text-xs w-[8%] text-center" rowSpan={2}>Jam</th>
+                  <th className="border p-1 text-[9px] md:text-xs w-[16%] text-center" rowSpan={2}>Kapal</th>
+                  <th className="border p-1 text-[9px] md:text-xs text-center" colSpan={2}>{singkatanAsal} - {singkatanTujuan}</th>
+                  <th className="border p-1 text-[9px] md:text-xs text-center" colSpan={2}>{singkatanTujuan} - {singkatanAsal}</th>
+                  <th className="border p-1 text-[9px] md:text-xs w-[16%] text-center align-middle" rowSpan={2}>Total Penjualan</th>
                 </tr>
                 <tr className="bg-gray-100">
-                  <th className="border p-1 text-[8px] md:text-xs text-center w-[24.5%] leading-tight">Tarakan - Tanjung Selor</th>
-                  <th className="border p-1 text-[8px] md:text-xs text-center w-[24.5%] leading-tight">Tanjung Selor - Tarakan</th>
+                  <th className="border p-1 text-[8px] md:text-xs text-center">Kursi Dewasa/Balita</th>
+                  <th className="border p-1 text-[8px] md:text-xs text-center">Pendapatan</th>
+                  <th className="border p-1 text-[8px] md:text-xs text-center">Kursi Dewasa/Balita</th>
+                  <th className="border p-1 text-[8px] md:text-xs text-center">Pendapatan</th>
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
@@ -210,9 +226,11 @@ export default function LaporanGabunganPage() {
                     <tr key={l.jam} className="hover:bg-gray-50 text-center">
                       <td className="border p-1 text-[9px] md:text-xs font-bold">{l.jam}</td>
                       <td className="border p-1 text-[9px] md:text-xs font-medium break-words">{l.nama_kapal}</td>
+                      <td className="border p-1 text-[9px] md:text-xs font-bold text-blue-600">{l.tarakan.dewasa}/{l.tarakan.balita}</td>
                       <td className="border p-1 text-[9px] md:text-xs">
                         {l.tarakan.total_pendapatan > 0 ? `Rp ${l.tarakan.total_pendapatan.toLocaleString('id-ID')}` : '-'}
                       </td>
+                      <td className="border p-1 text-[9px] md:text-xs font-bold text-blue-600">{l.tanjungSelor.dewasa}/{l.tanjungSelor.balita}</td>
                       <td className="border p-1 text-[9px] md:text-xs">
                         {l.tanjungSelor.total_pendapatan > 0 ? `Rp ${l.tanjungSelor.total_pendapatan.toLocaleString('id-ID')}` : '-'}
                       </td>
@@ -226,7 +244,9 @@ export default function LaporanGabunganPage() {
               <tfoot className="bg-blue-600 text-white font-bold text-center sticky bottom-0 z-10">
                 <tr>
                   <td colSpan={2} className="p-1 border text-[9px] md:text-xs">TOTAL</td>
+                  <td className="p-1 border text-[9px] md:text-xs">{totalDewasaTarakan}/{totalBalitaTarakan}</td>
                   <td className="p-1 border text-[9px] md:text-xs">Rp {totalPendapatanTarakan.toLocaleString('id-ID')}</td>
+                  <td className="p-1 border text-[9px] md:text-xs">{totalDewasaTjSelor}/{totalBalitaTjSelor}</td>
                   <td className="p-1 border text-[9px] md:text-xs">Rp {totalPendapatanTjSelor.toLocaleString('id-ID')}</td>
                   <td className="p-1 border text-[9px] md:text-xs">Rp {grandTotalPendapatan.toLocaleString('id-ID')}</td>
                 </tr>
@@ -239,21 +259,21 @@ export default function LaporanGabunganPage() {
           <h1 className="text-xl font-bold text-center mb-6">REKAP LAPORAN GABUNGAN</h1>
           <div className="mb-4 text-sm grid grid-cols-[100px_10px_1fr] gap-y-1">
             <span>Tanggal</span><span>:</span><span>{tanggal}</span>
-            <span>Rute</span><span>:</span><span>Tarakan & Tanjung Selor</span>
+            <span>Rute</span><span>:</span><span>{singkatanAsal} & {singkatanTujuan}</span>
           </div>
           <table className="w-full text-sm border-collapse border border-gray-400">
             <thead>
               <tr className="bg-gray-200 text-center text-gray-900">
                 <th className="border border-gray-400 px-2 py-1" rowSpan={2}>Jam</th>
                 <th className="border border-gray-400 px-2 py-1" rowSpan={2}>Kapal</th>
-                <th className="border border-gray-400 px-2 py-1" colSpan={2}>Tarakan - Tanjung Selor</th>
-                <th className="border border-gray-400 px-2 py-1" colSpan={2}>Tanjung Selor - Tarakan</th>
+                <th className="border border-gray-400 px-2 py-1" colSpan={2}>{singkatanAsal} - {singkatanTujuan}</th>
+                <th className="border border-gray-400 px-2 py-1" colSpan={2}>{singkatanTujuan} - {singkatanAsal}</th>
                 <th className="border border-gray-400 px-2 py-1" rowSpan={2}>Total Penjualan</th>
               </tr>
               <tr className="bg-gray-200 text-center text-gray-900">
-                <th className="border border-gray-400 px-2 py-1">Penumpang</th>
+                <th className="border border-gray-400 px-2 py-1">Kursi Dewasa/Balita</th>
                 <th className="border border-gray-400 px-2 py-1">Pendapatan</th>
-                <th className="border border-gray-400 px-2 py-1">Penumpang</th>
+                <th className="border border-gray-400 px-2 py-1">Kursi Dewasa/Balita</th>
                 <th className="border border-gray-400 px-2 py-1">Pendapatan</th>
               </tr>
             </thead>
@@ -264,9 +284,9 @@ export default function LaporanGabunganPage() {
                   <tr key={l.jam} className="text-center text-gray-900">
                     <td className="border border-gray-400 px-2 py-1 font-bold">{l.jam}</td>
                     <td className="border border-gray-400 px-2 py-1">{l.nama_kapal}</td>
-                    <td className="border border-gray-400 px-2 py-1">{l.tarakan.total_penumpang}</td>
+                    <td className="border border-gray-400 px-2 py-1">{l.tarakan.dewasa}/{l.tarakan.balita}</td>
                     <td className="border border-gray-400 px-2 py-1 text-right">Rp {l.tarakan.total_pendapatan.toLocaleString('id-ID')}</td>
-                    <td className="border border-gray-400 px-2 py-1">{l.tanjungSelor.total_penumpang}</td>
+                    <td className="border border-gray-400 px-2 py-1">{l.tanjungSelor.dewasa}/{l.tanjungSelor.balita}</td>
                     <td className="border border-gray-400 px-2 py-1 text-right">Rp {l.tanjungSelor.total_pendapatan.toLocaleString('id-ID')}</td>
                     <td className="border border-gray-400 px-2 py-1 text-right font-bold">Rp {totalBaris.toLocaleString('id-ID')}</td>
                   </tr>
@@ -274,9 +294,9 @@ export default function LaporanGabunganPage() {
               })}
               <tr className="font-bold bg-gray-300 text-center text-gray-900">
                 <td colSpan={2} className="border border-gray-400 px-2 py-1">TOTAL</td>
-                <td className="border border-gray-400 px-2 py-1">{totalPenumpangTarakan}</td>
+                <td className="border border-gray-400 px-2 py-1">{totalDewasaTarakan}/{totalBalitaTarakan}</td>
                 <td className="border border-gray-400 px-2 py-1 text-right">Rp {totalPendapatanTarakan.toLocaleString('id-ID')}</td>
-                <td className="border border-gray-400 px-2 py-1">{totalPenumpangTjSelor}</td>
+                <td className="border border-gray-400 px-2 py-1">{totalDewasaTjSelor}/{totalBalitaTjSelor}</td>
                 <td className="border border-gray-400 px-2 py-1 text-right">Rp {totalPendapatanTjSelor.toLocaleString('id-ID')}</td>
                 <td className="border border-gray-400 px-2 py-1 text-right">Rp {grandTotalPendapatan.toLocaleString('id-ID')}</td>
               </tr>

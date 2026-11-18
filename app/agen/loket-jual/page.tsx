@@ -11,6 +11,7 @@ type ProfileAgen = {
   role: string
   lokasi: string
   email: string
+  nomor_hp?: string
 }
 
 type KursiInfo = {
@@ -193,6 +194,12 @@ function LoketJualAgenContent() {
     setPenumpangList(baru)
   }
 
+  function pilihMetodeBayar(metode: 'cash' | 'qris') {
+    setMetodeBayar(metode)
+    // Pesan error sebelumnya sudah tidak relevan setelah ganti metode
+    setError('')
+  }
+
   const handleKtpScanSuccess = (nama: string, nik: string) => {
     if (showScannerIndex !== null) {
       const baru = [...penumpangList]
@@ -250,11 +257,7 @@ function LoketJualAgenContent() {
   async function prosesPesanan() {
     if (!profile || !jadwal) return
     setError('')
-    setShowQrisModal(false)
-    setShowCashModal(false)
-
-    const totalHarga = kursiDipilih.length * jadwal.harga
-
+    
     setLoadingSubmit(true)
 
     try {
@@ -264,6 +267,7 @@ function LoketJualAgenContent() {
       const grupId = generateGrupId()
       
       const metodePembayaran = metodeBayar === 'cash' ? 'cash_loket' : 'simulasi_online'
+      const identitasPenjual = profile.nomor_hp || profile.email
 
       const pesananData: any[] = []
 
@@ -278,11 +282,11 @@ function LoketJualAgenContent() {
           status: 'paid',
           kode_tiket: generateKodeTiket(idx, false),
           waktu_bayar: waktuKonfirmasi,
-          petugas_konfirmasi: profile.email,
+          petugas_konfirmasi: identitasPenjual,
           waktu_konfirmasi: waktuKonfirmasi,
           grup_transaksi_id: grupId,
           jam_transaksi: jamTransaksi,
-          petugas_jual: profile.email, 
+          petugas_jual: identitasPenjual,
           is_balita: false,
         })
 
@@ -296,11 +300,11 @@ function LoketJualAgenContent() {
             status: 'paid',
             kode_tiket: 'BALITA-' + Date.now() + '-A' + idx,
             waktu_bayar: waktuKonfirmasi,
-            petugas_konfirmasi: profile.email,
+            petugas_konfirmasi: identitasPenjual,
             waktu_konfirmasi: waktuKonfirmasi,
             grup_transaksi_id: grupId,
             jam_transaksi: jamTransaksi,
-            petugas_jual: profile.email,
+            petugas_jual: identitasPenjual,
             is_balita: true,
           })
         }
@@ -338,7 +342,7 @@ function LoketJualAgenContent() {
         grup_transaksi_id: grupId,
         jam_transaksi: jamTransaksi,
         jumlah_tiket: insertedDewasa.length,
-        total_bayar: totalHarga,
+        total_bayar: jadwal.harga * kursiDipilih.length,
         rute: `${jadwal.rute_asal} → ${jadwal.rute_tujuan}`,
         jam_berangkat: jadwal.jam_berangkat,
         nomor_hp: noHp,
@@ -351,12 +355,18 @@ function LoketJualAgenContent() {
         })),
       })
 
+      // TUTUP MODAL SETELAH SEMUA PROSES SELESAI
+      setShowQrisModal(false)
+      setShowCashModal(false)
+
       const ids = inserted.map((p) => p.id).join(',')
-      router.push(`/etiket?pesanan=${ids}`)
+      router.push(`/etiket?pesanan=${ids}&dari=agen`)
       
     } catch (err: any) {
       setError(err.message || 'Terjadi kesalahan saat memproses pembayaran.')
       setLoadingSubmit(false)
+      setShowQrisModal(false)
+      setShowCashModal(false)
     }
   }
 
@@ -439,7 +449,7 @@ function LoketJualAgenContent() {
               <h1 className="text-lg md:text-xl font-bold text-gray-900 leading-tight">Jual Tiket</h1>
               <p className="text-xs md:text-sm text-gray-600">Agen : {profile?.lokasi}</p>
             </div>
-            <button onClick={() => router.push('/agen/jual-tiket')} className="text-[10px] md:text-xs text-blue-600 hover:underline bg-gray-50 px-2 py-1 rounded border border-gray-200 mt-1">
+            <button type="button" onClick={() => router.push('/agen/jual-tiket')} className="text-[10px] md:text-xs text-blue-600 hover:underline bg-gray-50 px-2 py-1 rounded border border-gray-200 mt-1">
               &larr; Kembali
             </button>
           </div>
@@ -592,25 +602,26 @@ function LoketJualAgenContent() {
                 <p className="text-[9px] md:text-[10px] font-bold text-gray-700 mb-1">Metode Pembayaran:</p>
                 <div className="flex gap-4">
                   <label className="flex items-center gap-1.5 cursor-pointer">
-                    <input type="radio" name="metode" value="cash" checked={metodeBayar === 'cash'} onChange={() => setMetodeBayar('cash')} className="w-3.5 h-3.5 text-blue-600" />
+                    <input type="radio" name="metode" value="cash" checked={metodeBayar === 'cash'} onChange={() => pilihMetodeBayar('cash')} className="w-3.5 h-3.5 text-blue-600" />
                     <span className="text-[10px] md:text-xs text-gray-900 font-medium">💵 Tunai</span>
                   </label>
                   <label className="flex items-center gap-1.5 cursor-pointer">
-                    <input type="radio" name="metode" value="qris" checked={metodeBayar === 'qris'} onChange={() => setMetodeBayar('qris')} className="w-3.5 h-3.5 text-blue-600" />
+                    <input type="radio" name="metode" value="qris" checked={metodeBayar === 'qris'} onChange={() => pilihMetodeBayar('qris')} className="w-3.5 h-3.5 text-blue-600" />
                     <span className="text-[10px] md:text-xs text-gray-900 font-medium">📱 QRIS</span>
                   </label>
                 </div>
               </div>
 
-              {metodeBayar === 'cash' ? (
-                <div className="bg-yellow-50 border border-yellow-300 p-1.5 rounded-lg">
-                  <p className="text-[9px] md:text-[10px] text-yellow-900 font-bold">⚠️ UANG HARUS DITERIMA UTUH (Rp {totalHarga.toLocaleString('id-ID')})</p>
-                </div>
-              ) : (
-                <div className="bg-blue-50 border border-blue-300 p-1.5 rounded-lg">
-                  <p className="text-[9px] md:text-[10px] text-blue-900 font-bold">📱 Mode Simulasi QRIS (QR muncul saat klik bayar)</p>
-                </div>
-              )}
+              {/* Kedua kotak info selalu ter-mount, tampil/sembunyi lewat class `hidden`.
+                  Tujuannya: ganti metode pembayaran tidak menghapus/mengganti text node.
+                  React bisa melempar NotFoundError "removeChild" bila text node di blok ini
+                  sudah dimodifikasi pihak lain (ekstensi penerjemah/Grammarly, dsb). */}
+              <div className={`bg-yellow-50 border border-yellow-300 p-1.5 rounded-lg ${metodeBayar === 'cash' ? '' : 'hidden'}`} translate="no">
+                <p className="text-[9px] md:text-[10px] text-yellow-900 font-bold">⚠️ UANG HARUS DITERIMA UTUH (Rp {totalHarga.toLocaleString('id-ID')})</p>
+              </div>
+              <div className={`bg-blue-50 border border-blue-300 p-1.5 rounded-lg ${metodeBayar === 'qris' ? '' : 'hidden'}`} translate="no">
+                <p className="text-[9px] md:text-[10px] text-blue-900 font-bold">📱 Mode Simulasi QRIS (QR muncul saat klik bayar)</p>
+              </div>
 
               <button type="submit" disabled={loadingSubmit} className="w-full bg-green-600 text-white py-2 md:py-2.5 rounded-lg hover:bg-green-700 disabled:bg-gray-400 font-bold text-xs md:text-sm shadow-sm transition-colors">
                 {loadingSubmit ? 'Memproses...' : `✓ Bayar & Terbitkan ${kursiDipilih.length} Tiket`}
@@ -626,7 +637,7 @@ function LoketJualAgenContent() {
 
       {/* MODAL POP-UP QRIS */}
       {showQrisModal && (
-        <div className="absolute inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
+        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-xl shadow-2xl w-full max-w-xs overflow-hidden flex flex-col">
             <div className="bg-blue-600 text-white p-3 text-center">
               <h3 className="font-bold text-sm">Pembayaran QRIS</h3>
@@ -669,7 +680,7 @@ function LoketJualAgenContent() {
 
       {/* MODAL POP-UP CASH */}
       {showCashModal && (
-        <div className="absolute inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
+        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-xl shadow-2xl w-full max-w-xs overflow-hidden flex flex-col">
             <div className="bg-green-600 text-white p-3 text-center">
               <h3 className="font-bold text-sm">Pembayaran Tunai</h3>

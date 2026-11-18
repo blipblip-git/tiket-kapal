@@ -26,6 +26,7 @@ function SyahbandarContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const lokasi = searchParams.get('lokasi') || 'Tarakan'
+  const operatorId = searchParams.get('operator') || ''
 
   const [profile, setProfile] = useState<Profile | null>(null)
   const [loading, setLoading] = useState(true)
@@ -57,8 +58,23 @@ function SyahbandarContent() {
     async function fetchData() {
       setLoading(true)
 
-      const { data: templateData } = await supabase.from('template_jadwal').select('jam_berangkat').eq('rute_asal', lokasi)
-      const { data: jadwalData } = await supabase.from('jadwal').select('id, jam_berangkat, kapal_id').eq('tanggal', tanggal).eq('rute_asal', lokasi)
+      let queryTemplate = supabase.from('template_jadwal').select('jam_berangkat').eq('rute_asal', lokasi)
+      let queryJadwal = supabase.from('jadwal').select('id, jam_berangkat, kapal_id').eq('tanggal', tanggal).eq('rute_asal', lokasi)
+      let queryPesanan = supabase.from('pesanan').select(`
+          id, nama_penumpang, status_boarding, waktu_boarding, is_balita, grup_transaksi_id,
+          jadwal:jadwal_id (jam_berangkat, rute_asal, kapal_id, operator_id),
+          kursi:kursi_id (nomor_kursi)
+        `).eq('status', 'paid').eq('jadwal.tanggal', tanggal).eq('jadwal.rute_asal', lokasi)
+
+      if (operatorId) {
+        queryTemplate = queryTemplate.eq('operator_id', operatorId)
+        queryJadwal = queryJadwal.eq('operator_id', operatorId)
+        queryPesanan = queryPesanan.eq('jadwal.operator_id', operatorId)
+      }
+
+      const { data: templateData } = await queryTemplate
+      const { data: jadwalData } = await queryJadwal
+      const { data: pesananData } = await queryPesanan
       
       const kapalIdsFromJadwal = [...new Set(jadwalData?.map((j: any) => j.kapal_id).filter(Boolean) || [])]
       let kapalMap = new Map()
@@ -66,12 +82,6 @@ function SyahbandarContent() {
         const { data: kapalData } = await supabase.from('kapal').select('id, nama, nama_kapten').in('id', kapalIdsFromJadwal)
         kapalData?.forEach((k: any) => kapalMap.set(k.id, k))
       }
-
-      const { data: pesananData } = await supabase.from('pesanan').select(`
-          id, nama_penumpang, status_boarding, waktu_boarding, is_balita, grup_transaksi_id,
-          jadwal:jadwal_id (jam_berangkat, rute_asal, kapal_id),
-          kursi:kursi_id (nomor_kursi)
-        `).eq('status', 'paid').eq('jadwal.tanggal', tanggal).eq('jadwal.rute_asal', lokasi)
 
       const filtered = (pesananData || []).filter((item: any) => item.jadwal !== null)
 
@@ -109,7 +119,7 @@ function SyahbandarContent() {
       setLoading(false)
     }
     fetchData()
-  }, [tanggal, lokasi])
+  }, [tanggal, lokasi, operatorId])
 
   const handlePrint = () => { setTimeout(() => window.print(), 100) }
   

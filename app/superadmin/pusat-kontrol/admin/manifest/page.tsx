@@ -57,50 +57,61 @@ function ManifestSuperadminContent() {
       if (!profile) return
       setLoading(true)
 
-      // Tentukan target operator_id
       let targetOperatorId = operatorIdParam
       if (profile.role !== 'superadmin') {
         targetOperatorId = profile.operator_id || profile.id
       }
 
-      let queryTemplate = supabase.from('template_jadwal').select('jam_berangkat').eq('rute_asal', lokasi)
-      let queryJadwal = supabase.from('jadwal').select('id, jam_berangkat, kapal_id').eq('tanggal', tanggal).eq('rute_asal', lokasi)
+      // 1. Ambil Pesanan
       let queryPesanan = supabase.from('pesanan').select(`
           id, nama_penumpang, status_boarding, waktu_boarding, is_balita, grup_transaksi_id,
-          jadwal:jadwal_id (jam_berangkat, rute_asal, kapal_id),
+          jadwal:jadwal_id (jam_berangkat, rute_asal, kapal_id, operator_id),
           kursi:kursi_id (nomor_kursi)
         `).eq('status', 'paid').eq('jadwal.tanggal', tanggal).eq('jadwal.rute_asal', lokasi)
 
-      if (targetOperatorId) {
-        queryTemplate = queryTemplate.eq('operator_id', targetOperatorId)
-        queryJadwal = queryJadwal.eq('operator_id', targetOperatorId)
-        queryPesanan = queryPesanan.eq('jadwal.operator_id', targetOperatorId)
-      } else if (profile.role !== 'superadmin') {
-        // Kalau bukan superadmin tapi nggak punya operator_id, jangan tampilkan apa-apa
-        setLaporan([])
-        setLoading(false)
-        return
-      }
-
-      const { data: templateData } = await queryTemplate
-      const { data: jadwalData } = await queryJadwal
       const { data: pesananData } = await queryPesanan
+      
+      // 2. Ambil Jadwal (buat cadangan kalau pesanan kosong)
+      let queryJadwal = supabase.from('jadwal').select('id, jam_berangkat, kapal_id, operator_id').eq('tanggal', tanggal).eq('rute_asal', lokasi)
+      const { data: jadwalData } = await queryJadwal
 
-      const kapalIdsFromJadwal = [...new Set(jadwalData?.map((j: any) => j.kapal_id).filter(Boolean) || [])]
+      const filtered = (pesananData || []).filter((item: any) => {
+        if (!item.jadwal) return false;
+        
+        // FILTER MULTI-TENANT (AMAN UNTUK DATA LAMA YANG NULL)
+        let cocokOperator = true
+        if (targetOperatorId && item.jadwal.operator_id) {
+          cocokOperator = item.jadwal.operator_id === targetOperatorId
+        }
+        
+        return cocokOperator;
+      })
+
+      const jadwalFiltered = (jadwalData || []).filter((j: any) => {
+        let cocokOperator = true
+        if (targetOperatorId && j.operator_id) {
+          cocokOperator = j.operator_id === targetOperatorId
+        }
+        return cocokOperator;
+      })
+
+      const kapalIdsFromJadwal = [...new Set(jadwalFiltered.map((j: any) => j.kapal_id).filter(Boolean) || [])]
       let kapalMap = new Map()
       if (kapalIdsFromJadwal.length > 0) {
         const { data: kapalData } = await supabase.from('kapal').select('id, nama, nama_kapten').in('id', kapalIdsFromJadwal)
         kapalData?.forEach((k: any) => kapalMap.set(k.id, k))
       }
 
-      const filtered = (pesananData || []).filter((item: any) => item.jadwal !== null)
-
       const jamSet = new Set<string>()
-      if (templateData) templateData.forEach((t: any) => jamSet.add(t.jam_berangkat.substring(0, 5)))
+      // Ambil dari jadwal dulu
+      jadwalFiltered.forEach((j: any) => jamSet.add(j.jam_berangkat.substring(0, 5)))
+      // Kalau kosong, ambil dari pesanan
+      filtered.forEach((item: any) => jamSet.add(item.jadwal.jam_berangkat.substring(0, 5)))
 
       const groupedByJam: { [key: string]: LaporanPerJam } = {}
+      
       jamSet.forEach(jam => {
-        const jadwalCocok = jadwalData?.find((j: any) => j.jam_berangkat.substring(0, 5) === jam)
+        const jadwalCocok = jadwalFiltered.find((j: any) => j.jam_berangkat.substring(0, 5) === jam)
         const dataKapal = jadwalCocok ? kapalMap.get(jadwalCocok.kapal_id) : null
         groupedByJam[jam] = { 
           jam, total_terjual: 0, rincian: [], 
@@ -216,7 +227,7 @@ function ManifestSuperadminContent() {
                     <h1 className="text-xl font-bold text-gray-900 leading-tight">Manifest {lokasi}</h1>
                     <p className="text-sm text-gray-600 mt-0.5">{tanggalFormatHeader}</p>
                   </div>
-                  <button onClick={() => router.push('/superadmin/pusat-kontrol')} className="text-xs text-blue-600 hover:underline bg-gray-50 px-2 py-1.5 rounded border border-gray-200 mt-1">
+                  <button onClick={() => router.push('/laporan-penjualan-admin')} className="text-xs text-blue-600 hover:underline bg-gray-50 px-2 py-1.5 rounded border border-gray-200 mt-1">
                     &larr; Kembali
                   </button>
                 </div>
@@ -230,7 +241,7 @@ function ManifestSuperadminContent() {
             <div className="flex-1 overflow-y-auto w-full p-4">
               <div className="max-w-md mx-auto space-y-6">
                 <div>
-                  <h2 className="text-sm font-bold text-gray-800 mb-2 border-b border-gray-300 pb-1">OPEN SCHEDULE</h2>
+                  <h2 className="text-sm font-bold text-gray-800 mb-2 border-b border-gray-300 pb-1">JADWAL BELUM CLOSING</h2>
                   {laporanBelumClosed.length === 0 ? (
                     <div className="bg-white p-4 rounded-lg border border-gray-200 text-center shadow-sm">
                       <p className="text-gray-500 text-xs">Belum ada jadwal open.</p>
@@ -259,7 +270,7 @@ function ManifestSuperadminContent() {
                 </div>
 
                 <div>
-                  <h2 className="text-sm font-bold text-gray-800 mb-2 border-b border-gray-300 pb-1">CLOSING SCHEDULE</h2>
+                  <h2 className="text-sm font-bold text-gray-800 mb-2 border-b border-gray-300 pb-1">JADWAL SUDAH CLOSING</h2>
                   {laporanSudahClosed.length === 0 ? (
                     <div className="bg-white p-4 rounded-lg border border-gray-200 text-center shadow-sm">
                       <p className="text-gray-500 text-xs">Belum ada jadwal closing.</p>
