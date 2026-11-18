@@ -393,18 +393,27 @@ function LaporanContent() {
                   
                   <div className="overflow-x-auto flex-1">
                     <table className="w-full table-fixed border-collapse text-gray-900">
+                      <colgroup>
+                        <col className="w-[6%] md:w-[48px]" />
+                        <col />
+                        <col className="w-[14%] md:w-[100px]" />
+                        <col className="w-[14%] md:w-[118px]" />
+                        <col className="w-[14%] md:w-[118px]" />
+                        <col className="w-[14%] md:w-[118px]" />
+                        <col className="w-[12%] md:w-[72px]" />
+                      </colgroup>
                       <thead>
                         <tr className="bg-gray-200 border-b">
-                          <th className="border p-1 text-[9px] md:text-xs w-[6%]" rowSpan={2}>No</th>
-                          <th className="border p-1 text-[9px] md:text-xs w-[24%] text-center" rowSpan={2}>Jam / Kapal</th>
+                          <th className="border p-1 text-[9px] md:text-xs w-[6%] md:w-[48px]" rowSpan={2}>No</th>
+                          <th className="border p-1 text-[9px] md:text-xs text-center" rowSpan={2}>Jam / Kapal</th>
                           <th className="border p-1 text-[9px] md:text-xs" colSpan={4}>Total</th>
-                          <th className="border p-1 text-[9px] md:text-xs w-[12%]" rowSpan={2}>Aksi</th>
+                          <th className="border p-1 text-[9px] md:text-xs w-[12%] md:w-[72px]" rowSpan={2}>Aksi</th>
                         </tr>
                         <tr className="bg-gray-200 border-b">
-                          <th className="border p-1 text-[9px] md:text-xs w-[14%] whitespace-nowrap">Kursi Dewasa/Balita</th>
-                          <th className="border p-1 text-[9px] md:text-xs w-[16%]">Cash</th>
-                          <th className="border p-1 text-[9px] md:text-xs w-[16%]">Qris</th>
-                          <th className="border p-1 text-[9px] md:text-xs w-[16%]">Jual</th>
+                          <th className="border p-1 text-[9px] md:text-xs w-[14%] md:w-[100px] whitespace-nowrap">Kursi Dewasa/Balita</th>
+                          <th className="border p-1 text-[9px] md:text-xs w-[14%] md:w-[118px]">Cash</th>
+                          <th className="border p-1 text-[9px] md:text-xs w-[14%] md:w-[118px]">Qris</th>
+                          <th className="border p-1 text-[9px] md:text-xs w-[14%] md:w-[118px]">Jual</th>
                         </tr>
                       </thead>
                       <tbody className="bg-white divide-y divide-gray-200">
@@ -456,18 +465,27 @@ function LaporanContent() {
                   </div>
                   <div className="overflow-x-auto">
                     <table className="w-full table-fixed border-collapse text-gray-900">
+                      <colgroup>
+                        <col className="w-[6%] md:w-[48px]" />
+                        <col />
+                        <col className="w-[14%] md:w-[100px]" />
+                        <col className="w-[14%] md:w-[118px]" />
+                        <col className="w-[14%] md:w-[118px]" />
+                        <col className="w-[14%] md:w-[118px]" />
+                        <col className="w-[12%] md:w-[72px]" />
+                      </colgroup>
                       <thead>
                         <tr className="bg-gray-200 border-b">
-                          <th className="border p-1 text-[9px] md:text-xs w-[6%]" rowSpan={2}>No</th>
-                          <th className="border p-1 text-[9px] md:text-xs w-[24%] text-center uppercase" rowSpan={2}>Petugas</th>
+                          <th className="border p-1 text-[9px] md:text-xs w-[6%] md:w-[48px]" rowSpan={2}>No</th>
+                          <th className="border p-1 text-[9px] md:text-xs text-center uppercase" rowSpan={2}>Petugas</th>
                           <th className="border p-1 text-[9px] md:text-xs" colSpan={4}>Total</th>
-                          <th className="border p-1 text-[9px] md:text-xs w-[12%]" rowSpan={2}>Aksi</th>
+                          <th className="border p-1 text-[9px] md:text-xs w-[12%] md:w-[72px]" rowSpan={2}>Aksi</th>
                         </tr>
                         <tr className="bg-gray-200 border-b">
-                          <th className="border p-1 text-[9px] md:text-xs w-[14%] whitespace-nowrap">Kursi Dewasa/Balita</th>
-                          <th className="border p-1 text-[9px] md:text-xs w-[16%]">Cash</th>
-                          <th className="border p-1 text-[9px] md:text-xs w-[16%]">Qris</th>
-                          <th className="border p-1 text-[9px] md:text-xs w-[16%]">Jual</th>
+                          <th className="border p-1 text-[9px] md:text-xs w-[14%] md:w-[100px] whitespace-nowrap">Kursi Dewasa/Balita</th>
+                          <th className="border p-1 text-[9px] md:text-xs w-[14%] md:w-[118px]">Cash</th>
+                          <th className="border p-1 text-[9px] md:text-xs w-[14%] md:w-[118px]">Qris</th>
+                          <th className="border p-1 text-[9px] md:text-xs w-[14%] md:w-[118px]">Jual</th>
                         </tr>
                       </thead>
                       <tbody className="bg-white divide-y divide-gray-200">
@@ -531,17 +549,25 @@ function LaporanContent() {
                   
                   <div className="overflow-y-auto flex-1">
                     <table className="w-full table-fixed border-collapse text-gray-900">
+                      <colgroup>
+                        <col className="w-[5%] md:w-[48px]" />
+                        <col />
+                        <col className="w-[15%] md:w-[140px]" />
+                        <col className="w-[14%] md:w-[118px]" />
+                        <col className="w-[14%] md:w-[118px]" />
+                        <col className="w-[14%] md:w-[118px]" />
+                      </colgroup>
                       <thead className="bg-gray-200 border-b sticky top-0 z-10">
                         <tr>
-                          <th className="border p-1 text-[9px] md:text-xs w-[5%]" rowSpan={2}>No</th>
-                          <th className="border p-1 text-[9px] md:text-xs w-[35%] text-left" rowSpan={2}>Nama / Kursi</th>
-                          <th className="border p-1 text-[9px] md:text-xs w-[15%]" rowSpan={2}>Kode</th>
+                          <th className="border p-1 text-[9px] md:text-xs w-[5%] md:w-[48px]" rowSpan={2}>No</th>
+                          <th className="border p-1 text-[9px] md:text-xs text-left" rowSpan={2}>Nama / Kursi</th>
+                          <th className="border p-1 text-[9px] md:text-xs w-[15%] md:w-[140px]" rowSpan={2}>Kode</th>
                           <th className="border p-1 text-[9px] md:text-xs" colSpan={3}>Penjualan</th>
                         </tr>
                         <tr>
-                          <th className="border p-1 text-[9px] md:text-xs w-[15%]">Cash</th>
-                          <th className="border p-1 text-[9px] md:text-xs w-[15%]">Qris</th>
-                          <th className="border p-1 text-[9px] md:text-xs w-[15%]">Total</th>
+                          <th className="border p-1 text-[9px] md:text-xs w-[14%] md:w-[118px]">Cash</th>
+                          <th className="border p-1 text-[9px] md:text-xs w-[14%] md:w-[118px]">Qris</th>
+                          <th className="border p-1 text-[9px] md:text-xs w-[14%] md:w-[118px]">Total</th>
                         </tr>
                       </thead>
                       <tbody className="bg-white divide-y divide-gray-200">
@@ -567,14 +593,14 @@ function LaporanContent() {
 
                   <div className="bg-blue-600 text-white font-bold text-center flex-shrink-0 w-full">
                     <div className="flex w-full">
-                      <div className="p-2 border text-[9px] md:text-xs text-center w-[50%]">TOTAL</div>
-                      <div className="p-2 border text-[9px] md:text-xs text-center w-[15%]">
+                      <div className="p-2 border text-[9px] md:text-xs text-center flex-1">TOTAL</div>
+                      <div className="p-2 border text-[9px] md:text-xs text-center w-[14%] md:w-[118px]">
                         Rp {dataRincianAktif.filter(r => r.metode_bayar === 'Cash').reduce((s, x) => s + x.harga, 0).toLocaleString('id-ID')}
                       </div>
-                      <div className="p-2 border text-[9px] md:text-xs text-center w-[15%]">
+                      <div className="p-2 border text-[9px] md:text-xs text-center w-[14%] md:w-[118px]">
                         Rp {dataRincianAktif.filter(r => r.metode_bayar === 'QRIS').reduce((s, x) => s + x.harga, 0).toLocaleString('id-ID')}
                       </div>
-                      <div className="p-2 border text-[9px] md:text-xs text-center w-[20%]">
+                      <div className="p-2 border text-[9px] md:text-xs text-center w-[14%] md:w-[118px]">
                         Rp {dataRincianAktif.reduce((s, x) => s + x.harga, 0).toLocaleString('id-ID')}
                       </div>
                     </div>
