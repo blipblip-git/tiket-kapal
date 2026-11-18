@@ -34,7 +34,21 @@ export type Profile = {
 export async function ambilNamaPerusahaan(profile: Profile): Promise<string> {
   if (profile.nama_perusahaan) return profile.nama_perusahaan
 
-  const operatorId = profile.operator_id || (profile.role === 'admin_utama' ? profile.id : null)
+  let operatorId = profile.operator_id || (profile.role === 'admin_utama' ? profile.id : null)
+
+  // Sesi lama (disimpan sebelum login menyertakan operator_id / nama_perusahaan):
+  // ambil ulang datanya dari DB supaya tidak perlu logout-login.
+  if (!operatorId && profile.id) {
+    const { data: diriSendiri } = await supabase
+      .from('profiles')
+      .select('operator_id, nama_perusahaan, role')
+      .eq('id', profile.id)
+      .maybeSingle()
+
+    if (diriSendiri?.nama_perusahaan) return diriSendiri.nama_perusahaan
+    operatorId = diriSendiri?.operator_id || (diriSendiri?.role === 'admin_utama' ? profile.id : null)
+  }
+
   if (!operatorId) return profile.nama || '-'
 
   const { data } = await supabase
