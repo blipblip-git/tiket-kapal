@@ -28,6 +28,33 @@ export type Profile = {
   sesi_aktif?: string | null
 }
 
+// ==================== NAMA PERUSAHAAN UNTUK HEADER DASHBOARD ====================
+// Admin Utama memakai nama_perusahaan miliknya sendiri.
+// Petugas & Agen memakai nama_perusahaan milik operator induknya.
+export async function ambilNamaPerusahaan(profile: Profile): Promise<string> {
+  if (profile.nama_perusahaan) return profile.nama_perusahaan
+
+  const operatorId = profile.operator_id || (profile.role === 'admin_utama' ? profile.id : null)
+  if (!operatorId) return profile.nama || '-'
+
+  const { data } = await supabase
+    .from('profiles')
+    .select('nama_perusahaan, nama')
+    .eq('id', operatorId)
+    .maybeSingle()
+
+  return data?.nama_perusahaan || data?.nama || profile.nama || '-'
+}
+
+// ==================== FORMAT DAFTAR ABK (1 BARIS BERNOMOR) ====================
+export function formatDaftarAbk(namaAbk?: string[] | null): string {
+  if (!namaAbk || namaAbk.length === 0) return '-'
+  return namaAbk
+    .filter((nama) => nama && nama.trim() !== '')
+    .map((nama, idx) => `${idx + 1}. ${nama.trim()}`)
+    .join('  ')
+}
+
 // ==================== TIPE AUDIT LOG ====================
 export type AuditLog = {
   id: string

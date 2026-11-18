@@ -400,7 +400,7 @@ export default function DashboardLoketPage() {
   let labelRole = 'Operator'
   if (profile.role === 'petugas_loket') labelRole = 'Operator Loket'
   if (profile.role === 'petugas_mobile') labelRole = 'Operator Mobile'
-  if (profile.role === 'terminal_keberangkatan') labelRole = 'Operator Keberangkatan'
+  if (profile.role === 'terminal_keberangkatan') labelRole = 'Petugas Keberangkatan'
   
   const totalBayarCentang = grupCash.flatMap((g) => g.pesanan).filter((p) => selectedPesanan.includes(p.id)).reduce((sum, p) => sum + (p.harga || 0), 0)
 

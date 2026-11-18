@@ -2,11 +2,13 @@
 
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { supabase, getOperatorSession, getProfile, type Profile } from '@/lib/supabase'
+import { supabase, getOperatorSession, getProfile, ambilNamaPerusahaan, type Profile } from '@/lib/supabase'
+import DashboardHeader from '@/components/DashboardHeader'
 
 export default function DashboardAgenPage() {
   const router = useRouter()
   const [profile, setProfile] = useState<Profile | null>(null)
+  const [namaPerusahaan, setNamaPerusahaan] = useState('')
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
@@ -19,6 +21,7 @@ export default function DashboardAgenPage() {
           return
         }
         setProfile(sesiPetugas)
+        setNamaPerusahaan(await ambilNamaPerusahaan(sesiPetugas))
         setLoading(false)
         return
       }
@@ -26,6 +29,7 @@ export default function DashboardAgenPage() {
       const adminProfile = await getProfile()
       if (adminProfile && adminProfile.role === 'admin_utama') {
         setProfile(adminProfile)
+        setNamaPerusahaan(await ambilNamaPerusahaan(adminProfile))
         setLoading(false)
         return
       }
@@ -52,25 +56,20 @@ export default function DashboardAgenPage() {
     <div className="h-[100dvh] bg-gray-50 flex flex-col overflow-hidden">
       <div className="max-w-md w-full mx-auto p-4 flex-1 flex flex-col">
         
-        {/* HEADER */}
-        <div className="bg-white p-4 rounded-xl shadow-md border border-gray-100 mb-4 flex-shrink-0">
-          <div className="flex justify-between items-start">
-            <div>
-              <h1 className="text-lg md:text-xl font-bold text-gray-900 leading-tight">
-                Dashboard Agen
-              </h1>
-              <p className="text-sm text-gray-600 mt-1 font-medium">
-                {profile.lokasi || ''} - {profile.nama}
-              </p>
-            </div>
+        {/* HEADER (Format Seragam: Nama Perusahaan / Judul / Lokasi - Nama) */}
+        <DashboardHeader
+          namaPerusahaan={namaPerusahaan || profile.nama}
+          judul="Dasbor Agen"
+          subJudul={`${profile.lokasi || ''} - ${profile.nama}`}
+          aksi={
             <button 
               onClick={handleLogout} 
               className="text-xs bg-red-600 text-white px-3 py-1.5 rounded hover:bg-red-700 font-bold shadow-sm"
             >
               Logout
             </button>
-          </div>
-        </div>
+          }
+        />
 
         {/* MENU UTAMA (GAP DIHILANGKAN) */}
         <div className="flex-1 flex flex-col gap-3 justify-start pb-4">

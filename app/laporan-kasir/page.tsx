@@ -207,7 +207,7 @@ export default function LaporanKasirPage() {
   let labelRole = 'Operator'
   if (profile.role === 'petugas_loket') labelRole = 'Operator Loket'
   if (profile.role === 'petugas_mobile') labelRole = 'Operator Mobile'
-  if (profile.role === 'terminal_keberangkatan') labelRole = 'Operator Keberangkatan'
+  if (profile.role === 'terminal_keberangkatan') labelRole = 'Petugas Keberangkatan'
   if (profile.role === 'admin_utama') labelRole = 'Admin Utama'
 
   const grandTotal = laporan.reduce(

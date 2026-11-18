@@ -2,7 +2,7 @@
 
 import { useEffect, useState, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { supabase, getProfile, getOperatorSession, type Profile } from '@/lib/supabase'
+import { supabase, getProfile, getOperatorSession, formatDaftarAbk, type Profile } from '@/lib/supabase'
 
 type RincianPenumpang = {
   id: string
@@ -20,6 +20,8 @@ type LaporanPerJam = {
   rincian: RincianPenumpang[]
   nama_kapal: string
   nama_kapten: string
+  nama_abk: string[]
+  rute: string
 }
 
 function PetugasLaporanContent() {
@@ -78,10 +80,10 @@ function PetugasLaporanContent() {
       setLoading(true)
 
       let queryTemplate = supabase.from('template_jadwal').select('jam_berangkat').eq('rute_asal', filterLokasi)
-      let queryJadwal = supabase.from('jadwal').select('id, jam_berangkat, kapal_id').eq('tanggal', tanggal).eq('rute_asal', filterLokasi)
+      let queryJadwal = supabase.from('jadwal').select('id, jam_berangkat, rute_asal, rute_tujuan, kapal_id').eq('tanggal', tanggal).eq('rute_asal', filterLokasi)
       let queryPesanan = supabase.from('pesanan').select(`
           id, nama_penumpang, status_boarding, waktu_boarding, is_balita, grup_transaksi_id,
-          jadwal:jadwal_id (jam_berangkat, rute_asal, kapal_id),
+          jadwal:jadwal_id (jam_berangkat, rute_asal, rute_tujuan, kapal_id),
           kursi:kursi_id (nomor_kursi)
         `).eq('status', 'paid').eq('jadwal.tanggal', tanggal).eq('jadwal.rute_asal', filterLokasi)
 
@@ -106,7 +108,7 @@ function PetugasLaporanContent() {
       const kapalIdsFromJadwal = [...new Set(jadwalData?.map((j: any) => j.kapal_id).filter(Boolean) || [])]
       let kapalMap = new Map()
       if (kapalIdsFromJadwal.length > 0) {
-        const { data: kapalData } = await supabase.from('kapal').select('id, nama, nama_kapten').in('id', kapalIdsFromJadwal)
+        const { data: kapalData } = await supabase.from('kapal').select('*').in('id', kapalIdsFromJadwal)
         kapalData?.forEach((k: any) => kapalMap.set(k.id, k))
       }
 
@@ -122,13 +124,19 @@ function PetugasLaporanContent() {
         groupedByJam[jam] = { 
           jam, total_terjual: 0, rincian: [], 
           nama_kapal: dataKapal?.nama || '-', 
-          nama_kapten: dataKapal?.nama_kapten || '-'
+          nama_kapten: dataKapal?.nama_kapten || '-',
+          nama_abk: dataKapal?.nama_abk || [],
+          rute: jadwalCocok ? `${jadwalCocok.rute_asal} - ${jadwalCocok.rute_tujuan}` : `${filterLokasi} - -`
         }
       })
 
       filtered.forEach((item: any) => {
         const jam = item.jadwal.jam_berangkat.substring(0, 5)
-        if (!groupedByJam[jam]) groupedByJam[jam] = { jam, total_terjual: 0, rincian: [], nama_kapal: '-', nama_kapten: '-' }
+        if (!groupedByJam[jam]) groupedByJam[jam] = {
+          jam, total_terjual: 0, rincian: [],
+          nama_kapal: '-', nama_kapten: '-', nama_abk: [],
+          rute: `${item.jadwal.rute_asal} - ${item.jadwal.rute_tujuan}`
+        }
         const group = groupedByJam[jam]
         group.total_terjual += 1
         group.rincian.push({
@@ -273,7 +281,7 @@ function PetugasLaporanContent() {
                               <p className="text-[10px] text-gray-600">{l.nama_kapal}</p>
                             </div>
                             <div className="flex items-center gap-2">
-                              <span className="text-[9px] bg-blue-100 text-blue-800 px-1.5 py-0.5 rounded font-bold">{l.total_terjual} Org</span>
+                              <span className="text-[9px] bg-blue-100 text-blue-800 px-1.5 py-0.5 rounded font-bold">{l.total_terjual} Penumpang</span>
                               <span className="text-blue-600 text-[10px]">▶</span>
                             </div>
                           </button>
@@ -302,7 +310,7 @@ function PetugasLaporanContent() {
                               <p className="text-[10px] text-gray-600">{l.nama_kapal}</p>
                             </div>
                             <div className="flex items-center gap-2">
-                              <span className="text-[9px] bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded font-bold">{l.total_terjual} Org</span>
+                              <span className="text-[9px] bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded font-bold">{l.total_terjual} Penumpang</span>
                               <span className="text-blue-600 text-[10px]">▶</span>
                             </div>
                           </button>
@@ -319,7 +327,7 @@ function PetugasLaporanContent() {
             <div className="flex-shrink-0 bg-white shadow-sm z-10 px-4 py-3">
               <div className="max-w-md mx-auto flex justify-between items-center">
                 <div>
-                  <h1 className="text-xl font-bold text-gray-900 leading-tight">Rincian Manifest</h1>
+                  <h1 className="text-xl font-bold text-gray-900 leading-tight">Detail Manifest</h1>
                   <p className="text-sm text-gray-600 mt-0.5">Jam {expandedJam} - {tanggalFormatHeader}</p>
                 </div>
                 <button onClick={() => setExpandedJam(null)} className="text-xs bg-red-50 text-red-600 hover:bg-red-100 px-3 py-1.5 rounded border border-red-200 font-bold">
@@ -331,11 +339,13 @@ function PetugasLaporanContent() {
             <div className="flex-shrink-0 bg-blue-50 p-4 border-b border-blue-200">
               <div className="max-w-md mx-auto text-[11px] grid grid-cols-[100px_10px_1fr] gap-y-1.5 text-gray-700">
                 <span>Tanggal</span><span>:</span><span>{tanggalFormatHeader}</span>
-                <span>Rute</span><span>:</span><span>{filterLokasi} - {filterLokasi === 'Tarakan' ? 'Tanjung Selor' : 'Tarakan'}</span>
+                <span>Rute</span><span>:</span><span>{rincianAktif?.rute || `${filterLokasi} - -`}</span>
                 <span>Kapal</span><span>:</span><span className="font-medium text-gray-900">{rincianAktif?.nama_kapal}</span>
-                <span>Kapten</span><span>:</span><span className="font-medium text-gray-900">{rincianAktif?.nama_kapten}</span>
-                <span>Total Penumpang</span><span>:</span><span className="font-bold">{rincianAktif?.total_terjual} Orang</span>
-                <span></span><span></span><span className="font-medium">Dewasa {totalDewasa} Orang | <span className="text-orange-600">Balita {totalBalita} Orang</span></span>
+                <span className="col-span-3 flex flex-wrap gap-x-6 gap-y-1">
+                  <span><span className="font-medium">Nama Kapten</span> : {rincianAktif?.nama_kapten || '-'}</span>
+                  <span><span className="font-medium">ABK</span> : {formatDaftarAbk(rincianAktif?.nama_abk)}</span>
+                </span>
+                <span className="col-span-3 font-bold">Total Penumpang : {rincianAktif?.total_terjual} Orang / Dewasa {totalDewasa} Orang + Balita {totalBalita} Orang</span>
               </div>
             </div>
 
@@ -346,7 +356,7 @@ function PetugasLaporanContent() {
                     <tr>
                       <th className="px-2 py-3 text-[10px] font-bold">No</th>
                       <th className="px-2 py-3 text-[10px] font-bold">Nama / Kursi</th>
-                      <th className="px-2 py-3 text-[10px] font-bold">Scan</th>
+                      <th className="px-2 py-3 text-[10px] font-bold">SCAN</th>
                     </tr>
                   </thead>
                   <tbody className="bg-white divide-y divide-gray-100">
@@ -398,14 +408,13 @@ function PetugasLaporanContent() {
                 </div>
                 <div className="mb-4 text-sm grid grid-cols-[150px_10px_1fr] gap-y-1">
                   <span>Tanggal</span><span>:</span><span>{tanggalFormatHeader}</span>
-                  <span>Rute</span><span>:</span><span>{filterLokasi} - {filterLokasi === 'Tarakan' ? 'Tanjung Selor' : 'Tarakan'}</span>
+                  <span>Rute</span><span>:</span><span>{rincianAktif.rute || `${filterLokasi} - -`}</span>
                   <span>Kapal</span><span>:</span><span>{rincianAktif.nama_kapal}</span>
-                  <span>Kapten</span><span>:</span><span>{rincianAktif.nama_kapten}</span>
-                  <span>Total Penumpang</span><span>:</span><span className="font-bold">{rincianAktif.total_terjual} Orang</span>
-                  
-                  {/* --- REVISI: Teks di print diubah jadi 'Orang' dan dipecah 2 baris --- */}
-                  <span></span><span></span><span className="font-bold">Dewasa {totalDewasa} Orang</span>
-                  <span></span><span></span><span className="font-bold text-orange-600">Balita {totalBalita} Orang</span>
+                  <span className="col-span-3 flex flex-wrap gap-x-8 gap-y-1">
+                    <span><span className="font-medium">Nama Kapten</span> : {rincianAktif.nama_kapten || '-'}</span>
+                    <span><span className="font-medium">ABK</span> : {formatDaftarAbk(rincianAktif.nama_abk)}</span>
+                  </span>
+                  <span className="col-span-3 font-bold">Total Penumpang : {rincianAktif.total_terjual} Orang / Dewasa {totalDewasa} Orang + Balita {totalBalita} Orang</span>
                 </div>
 
                 <table className="w-full text-sm border-collapse border border-gray-400">

@@ -203,7 +203,7 @@ export default function AdminPetugasPage() {
       noHpMurni = '62' + noHpMurni.slice(1)
     }
     
-    const pesan = `Halo ${p.nama}, ini pesan dari Admin. Berikut informasi akun Anda:\n\nNo HP: ${p.nomor_hp || noHpMurni}\nPassword: ${p.password_plain || '(belum di-set)'}\nRole: Operator Keberangkatan\nUnit: ${(p as any).unit || '-'}\nLokasi: ${(p as any).lokasi}\n\nSilakan login dan jangan bagikan password ini.`
+    const pesan = `Halo ${p.nama}, ini pesan dari Admin. Berikut informasi akun Anda:\n\nNo HP: ${p.nomor_hp || noHpMurni}\nPassword: ${p.password_plain || '(belum di-set)'}\nRole: Petugas Keberangkatan\nUnit: ${(p as any).unit || '-'}\nLokasi: ${(p as any).lokasi}\n\nSilakan login dan jangan bagikan password ini.`
     const url = `https://wa.me/${noHpMurni}?text=${encodeURIComponent(pesan)}`
     window.open(url, '_blank')
   }
@@ -228,7 +228,7 @@ export default function AdminPetugasPage() {
                 <span className="w-2 h-2 rounded-full bg-green-500"></span> Mode Pusat Kontrol
               </span>
             </h1>
-            <p className="text-sm text-gray-500 mt-1">Kelola akun operator keberangkatan (Scan & Manifest) untuk kapal Anda.</p>
+            <p className="text-sm text-gray-500 mt-1">Kelola akun petugas keberangkatan (Scan & Manifest) untuk kapal Anda.</p>
           </div>
           <div className="flex gap-3">
             <button onClick={() => setModalTambah(true)} className="bg-green-600 text-white px-4 py-2 rounded shadow hover:bg-green-700 text-sm font-medium">
@@ -277,7 +277,7 @@ export default function AdminPetugasPage() {
                           <td className="px-4 py-2 text-center font-bold">{idx + 1}</td>
                           <td className="px-4 py-2"><input type="text" value={editNama} onChange={(e) => setEditNama(e.target.value)} className="border rounded px-2 py-1 w-full text-gray-900" /></td>
                           <td className="px-4 py-2"><input type="text" value={editUnit} onChange={(e) => setEditUnit(e.target.value)} className="border rounded px-2 py-1 w-full text-gray-900" placeholder="Loket 1" /></td>
-                          <td className="px-4 py-2 text-gray-600 font-medium">Operator Keberangkatan</td>
+                          <td className="px-4 py-2 text-gray-600 font-medium">Petugas Keberangkatan</td>
                           <td className="px-4 py-2 space-y-1">
                              <input type="tel" value={editHp} onChange={(e) => setEditHp(e.target.value)} className="border rounded px-2 py-1 w-full text-gray-900" />
                              <input type="text" value={editPass} onChange={(e) => setEditPass(e.target.value)} className="border rounded px-2 py-1 w-full text-gray-900" />
@@ -304,7 +304,7 @@ export default function AdminPetugasPage() {
                         <td className="px-4 py-3 text-center font-bold text-gray-500">{idx + 1}</td>
                         <td className="px-4 py-3 font-medium text-gray-900">{p.nama}</td>
                         <td className="px-4 py-3 font-bold text-blue-700">{(p as any).unit || '-'}</td>
-                        <td className="px-4 py-3 text-gray-600">Operator Keberangkatan</td>
+                        <td className="px-4 py-3 text-gray-600">Petugas Keberangkatan</td>
                         <td className="px-4 py-3 text-gray-600">
                           {/* PERBAIKAN: Pake nomor_hp, bukan email */}
                           <div>{p.nomor_hp || '-'}</div>

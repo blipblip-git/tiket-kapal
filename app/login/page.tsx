@@ -64,7 +64,10 @@ function LoginContent() {
       await supabase.from('profiles').update({ sesi_aktif: true, updated_at: new Date().toISOString() }).eq('id', data.id);
 
       localStorage.setItem('petugas_session', JSON.stringify({
-        id: data.id, nama: data.nama, role: data.role, lokasi: data.lokasi, unit: data.unit, email: data.email, nomor_hp: data.nomor_hp
+        id: data.id, nama: data.nama, role: data.role, lokasi: data.lokasi, unit: data.unit,
+        email: data.email, nomor_hp: data.nomor_hp,
+        operator_id: data.operator_id || null,
+        nama_perusahaan: data.nama_perusahaan || null
       }))
 
       setPesan('Login berhasil, mengalihkan...');

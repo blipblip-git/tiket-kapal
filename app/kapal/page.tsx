@@ -2,7 +2,7 @@
 
 import { useEffect, useState, Suspense, useRef } from 'react'
 import { useRouter } from 'next/navigation'
-import { supabase, getProfile, getOperatorSession, type Profile } from '@/lib/supabase'
+import { supabase, getProfile, getOperatorSession, formatDaftarAbk, type Profile } from '@/lib/supabase'
 
 type Kapal = {
   id: string
@@ -13,6 +13,7 @@ type Kapal = {
   catatan: string | null
   foto_url: string | null
   nama_kapten: string | null
+  nama_abk: string[] | null
 }
 
 function KapalContent() {
@@ -28,6 +29,7 @@ function KapalContent() {
   const [kapasitas, setKapasitas] = useState('')
   const [layout, setLayout] = useState('tanpa_layout')
   const [namaKapten, setNamaKapten] = useState('')
+  const [daftarAbk, setDaftarAbk] = useState<string[]>([''])
   const [status, setStatus] = useState('aktif')
   const [catatan, setCatatan] = useState('')
   const [fotoFile, setFotoFile] = useState<File | null>(null)
@@ -74,6 +76,7 @@ function KapalContent() {
     setKapasitas('')
     setLayout('tanpa_layout')
     setNamaKapten('')
+    setDaftarAbk([''])
     setStatus('aktif')
     setCatatan('')
     setFotoFile(null)
@@ -88,6 +91,7 @@ function KapalContent() {
     setKapasitas(k.kapasitas.toString())
     setLayout(k.layout_kursi || 'tanpa_layout')
     setNamaKapten(k.nama_kapten || '')
+    setDaftarAbk(k.nama_abk && k.nama_abk.length > 0 ? k.nama_abk : [''])
     setStatus(k.status)
     setCatatan(k.catatan || '')
     setFotoLama(k.foto_url)
@@ -141,6 +145,7 @@ function KapalContent() {
         kapasitas: parseInt(kapasitas),
         layout_kursi: layout,
         nama_kapten: namaKapten || null,
+        nama_abk: daftarAbk.map((n) => n.trim()).filter((n) => n !== ''),
         status,
         catatan: catatan || null,
         foto_url: fotoUrl,
@@ -163,7 +168,12 @@ function KapalContent() {
       resetForm()
       fetchData(profile)
     } catch (err: any) {
-      setError(err.message || 'Terjadi kesalahan')
+      const pesan = err?.message || 'Terjadi kesalahan'
+      if (pesan.includes('nama_abk')) {
+        setError("Kolom ABK belum ada di database. Jalankan dulu di Supabase: alter table public.kapal add column if not exists nama_abk text[] default '{}';")
+      } else {
+        setError(pesan)
+      }
     } finally {
       setProses(false)
     }
@@ -214,6 +224,42 @@ function KapalContent() {
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Nama Kapten</label>
                   <input type="text" value={namaKapten} onChange={e => setNamaKapten(e.target.value)} className="w-full border rounded-md px-3 py-2 text-gray-900 focus:ring-blue-500 focus:border-blue-500" placeholder="Contoh: Budi" />
+                </div>
+                <div className="md:col-span-2">
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Nama ABK</label>
+                  <div className="space-y-2">
+                    {daftarAbk.map((namaAbkItem, idx) => (
+                      <div key={idx} className="flex gap-2">
+                        <input
+                          type="text"
+                          value={namaAbkItem}
+                          onChange={(e) => {
+                            const baru = [...daftarAbk]
+                            baru[idx] = e.target.value
+                            setDaftarAbk(baru)
+                          }}
+                          className="w-full border rounded-md px-3 py-2 text-gray-900 focus:ring-blue-500 focus:border-blue-500"
+                          placeholder={`Nama ABK ${idx + 1}`}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setDaftarAbk(daftarAbk.length === 1 ? [''] : daftarAbk.filter((_, i) => i !== idx))}
+                          className="px-3 py-2 bg-red-50 text-red-600 rounded-md text-sm font-medium hover:bg-red-100"
+                          title="Hapus ABK"
+                        >
+                          ✕
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setDaftarAbk([...daftarAbk, ''])}
+                    className="mt-2 text-sm bg-blue-50 text-blue-600 px-3 py-1.5 rounded-md font-medium hover:bg-blue-100"
+                  >
+                    + Tambah ABK
+                  </button>
+                  <p className="text-xs text-gray-500 mt-1">Satu kolom untuk satu orang ABK.</p>
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Layout Kursi</label>
@@ -269,6 +315,7 @@ function KapalContent() {
                 <div className="text-sm text-gray-600 flex flex-col md:flex-row gap-2 md:gap-6">
                   <p>Kapasitas: <span className="font-medium text-gray-900">{k.kapasitas} Kursi</span></p>
                   <p>Kapten: <span className="font-medium text-gray-900">{k.nama_kapten || '-'}</span></p>
+                  <p>ABK: <span className="font-medium text-gray-900">{formatDaftarAbk(k.nama_abk)}</span></p>
                   {k.catatan && <p className="italic text-xs self-end md:self-auto text-gray-400">"{k.catatan}"</p>}
                 </div>
               </div>

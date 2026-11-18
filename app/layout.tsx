@@ -17,13 +17,17 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "Tiket Kapal Kaltara",
   description: "Sistem Penjualan Tiket Kapal Kalimantan Utara",
+  other: {
+    google: "notranslate",
+  },
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html
-      lang="en"
-      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
+      lang="id"
+      translate="no"
+      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased notranslate`}
     >
       <body className="min-h-full flex flex-col">
         <Suspense fallback={null}>

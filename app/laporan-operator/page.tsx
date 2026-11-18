@@ -146,7 +146,7 @@ function LaporanOperatorContent() {
   )
   if (!profile) return null
 
-  let labelRole = profile.role === 'admin_utama' ? 'Admin Utama' : 'Operator Keberangkatan'
+  let labelRole = profile.role === 'admin_utama' ? 'Admin Utama' : 'Petugas Keberangkatan'
   const ruteLengkap = `${profile.lokasi} - ${profile.lokasi === 'Tarakan' ? 'Tanjung Selor' : 'Tarakan'}`
   const now = new Date()
   const hariIniStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`

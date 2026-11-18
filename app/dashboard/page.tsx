@@ -2,7 +2,8 @@
 
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { supabase, getProfile, getOperatorSession, type Profile } from '@/lib/supabase'
+import { supabase, getProfile, getOperatorSession, ambilNamaPerusahaan, type Profile } from '@/lib/supabase'
+import DashboardHeader from '@/components/DashboardHeader'
 
 type StatistikRute = {
   rute: string
@@ -14,6 +15,7 @@ type StatistikRute = {
 export default function DashboardAdminPage() {
   const router = useRouter()
   const [profile, setProfile] = useState<Profile | null>(null)
+  const [namaPerusahaan, setNamaPerusahaan] = useState('')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [statPerRute, setStatPerRute] = useState<StatistikRute[]>([])
@@ -63,6 +65,7 @@ export default function DashboardAdminPage() {
         return
       }
       setProfile(p)
+      setNamaPerusahaan(await ambilNamaPerusahaan(p))
 
       // Gunakan WITA (UTC+8) untuk tanggal hari ini
       const now = new Date()
@@ -138,22 +141,22 @@ export default function DashboardAdminPage() {
     <div className="h-[100dvh] w-full bg-gray-100 p-3 md:p-6 flex flex-col overflow-hidden">
       <div className="max-w-4xl w-full mx-auto flex flex-col h-full">
         
-        {/* HEADER */}
-        <div className="flex justify-between items-start mb-4 md:mb-6 flex-shrink-0">
-          <div>
-            <h1 className="text-xl md:text-2xl font-bold text-gray-900 leading-tight">{teks.judul_dashboard}</h1>
-            <h2 className="text-lg md:text-xl font-bold text-gray-700">{teks.sub_judul}</h2>
-            <p className="text-xs text-gray-500 mt-1">{profile.nama_perusahaan || profile.nama}</p>
-          </div>
-          <div className="flex gap-2 flex-shrink-0">
-            <button onClick={() => router.push('/ganti-password')} className="bg-gray-600 text-white px-2 py-1.5 md:px-4 md:py-2 rounded hover:bg-gray-700 text-[10px] md:text-sm font-medium">
-              {teks.tombol_ganti_password}
-            </button>
-            <button onClick={handleLogout} className="bg-red-600 text-white px-3 py-1.5 md:px-4 md:py-2 rounded hover:bg-red-700 text-[10px] md:text-sm font-medium">
-              {teks.tombol_logout}
-            </button>
-          </div>
-        </div>
+        {/* HEADER (Format Seragam: Nama Perusahaan / Judul / Nama) */}
+        <DashboardHeader
+          namaPerusahaan={namaPerusahaan || profile.nama_perusahaan || profile.nama}
+          judul={`${teks.judul_dashboard} ${teks.sub_judul}`}
+          subJudul={profile.nama}
+          aksi={
+            <>
+              <button onClick={() => router.push('/ganti-password')} className="bg-gray-600 text-white px-2 py-1.5 md:px-4 md:py-2 rounded hover:bg-gray-700 text-[10px] md:text-sm font-medium">
+                {teks.tombol_ganti_password}
+              </button>
+              <button onClick={handleLogout} className="bg-red-600 text-white px-3 py-1.5 md:px-4 md:py-2 rounded hover:bg-red-700 text-[10px] md:text-sm font-medium">
+                {teks.tombol_logout}
+              </button>
+            </>
+          }
+        />
 
         {/* KARTU PENJUALAN PER RUTE */}
         <div className="bg-white rounded-xl shadow-md p-4 md:p-6 mb-4 md:mb-6 flex-shrink-0 border border-gray-200">
