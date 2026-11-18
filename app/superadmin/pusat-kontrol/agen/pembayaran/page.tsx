@@ -3,7 +3,6 @@
 import { useEffect, useState, Suspense } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
 import { supabase, getProfile, getOperatorSession, type Profile } from '@/lib/supabase'
-import { cetakTiketThermal } from '@/lib/thermalPrinter'
 
 type Pesanan = {
   id: string
@@ -39,7 +38,7 @@ function PembayaranSuperadminContent() {
 
   useEffect(() => {
     if (pesananIds.length === 0) {
-      router.push('/superadmin/pusat-kontrol/agen/jual-tiket')
+      router.push('/superadmin/pusat-kontrol/agen/loket-jual')
       return
     }
 

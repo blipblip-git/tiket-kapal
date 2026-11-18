@@ -75,7 +75,7 @@ function LaporanOperatorContent() {
       }
 
       let queryPesanan = supabase.from('pesanan').select(`
-          id, nama_penumpang, kode_tiket, kanal, status, status_boarding, waktu_boarding,
+          id, nama_penumpang, kode_tiket, kanal, status, status_boarding, waktu_boarding, is_balita,
           jadwal:jadwal_id (rute_asal, rute_tujuan, harga, tanggal, jam_berangkat, status_jadwal, kapal_id, operator_id),
           kursi:kursi_id (nomor_kursi)
         `).eq('status', 'paid').eq('jadwal.tanggal', tanggal)
@@ -112,6 +112,8 @@ function LaporanOperatorContent() {
       })
 
       filtered.forEach((item: any) => {
+        // Balita gratis: tidak menambah tiket terjual / pendapatan
+        if (item.is_balita) return
         const jam = item.jadwal.jam_berangkat.substring(0, 5)
         if (!groupedByJam[jam]) groupedByJam[jam] = { jam, total_terjual: 0, total_pendapatan: 0, rincian: [], nama_kapal: '-', nama_kapten: '-', status_jadwal: 'open' }
         

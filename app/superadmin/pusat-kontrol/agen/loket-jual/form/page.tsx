@@ -12,8 +12,7 @@ type Kursi = {
 
 type Penumpang = {
   nama: string
-  is_balita: boolean
-  nama_balita: string
+  balita: string[]
 }
 
 const toTitleCase = (str: string) => {
@@ -74,7 +73,7 @@ function FormAgenSuperadminContent() {
         if (!kData || kData.length === 0) throw new Error('Kursi tidak ditemukan.')
 
         setJadwal(jData)
-        setPenumpangList(kData.map(() => ({ nama: '', is_balita: false, nama_balita: '' })))
+        setPenumpangList(kData.map(() => ({ nama: '', balita: [] as string[] })))
         setKursiList(kData)
       } catch (err: any) {
         setError(err.message)
@@ -94,12 +93,30 @@ function FormAgenSuperadminContent() {
 
   const toggleBalita = (idx: number) => {
     const baru = [...penumpangList]
-    const currentStatus = baru[idx].is_balita
     baru[idx] = {
       ...baru[idx],
-      is_balita: !currentStatus,
-      nama_balita: !currentStatus ? baru[idx].nama_balita : ''
+      balita: baru[idx].balita.length > 0 ? [] : ['']
     }
+    setPenumpangList(baru)
+  }
+
+  const tambahBalita = (idx: number) => {
+    const baru = [...penumpangList]
+    baru[idx] = { ...baru[idx], balita: [...baru[idx].balita, ''] }
+    setPenumpangList(baru)
+  }
+
+  const updateBalita = (idx: number, balitaIdx: number, value: string) => {
+    const baru = [...penumpangList]
+    const listBaru = [...baru[idx].balita]
+    listBaru[balitaIdx] = value
+    baru[idx] = { ...baru[idx], balita: listBaru }
+    setPenumpangList(baru)
+  }
+
+  const hapusBalita = (idx: number, balitaIdx: number) => {
+    const baru = [...penumpangList]
+    baru[idx] = { ...baru[idx], balita: baru[idx].balita.filter((_, i) => i !== balitaIdx) }
     setPenumpangList(baru)
   }
 
@@ -117,8 +134,10 @@ function FormAgenSuperadminContent() {
         setError(`Nama penumpang #${i + 1} wajib diisi.`)
         return
       }
-      if (penumpangList[i].is_balita && !penumpangList[i].nama_balita) {
-        setError(`Nama balita untuk penumpang #${i + 1} wajib diisi.`)
+      const balitaKosong = penumpangList[i].balita.findIndex((n) => !n.trim())
+      if (balitaKosong !== -1) {
+        const labelBalita = penumpangList[i].balita.length > 1 ? ` ${balitaKosong + 1}` : ''
+        setError(`Nama balita${labelBalita} untuk penumpang #${i + 1} wajib diisi.`)
         return
       }
     }
@@ -139,8 +158,11 @@ function FormAgenSuperadminContent() {
         const kursiId = kursiList[idx]?.id
         if (!kursiId) throw new Error(`Kursi untuk penumpang #${idx + 1} tidak ditemukan.`)
 
+        const indukId = crypto.randomUUID()
+
         // DEWASA
         pesananPayload.push({
+          id: indukId,
           jadwal_id: jadwalId,
           kursi_id: kursiId,
           nama_penumpang: toTitleCase(p.nama),
@@ -153,27 +175,32 @@ function FormAgenSuperadminContent() {
           waktu_pesan: waktuSekarang,
           waktu_expired: waktuExpired,
           is_balita: false,
+          induk_id: null,
           petugas_jual: identitasPenjual,
         })
 
         // BALITA
-        if (p.is_balita && p.nama_balita) {
+        p.balita.forEach((namaBalita, bIdx) => {
+          const namaRapiBalita = toTitleCase(namaBalita.trim())
+          if (!namaRapiBalita) return
+
           pesananPayload.push({
             jadwal_id: jadwalId,
             kursi_id: null,
-            nama_penumpang: toTitleCase(p.nama_balita),
+            nama_penumpang: namaRapiBalita,
             nik: null,
             nomor_hp: noHp,
             kanal: 'agen',
             status: 'pending',
-            kode_tiket: 'BALITA-' + Math.random().toString(36).substring(2, 8).toUpperCase(),
+            kode_tiket: 'BALITA-' + Math.random().toString(36).substring(2, 8).toUpperCase() + '-B' + bIdx,
             grup_transaksi_id: grupTransaksiId,
             waktu_pesan: waktuSekarang,
             waktu_expired: waktuExpired,
             is_balita: true,
+            induk_id: indukId,
             petugas_jual: identitasPenjual,
           })
-        }
+        })
       })
 
       const { data: insertedPesanan, error: errPesanan } = await supabase
@@ -251,32 +278,52 @@ function FormAgenSuperadminContent() {
                     <button
                       type="button"
                       onClick={() => toggleBalita(idx)}
-                      className={`mt-1 flex items-start gap-2 w-full text-left p-1.5 rounded transition-colors ${p.is_balita ? 'bg-orange-50' : 'hover:bg-gray-50'}`}
+                      className={`mt-1 flex items-start gap-2 w-full text-left p-1.5 rounded transition-colors ${p.balita.length > 0 ? 'bg-orange-50' : 'hover:bg-gray-50'}`}
                     >
-                      <div className={`w-4 h-4 mt-0.5 rounded border flex items-center justify-center flex-shrink-0 ${p.is_balita ? 'bg-orange-600 border-orange-600' : 'bg-white border-gray-300'}`}>
-                        {p.is_balita && (
+                      <div className={`w-4 h-4 mt-0.5 rounded border flex items-center justify-center flex-shrink-0 ${p.balita.length > 0 ? 'bg-orange-600 border-orange-600' : 'bg-white border-gray-300'}`}>
+                        {p.balita.length > 0 && (
                           <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
                           </svg>
                         )}
                       </div>
                       <div className="flex flex-col">
-                        <span className="text-xs font-bold text-orange-900 leading-tight">Apakah ada balita ?</span>
+                        <span className="text-xs font-bold text-orange-900 leading-tight">
+                          {p.balita.length > 0 ? `Balita: ${p.balita.length} anak` : 'Apakah ada balita ?'}
+                        </span>
                         <span className="text-[10px] text-orange-800 leading-tight">(Free dibawah 4 th dipangku)</span>
                       </div>
                     </button>
                   </div>
                 </div>
 
-                {p.is_balita && (
-                  <div className="bg-orange-50 p-3 rounded-md border border-orange-200 mt-2">
-                    <input
-                      type="text"
-                      className="block w-full px-3 py-2 border border-orange-300 rounded-md shadow-sm text-gray-900 focus:ring-orange-500 focus:border-orange-500 text-sm"
-                      value={p.nama_balita}
-                      onChange={(e) => updatePenumpang(idx, 'nama_balita', e.target.value)}
-                      placeholder="Nama Balita"
-                    />
+                {p.balita.length > 0 && (
+                  <div className="bg-orange-50 p-3 rounded-md border border-orange-200 mt-2 space-y-2">
+                    {p.balita.map((namaBalita, bIdx) => (
+                      <div key={bIdx} className="flex items-center gap-2">
+                        <input
+                          type="text"
+                          className="block w-full px-3 py-2 border border-orange-300 rounded-md shadow-sm text-gray-900 focus:ring-orange-500 focus:border-orange-500 text-sm"
+                          value={namaBalita}
+                          onChange={(e) => updateBalita(idx, bIdx, e.target.value)}
+                          placeholder={p.balita.length > 1 ? `Nama Balita ${bIdx + 1}` : 'Nama Balita'}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => hapusBalita(idx, bIdx)}
+                          className="text-xs font-bold text-red-600 border border-red-200 bg-white hover:bg-red-50 px-2 py-2 rounded-md flex-shrink-0"
+                        >
+                          Hapus
+                        </button>
+                      </div>
+                    ))}
+                    <button
+                      type="button"
+                      onClick={() => tambahBalita(idx)}
+                      className="text-xs font-bold text-orange-700 hover:underline"
+                    >
+                      + Tambah Balita
+                    </button>
                   </div>
                 )}
               </div>

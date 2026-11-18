@@ -107,7 +107,8 @@ function PusatLaporanContent() {
     
     jamSet.forEach(jam => {
       const itemPertama = filtered.find((item: any) => item.jadwal.jam_berangkat.substring(0, 5) === jam)
-      const dataKapal = itemPertama ? kapalMap.get(itemPertama.jadwal.kapal_id) : null
+      const jadwalPertama = itemPertama ? (Array.isArray(itemPertama.jadwal) ? itemPertama.jadwal[0] : itemPertama.jadwal) : null
+      const dataKapal = jadwalPertama ? kapalMap.get(jadwalPertama.kapal_id) : null
       
       groupedByJam[jam] = { 
         jam, total_terjual: 0, total_pendapatan: 0, rincian: [], 
@@ -122,8 +123,13 @@ function PusatLaporanContent() {
       if (!groupedByJam[jam]) groupedByJam[jam] = { jam, total_terjual: 0, total_pendapatan: 0, rincian: [], nama_kapal: '-', nama_kapten: '-', status_jadwal: 'open' }
       
       const group = groupedByJam[jam]
-      group.total_terjual += 1
-      group.total_pendapatan += item.jadwal.harga || 0
+      const isBalita = item.is_balita || false
+
+      // Balita tetap masuk rincian manifest, tapi tidak dihitung sebagai tiket berbayar
+      if (!isBalita) {
+        group.total_terjual += 1
+        group.total_pendapatan += item.jadwal.harga || 0
+      }
       
       group.rincian.push({
         id: item.id, 
@@ -131,13 +137,13 @@ function PusatLaporanContent() {
         kursi: item.kursi?.nomor_kursi || '-', 
         kanal: item.kanal || 'loket', 
         kode_tiket: item.kode_tiket, 
-        harga: item.jadwal.harga || 0, 
+        harga: isBalita ? 0 : (item.jadwal.harga || 0), 
         status_boarding: item.status_boarding || 'belum', 
         waktu_boarding: item.waktu_boarding || null, 
         nama_kapal: group.nama_kapal, 
         nama_kapten: group.nama_kapten, 
         rute: `${item.jadwal.rute_asal} - ${item.jadwal.rute_tujuan}`, 
-        is_balita: item.is_balita || false,
+        is_balita: isBalita,
         grup_transaksi_id: item.grup_transaksi_id || null
       })
     })
@@ -419,7 +425,7 @@ function PusatLaporanContent() {
                     <span>Rute</span><span>:</span><span>{ruteLengkap}</span>
                     <span>Kapal</span><span>:</span><span className="font-medium text-gray-900">{rincianAktif?.nama_kapal}</span>
                     <span>Kapten</span><span>:</span><span className="font-medium text-gray-900">{rincianAktif?.nama_kapten}</span>
-                    <span>Total Penumpang</span><span>:</span><span className="font-bold">{rincianAktif?.total_terjual} Orang</span>
+                    <span>Total Tiket</span><span>:</span><span className="font-bold">{rincianAktif?.total_terjual} Orang</span>
                     <span></span><span></span><span className="font-medium">Dewasa {totalDewasa} org | <span className="text-orange-600">Balita {totalBalita} org</span></span>
                   </div>
                 </div>
@@ -490,7 +496,7 @@ function PusatLaporanContent() {
                   <span>Rute</span><span>:</span><span>{ruteLengkap}</span>
                   <span>Kapal</span><span>:</span><span>{rincianAktif.nama_kapal}</span>
                   <span>Kapten</span><span>:</span><span>{rincianAktif.nama_kapten}</span>
-                  <span>Total Penumpang</span><span>:</span><span className="font-bold">{rincianAktif.total_terjual} Orang</span>
+                  <span>Total Tiket</span><span>:</span><span className="font-bold">{rincianAktif.total_terjual} Orang</span>
                   <span></span><span></span><span>Dewasa {totalDewasa} org | Balita {totalBalita} org</span>
                 </div>
 

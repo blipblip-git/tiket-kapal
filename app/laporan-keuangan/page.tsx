@@ -53,7 +53,7 @@ function LaporanKeuanganContent() {
       let query = supabase
         .from('pesanan')
         .select(`
-          id, nama_penumpang, kode_tiket, kanal, status_boarding,
+          id, nama_penumpang, kode_tiket, kanal, status_boarding, is_balita,
           jadwal:jadwal_id (rute_asal, rute_tujuan, jam_berangkat, harga, tanggal, status_jadwal, operator_id, kapal:kapal_id(nama)),
           kursi:kursi_id (nomor_kursi)
         `)
@@ -126,6 +126,8 @@ function LaporanKeuanganContent() {
   data.forEach((item: any) => {
     if (filterKanal !== 'semua' && item.kanal !== filterKanal) return
     if (!item.jadwal || !item.jadwal.jam_berangkat) return
+    // Balita gratis: tidak dihitung sebagai penumpang berbayar / pendapatan
+    if (item.is_balita) return
 
     const jam = item.jadwal.jam_berangkat.substring(0, 5)
     if (!grouped[jam]) {

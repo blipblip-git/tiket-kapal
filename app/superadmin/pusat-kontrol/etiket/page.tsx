@@ -21,6 +21,7 @@ type Pesanan = {
   petugas_jual: string | null
   metode_bayar?: string
   is_balita: boolean
+  induk_id?: string | null
 }
 
 type Detail = {
@@ -39,6 +40,7 @@ type TiketLengkap = {
   }
   nomor_kursi: string
   qrUrl: string
+  nama_balita: string[]
 }
 
 function EtiketSuperadminContent() {
@@ -113,16 +115,33 @@ function EtiketSuperadminContent() {
         return
       }
 
+      const adultIds = (p as Pesanan[]).filter((x) => !x.is_balita).map((x) => x.id)
+      let balitaTambahan: Pesanan[] = []
+      if (adultIds.length > 0) {
+        const { data: b } = await supabase
+          .from('pesanan')
+          .select('*')
+          .in('induk_id', adultIds)
+        balitaTambahan = (b || []) as Pesanan[]
+      }
+
+      const petaPesanan = new Map<string, Pesanan>()
+      ;[...(p as Pesanan[]), ...balitaTambahan].forEach((x) => petaPesanan.set(x.id, x))
+
       const sorted = pesananIds
-        .map((id) => p.find((x) => x.id === id))
+        .map((id) => petaPesanan.get(id))
         .filter((x): x is Pesanan => !!x)
 
+      // Balita dengan induk_id menempel di tiket dewasa.
+      // Baris BALITA- lama (tanpa induk_id) tetap dicetak sebagai tiket sendiri.
+      const barisTiket = sorted.filter((x) => !x.is_balita || !x.induk_id)
+
       let detailJadwal: Detail | null = null
-      if (sorted[0]) {
+      if (barisTiket[0]) {
         const { data: j } = await supabase
           .from('jadwal')
           .select('rute_asal, rute_tujuan, tanggal, jam_berangkat, harga, kapal_id')
-          .eq('id', sorted[0].jadwal_id)
+          .eq('id', barisTiket[0].jadwal_id)
           .maybeSingle()
 
         if (j) {
@@ -154,7 +173,7 @@ function EtiketSuperadminContent() {
       allKota?.forEach(k => kotaMap.set(k.nama_kota, k.singkatan))
 
       const tiketLengkap: TiketLengkap[] = []
-      for (const psn of sorted) {
+      for (const psn of barisTiket) {
         let nomorKursi = '-'
         if (psn.kursi_id) {
           const { data: k } = await supabase
@@ -215,6 +234,10 @@ function EtiketSuperadminContent() {
           margin: 1,
         })
 
+        const namaBalita = sorted
+          .filter((x) => x.is_balita && x.induk_id === psn.id)
+          .map((x) => x.nama_penumpang)
+
         tiketLengkap.push({
           pesanan: { 
             ...psn, 
@@ -224,6 +247,7 @@ function EtiketSuperadminContent() {
           },
           nomor_kursi: nomorKursi,
           qrUrl: qrDataUrl,
+          nama_balita: namaBalita,
         })
       }
 
@@ -380,6 +404,7 @@ function EtiketSuperadminContent() {
       tanggal: detail?.tanggal || '-',
       harga: t.pesanan.is_balita ? 0 : (detail?.harga || 0),
       kursi: t.nomor_kursi,
+      nama_balita: t.nama_balita,
       teks_loket: t.pesanan.teks_loket_print 
     })
     setPesanShare(result.message)
@@ -449,6 +474,12 @@ function EtiketSuperadminContent() {
               {tiket.pesanan.is_balita && <span className="text-[9px] text-orange-600 ml-1">(Balita)</span>}
             </span>
           </div>
+          {tiket.nama_balita.length > 0 && (
+            <div className="flex justify-between">
+              <span className="text-gray-500">Nama Balita</span>
+              <span className="font-medium text-gray-900 text-right">{tiket.nama_balita.join(', ')}</span>
+            </div>
+          )}
           <div className="flex justify-between">
             <span className="text-gray-500">Kapal</span>
             <span className="font-medium text-gray-900 text-right">{detail?.nama_kapal}</span>

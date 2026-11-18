@@ -2,15 +2,10 @@
 
 import { useEffect, useState, Suspense } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
-import { supabase, getOperatorSession, catatAudit } from '@/lib/supabase'
+import { supabase, getOperatorSession, catatAudit, type Profile } from '@/lib/supabase'
 import KtpScanner from '@/components/KtpScanner'
 
-type ProfileAgen = {
-  id: string
-  nama: string
-  role: string
-  lokasi: string
-  email: string
+type ProfileAgen = Profile & {
   nomor_hp?: string
 }
 
@@ -35,8 +30,7 @@ type JadwalInfo = {
 
 type Penumpang = {
   nama: string
-  is_balita: boolean
-  nama_balita: string
+  balita: string[]
 }
 
 const toTitleCase = (str: string) => {
@@ -166,7 +160,7 @@ function LoketJualAgenContent() {
       alert('Pilih minimal 1 kursi dulu bray.')
       return
     }
-    setPenumpangList(kursiDipilih.map(() => ({ nama: '', is_balita: false, nama_balita: '' })))
+    setPenumpangList(kursiDipilih.map(() => ({ nama: '', balita: [] as string[] })))
     setStep('form')
   }
 
@@ -185,12 +179,30 @@ function LoketJualAgenContent() {
 
   const toggleBalita = (idx: number) => {
     const baru = [...penumpangList]
-    const currentStatus = baru[idx].is_balita
     baru[idx] = {
       ...baru[idx],
-      is_balita: !currentStatus,
-      nama_balita: !currentStatus ? baru[idx].nama_balita : ''
+      balita: baru[idx].balita.length > 0 ? [] : ['']
     }
+    setPenumpangList(baru)
+  }
+
+  const tambahBalita = (idx: number) => {
+    const baru = [...penumpangList]
+    baru[idx] = { ...baru[idx], balita: [...baru[idx].balita, ''] }
+    setPenumpangList(baru)
+  }
+
+  const updateBalita = (idx: number, balitaIdx: number, value: string) => {
+    const baru = [...penumpangList]
+    const listBaru = [...baru[idx].balita]
+    listBaru[balitaIdx] = value
+    baru[idx] = { ...baru[idx], balita: listBaru }
+    setPenumpangList(baru)
+  }
+
+  const hapusBalita = (idx: number, balitaIdx: number) => {
+    const baru = [...penumpangList]
+    baru[idx] = { ...baru[idx], balita: baru[idx].balita.filter((_, i) => i !== balitaIdx) }
     setPenumpangList(baru)
   }
 
@@ -214,7 +226,7 @@ function LoketJualAgenContent() {
     return prefix + Date.now() + '-A' + idx + '-' + Math.floor(Math.random() * 1000)
   }
 
-  function generateGrupId() {
+  function generateUuid() {
     if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) {
       return crypto.randomUUID()
     }
@@ -240,8 +252,10 @@ function LoketJualAgenContent() {
         setError(`Nama penumpang ${i + 1} wajib diisi`)
         return
       }
-      if (penumpangList[i].is_balita && !penumpangList[i].nama_balita) {
-        setError(`Nama balita untuk penumpang ${i + 1} wajib diisi.`)
+      const balitaKosong = penumpangList[i].balita.findIndex((n) => !n.trim())
+      if (balitaKosong !== -1) {
+        const labelBalita = penumpangList[i].balita.length > 1 ? ` ${balitaKosong + 1}` : ''
+        setError(`Nama balita${labelBalita} untuk penumpang ${i + 1} wajib diisi.`)
         return
       }
     }
@@ -264,7 +278,7 @@ function LoketJualAgenContent() {
       const sekarang = new Date()
       const waktuKonfirmasi = sekarang.toISOString()
       const jamTransaksi = getJamTransaksi(sekarang)
-      const grupId = generateGrupId()
+      const grupId = generateUuid()
       
       const metodePembayaran = metodeBayar === 'cash' ? 'cash_loket' : 'simulasi_online'
       const identitasPenjual = profile.nomor_hp || profile.email
@@ -272,8 +286,11 @@ function LoketJualAgenContent() {
       const pesananData: any[] = []
 
       penumpangList.forEach((p, idx) => {
+        const indukId = generateUuid()
         const namaRapi = toTitleCase(p.nama);
+
         pesananData.push({
+          id: indukId,
           jadwal_id: jadwal.id,
           kursi_id: kursiDipilih[idx],
           nama_penumpang: namaRapi,
@@ -288,17 +305,21 @@ function LoketJualAgenContent() {
           jam_transaksi: jamTransaksi,
           petugas_jual: identitasPenjual,
           is_balita: false,
+          induk_id: null,
         })
 
-        if (p.is_balita && p.nama_balita) {
+        p.balita.forEach((namaBalita, bIdx) => {
+          const namaRapiBalita = toTitleCase(namaBalita.trim())
+          if (!namaRapiBalita) return
+
           pesananData.push({
             jadwal_id: jadwal.id,
             kursi_id: null,
-            nama_penumpang: toTitleCase(p.nama_balita),
+            nama_penumpang: namaRapiBalita,
             nomor_hp: noHp,
             kanal: 'agen', 
             status: 'paid',
-            kode_tiket: 'BALITA-' + Date.now() + '-A' + idx,
+            kode_tiket: 'BALITA-' + Date.now() + '-A' + idx + '-B' + bIdx,
             waktu_bayar: waktuKonfirmasi,
             petugas_konfirmasi: identitasPenjual,
             waktu_konfirmasi: waktuKonfirmasi,
@@ -306,8 +327,9 @@ function LoketJualAgenContent() {
             jam_transaksi: jamTransaksi,
             petugas_jual: identitasPenjual,
             is_balita: true,
+            induk_id: indukId,
           })
-        }
+        })
       })
 
       const { data: inserted, error: errInsert } = await supabase
@@ -553,32 +575,52 @@ function LoketJualAgenContent() {
                         <button
                           type="button"
                           onClick={() => toggleBalita(idx)}
-                          className={`mt-1 flex items-start gap-2 w-full text-left p-1.5 rounded transition-colors ${p.is_balita ? 'bg-orange-50' : 'hover:bg-gray-50'}`}
+                          className={`mt-1 flex items-start gap-2 w-full text-left p-1.5 rounded transition-colors ${p.balita.length > 0 ? 'bg-orange-50' : 'hover:bg-gray-50'}`}
                         >
-                          <div className={`w-4 h-4 mt-0.5 rounded border flex items-center justify-center flex-shrink-0 ${p.is_balita ? 'bg-orange-600 border-orange-600' : 'bg-white border-gray-300'}`}>
-                            {p.is_balita && (
+                          <div className={`w-4 h-4 mt-0.5 rounded border flex items-center justify-center flex-shrink-0 ${p.balita.length > 0 ? 'bg-orange-600 border-orange-600' : 'bg-white border-gray-300'}`}>
+                            {p.balita.length > 0 && (
                               <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
                               </svg>
                             )}
                           </div>
                           <div className="flex flex-col">
-                            <span className="text-xs font-bold text-orange-900 leading-tight">Apakah ada balita ?</span>
+                            <span className="text-xs font-bold text-orange-900 leading-tight">
+                              {p.balita.length > 0 ? `Balita: ${p.balita.length} anak` : 'Apakah ada balita ?'}
+                            </span>
                             <span className="text-[10px] text-orange-800 leading-tight">(Free dibawah 4 th dipangku)</span>
                           </div>
                         </button>
                       </div>
                     </div>
 
-                    {p.is_balita && (
-                      <div className="bg-orange-50 p-3 rounded-md border border-orange-200 mt-2">
-                        <input
-                          type="text"
-                          className="block w-full px-3 py-2 border border-orange-300 rounded-md shadow-sm text-gray-900 focus:ring-orange-500 focus:border-orange-500 text-sm"
-                          value={p.nama_balita}
-                          onChange={(e) => updatePenumpang(idx, 'nama_balita', e.target.value)}
-                          placeholder="Nama Balita"
-                        />
+                    {p.balita.length > 0 && (
+                      <div className="bg-orange-50 p-3 rounded-md border border-orange-200 mt-2 space-y-2">
+                        {p.balita.map((namaBalita, bIdx) => (
+                          <div key={bIdx} className="flex items-center gap-2">
+                            <input
+                              type="text"
+                              className="block w-full px-3 py-2 border border-orange-300 rounded-md shadow-sm text-gray-900 focus:ring-orange-500 focus:border-orange-500 text-sm"
+                              value={namaBalita}
+                              onChange={(e) => updateBalita(idx, bIdx, e.target.value)}
+                              placeholder={p.balita.length > 1 ? `Nama Balita ${bIdx + 1}` : 'Nama Balita'}
+                            />
+                            <button
+                              type="button"
+                              onClick={() => hapusBalita(idx, bIdx)}
+                              className="text-xs font-bold text-red-600 border border-red-200 bg-white hover:bg-red-50 px-2 py-2 rounded-md flex-shrink-0"
+                            >
+                              Hapus
+                            </button>
+                          </div>
+                        ))}
+                        <button
+                          type="button"
+                          onClick={() => tambahBalita(idx)}
+                          className="text-xs font-bold text-orange-700 hover:underline"
+                        >
+                          + Tambah Balita
+                        </button>
                       </div>
                     )}
                   </div>

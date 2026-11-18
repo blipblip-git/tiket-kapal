@@ -75,7 +75,7 @@ function JualTiketAgenContent() {
   }, [router, isPreview])
 
   useEffect(() => {
-    if (tanggal && profile) {
+    if (tanggal && profile?.lokasi) {
       loadJadwal(tanggal, profile.lokasi)
     }
   }, [tanggal, profile])
@@ -123,7 +123,7 @@ function JualTiketAgenContent() {
       if (newJadwalPayload.length > 0) {
         const { data: insertedJadwal, error: insertError } = await supabase
           .from('jadwal')
-          .insert(newJadwalPayload, { ignoreDuplicates: true })
+          .insert(newJadwalPayload)
           .select('id, rute_asal, rute_tujuan, jam_berangkat, harga, kapal_id, status_jadwal')
 
         if (!insertError && insertedJadwal) {

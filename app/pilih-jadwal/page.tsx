@@ -91,7 +91,7 @@ function PilihJadwalContent() {
           if (newJadwalPayload.length > 0) {
             await supabase
               .from('jadwal')
-              .insert(newJadwalPayload, { ignoreDuplicates: true })
+              .insert(newJadwalPayload)
 
             // 3b. WAJIB QUERY ULANG SETELAH INSERT
             const { data: refreshedJadwal } = await queryJadwal

@@ -23,7 +23,19 @@ export type Profile = {
   created_at: string
   lokasi?: string
   unit?: string
+  nomor_hp?: string
+  nama_perusahaan?: string
   sesi_aktif?: string | null
+}
+
+// ==================== TIPE AUDIT LOG ====================
+export type AuditLog = {
+  id: string
+  petugas_id: string | null
+  petugas_email: string
+  aksi: string
+  detail: any
+  waktu: string
 }
 
 // ==================== GET PROFILE (KHUSUS ADMIN) ====================

@@ -20,6 +20,7 @@ type HasilPencarian = {
   jam: string
   harga: number
   is_balita: boolean
+  nama_balita?: string[]
   teks_loket_layar: string
   teks_loket_print: string
 }
@@ -74,6 +75,7 @@ function CetakUlangSuperadminContent() {
       `)
       .or(`nama_penumpang.ilike.%${keyword}%,kode_tiket.eq.${keyword}`)
       .eq('status', 'paid')
+      .is('induk_id', null) // balita yang menempel di tiket dewasa tidak dicetak ulang sendiri
 
     // FILTER OPERATOR: Kalau bukan Superadmin murni, atau ada operatorId di URL, filter!
     if (operatorId) {
@@ -174,6 +176,18 @@ function CetakUlangSuperadminContent() {
     setQrUrl('') 
     const qr = await QRCode.toDataURL(tiket.kode_tiket, { width: 300, margin: 2 })
     setQrUrl(qr)
+
+    // Balita yang menempel di tiket dewasa (induk_id)
+    if (!tiket.is_balita) {
+      const { data: balitaData } = await supabase
+        .from('pesanan')
+        .select('nama_penumpang')
+        .eq('induk_id', tiket.id)
+      const namaBalita = (balitaData || []).map((b: any) => b.nama_penumpang)
+      if (namaBalita.length > 0) {
+        setDetailPilih({ ...tiket, nama_balita: namaBalita })
+      }
+    }
   }
 
   async function handleSimpan() {
@@ -207,6 +221,7 @@ function CetakUlangSuperadminContent() {
       tanggal: detailPilih.tanggal,
       harga: detailPilih.is_balita ? 0 : detailPilih.harga,
       kursi: detailPilih.kursi,
+      nama_balita: detailPilih.nama_balita || [],
       teks_loket: detailPilih.teks_loket_print,
     })
     setPesan(result.message)
@@ -349,6 +364,12 @@ function CetakUlangSuperadminContent() {
                       {detailPilih.is_balita && <span className="text-[9px] text-orange-600 ml-1">(Balita)</span>}
                     </span>
                   </div>
+                  {detailPilih.nama_balita && detailPilih.nama_balita.length > 0 && (
+                    <div className="flex justify-between">
+                      <span className="text-gray-500">Nama Balita</span>
+                      <span className="font-medium text-gray-900 text-right">{detailPilih.nama_balita.join(', ')}</span>
+                    </div>
+                  )}
                   <div className="flex justify-between">
                     <span className="text-gray-500">Kapal</span>
                     <span className="font-medium text-gray-900 text-right">{detailPilih.kapal}</span>

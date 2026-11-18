@@ -910,7 +910,7 @@ function LaporanContent() {
             <span>Rute</span><span>:</span><span>{ruteLengkap}</span>
             <span>Kapal</span><span>:</span><span>{laporan.find(l => l.jam === selectedJam)?.nama_kapal || '-'}</span>
             <span>Kapten</span><span>:</span><span>{laporan.find(l => l.jam === selectedJam)?.rincian[0]?.nama_kapten || '-'}</span>
-            <span>Jumlah Penumpang</span><span>:</span><span>{laporan.find(l => l.jam === selectedJam)?.total_dewasa + (laporan.find(l => l.jam === selectedJam)?.total_balita || 0)} Orang</span>
+            <span>Jumlah Penumpang</span><span>:</span><span>{((laporan.find(l => l.jam === selectedJam)?.total_dewasa || 0) + (laporan.find(l => l.jam === selectedJam)?.total_balita || 0))} Orang</span>
           </div>
           <table className="w-full text-sm border-collapse border border-gray-400">
             <thead>

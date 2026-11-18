@@ -210,7 +210,7 @@ function LoketJualSuperadminContent() {
               <h1 className="text-lg md:text-2xl font-bold text-gray-900">Jual Tiket</h1>
               <p className="text-xs md:text-sm text-gray-600">Mode Superadmin</p>
             </div>
-            <button onClick={() => router.push('/superadmin/pusat-kontrol/agen/jual-tiket')} className="text-xs text-blue-600 hover:underline bg-gray-50 px-2 py-1.5 rounded border border-gray-200 mt-1">
+            <button onClick={() => router.push('/superadmin/pusat-kontrol')} className="text-xs text-blue-600 hover:underline bg-gray-50 px-2 py-1.5 rounded border border-gray-200 mt-1">
               &larr; Kembali
             </button>
           </div>

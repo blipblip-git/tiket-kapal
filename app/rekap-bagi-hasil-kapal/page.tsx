@@ -86,7 +86,7 @@ function RekapBagiHasilKapalContent() {
 
     const { data: pesananData, error: errPesanan } = await supabase
       .from('pesanan')
-      .select('id, jadwal:jadwal_id(tanggal, operator_id)')
+      .select('id, is_balita, jadwal:jadwal_id(tanggal, operator_id)')
       .eq('status', 'paid')
       .eq('jadwal.operator_id', operatorId) // KUNCI MULTI-TENANT
 
@@ -101,6 +101,7 @@ function RekapBagiHasilKapalContent() {
     if (pesananData) {
       pesananData.forEach((pItem: any) => {
         if (!pItem.jadwal || !pItem.jadwal.tanggal) return
+        if (pItem.is_balita) return // Balita gratis, tidak kena fee
         const tgl = pItem.jadwal.tanggal
         
         if (tgl > batasTanggal) return
@@ -129,7 +130,7 @@ function RekapBagiHasilKapalContent() {
 
     const { data: pesananData } = await supabase
       .from('pesanan')
-      .select('id, jadwal:jadwal_id(tanggal)')
+      .select('id, is_balita, jadwal:jadwal_id(tanggal)')
       .eq('status', 'paid')
       .eq('jadwal.operator_id', operatorId) // KUNCI MULTI-TENANT
 
@@ -149,6 +150,7 @@ function RekapBagiHasilKapalContent() {
     if (pesananData) {
       pesananData.forEach((p: any) => {
         if (!p.jadwal || !p.jadwal.tanggal) return
+        if (p.is_balita) return // Balita gratis, tidak kena fee
         const tgl = p.jadwal.tanggal
 
         if (tgl.startsWith(bulan) && groupedByDate[tgl]) {
@@ -176,7 +178,7 @@ function RekapBagiHasilKapalContent() {
 
     const { data: pesananData } = await supabase
       .from('pesanan')
-      .select('id, jadwal:jadwal_id(jam_berangkat, tanggal, rute_asal, rute_tujuan)')
+      .select('id, is_balita, jadwal:jadwal_id(jam_berangkat, tanggal, rute_asal, rute_tujuan)')
       .eq('status', 'paid')
       .eq('jadwal.operator_id', operatorId) // KUNCI MULTI-TENANT
 
@@ -197,6 +199,7 @@ function RekapBagiHasilKapalContent() {
     if (pesananData) {
       pesananData.forEach((p: any) => {
         if (!p.jadwal || p.jadwal.tanggal !== tanggal) return
+        if (p.is_balita) return // Balita gratis, tidak kena fee
         
         const jam = p.jadwal.jam_berangkat.substring(0, 5)
         const rute = `${p.jadwal.rute_asal} - ${p.jadwal.rute_tujuan}`

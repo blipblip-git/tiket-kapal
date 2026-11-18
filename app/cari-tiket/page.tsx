@@ -132,7 +132,7 @@ function CariTiketContent() {
 
         const { data: insertedJadwal, error: insertError } = await supabase
           .from('jadwal')
-          .insert(newJadwalPayload, { ignoreDuplicates: true })
+          .insert(newJadwalPayload)
           .select('id, rute_asal, rute_tujuan, jam_berangkat, harga, kapal_id, status_jadwal')
 
         if (!insertError && insertedJadwal) {
@@ -154,7 +154,7 @@ function CariTiketContent() {
           }
 
           if (kursiPayload.length > 0) {
-            await supabase.from('kursi').insert(kursiPayload, { ignoreDuplicates: true })
+            await supabase.from('kursi').insert(kursiPayload)
           }
         }
       }

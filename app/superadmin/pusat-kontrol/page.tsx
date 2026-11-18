@@ -73,12 +73,12 @@ export default function PusatKontrolPage() {
 
           {/* 3. PETUGAS */}
           <button 
-            onClick={() => router.push('/superadmin/pusat-kontrol/petugas')}
+            onClick={() => router.push('/superadmin/pusat-kontrol/admin/petugas')}
             className="bg-gray-800 border border-gray-700 p-6 rounded-xl hover:bg-gray-750 transition text-left flex flex-col items-start h-40 justify-center shadow-lg group"
           >
             <div className="text-4xl mb-3 group-hover:scale-110 transition">📷</div>
             <h2 className="text-lg font-bold text-white mb-1">Petugas Keberangkatan</h2>
-            <p className="text-xs text-gray-400">Atur teks & tombol di dashboard Petugas.</p>
+            <p className="text-xs text-gray-400">Kelola akun & lokasi petugas keberangkatan.</p>
           </button>
 
           {/* 4. AGEN */}

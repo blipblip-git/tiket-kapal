@@ -67,17 +67,20 @@ function RekapBagiHasilContent() {
         return
       }
       setProfile(adminProfile)
-      await fetchLaporanBulanan()
+      await fetchLaporanBulanan(adminProfile)
       setLoading(false)
     }
     init()
   }, [router])
 
-  async function fetchLaporanBulanan() {
+  async function fetchLaporanBulanan(p: Profile) {
+    const operatorId = p.operator_id || p.id
+
     const { data: pesananData, error: errPesanan } = await supabase
       .from('pesanan')
-      .select('id, jadwal:jadwal_id(tanggal)')
+      .select('id, is_balita, jadwal:jadwal_id(tanggal, operator_id)')
       .eq('status', 'paid')
+      .eq('jadwal.operator_id', operatorId) // KUNCI MULTI-TENANT
 
     if (errPesanan) {
       setError('Gagal memuat data: ' + errPesanan.message)
@@ -90,6 +93,7 @@ function RekapBagiHasilContent() {
     if (pesananData) {
       pesananData.forEach((p: any) => {
         if (!p.jadwal || !p.jadwal.tanggal) return
+        if (p.is_balita) return // Balita gratis, tidak kena fee
         const tgl = p.jadwal.tanggal
         
         if (tgl > batasTanggal) return
@@ -110,13 +114,17 @@ function RekapBagiHasilContent() {
   }
 
   async function handleLihatBulan(bulan: string) {
+    if (!profile) return
     setBulanDipilih(bulan)
     setTanggalDipilih(null)
 
+    const operatorId = profile.operator_id || profile.id
+
     const { data: pesananData } = await supabase
       .from('pesanan')
-      .select('id, jadwal:jadwal_id(tanggal)')
+      .select('id, is_balita, jadwal:jadwal_id(tanggal)')
       .eq('status', 'paid')
+      .eq('jadwal.operator_id', operatorId) // KUNCI MULTI-TENANT
 
     const groupedByDate: { [key: string]: LaporanHarian } = {}
     const batasTanggal = getBatasTanggal()
@@ -134,6 +142,7 @@ function RekapBagiHasilContent() {
     if (pesananData) {
       pesananData.forEach((p: any) => {
         if (!p.jadwal || !p.jadwal.tanggal) return
+        if (p.is_balita) return // Balita gratis, tidak kena fee
         const tgl = p.jadwal.tanggal
 
         if (tgl.startsWith(bulan) && groupedByDate[tgl]) {
@@ -148,17 +157,22 @@ function RekapBagiHasilContent() {
   }
 
   async function handleLihatTanggal(tanggal: string) {
+    if (!profile) return
     setTanggalDipilih(tanggal)
-    
+
+    const operatorId = profile.operator_id || profile.id
+
     const { data: templateData } = await supabase
       .from('template_jadwal')
       .select('jam_berangkat, rute_asal, rute_tujuan')
       .eq('aktif', true)
+      .eq('operator_id', operatorId) // KUNCI MULTI-TENANT
 
     const { data: pesananData } = await supabase
       .from('pesanan')
-      .select('id, jadwal:jadwal_id(jam_berangkat, tanggal, rute_asal, rute_tujuan)')
+      .select('id, is_balita, jadwal:jadwal_id(jam_berangkat, tanggal, rute_asal, rute_tujuan)')
       .eq('status', 'paid')
+      .eq('jadwal.operator_id', operatorId) // KUNCI MULTI-TENANT
 
     const grouped: { [key: string]: RincianPerJam } = {}
 
@@ -177,6 +191,7 @@ function RekapBagiHasilContent() {
     if (pesananData) {
       pesananData.forEach((p: any) => {
         if (!p.jadwal || p.jadwal.tanggal !== tanggal) return
+        if (p.is_balita) return // Balita gratis, tidak kena fee
         
         const jam = p.jadwal.jam_berangkat.substring(0, 5)
         const rute = `${p.jadwal.rute_asal} - ${p.jadwal.rute_tujuan}`
@@ -239,7 +254,9 @@ function RekapBagiHasilContent() {
         <div className="flex justify-between items-center mb-6 bg-white p-4 rounded shadow-sm border border-gray-200 print-hidden">
           <div>
             <h1 className="text-xl font-bold text-gray-900">Rekap Fee Platform</h1>
-            <p className="text-sm text-gray-600">Laporan pendapatan fee sistem</p>
+            <p className="text-sm text-gray-600">
+              Laporan pendapatan fee sistem{profile.nama_perusahaan ? ` — ${profile.nama_perusahaan}` : (profile.nama ? ` — ${profile.nama}` : '')}
+            </p>
           </div>
           <button onClick={() => router.push('/dashboard-superadmin')} className="text-sm text-blue-600 hover:underline">
             &larr; Kembali ke Dashboard

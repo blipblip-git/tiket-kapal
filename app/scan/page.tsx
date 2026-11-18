@@ -9,6 +9,7 @@ type HasilScan = {
   status: 'valid' | 'sudah_boarding' | 'tidak_valid' | 'terlalu_awal' | 'terlambat' | 'salah_rute'
   pesanan?: any
   nomor_kursi?: string
+  balita?: { id: string; nama_penumpang: string; status_boarding: string | null }[]
   pesan: string
 }
 
@@ -162,7 +163,7 @@ function ScanContent() {
     try {
       const { data: p, error: errP } = await supabase
         .from('pesanan')
-        .select('id, nama_penumpang, nik, kode_tiket, status_boarding, jadwal_id, kursi_id, is_balita')
+        .select('id, nama_penumpang, nik, kode_tiket, status_boarding, jadwal_id, kursi_id, is_balita, induk_id')
         .eq('kode_tiket', kodeTiket)
         .maybeSingle()
 
@@ -244,11 +245,23 @@ function ScanContent() {
         nomorKursi = 'Balita'
       }
 
+      // TIKET DEWASA: balita yang menempel di induk_id ikut boarding.
+      // Baris BALITA- lama (tanpa induk_id) tetap bisa di-scan sendiri.
+      let daftarBalita: { id: string; nama_penumpang: string; status_boarding: string | null }[] = []
+      if (!p.is_balita) {
+        const { data: b } = await supabase
+          .from('pesanan')
+          .select('id, nama_penumpang, status_boarding')
+          .eq('induk_id', p.id)
+        daftarBalita = (b || []) as { id: string; nama_penumpang: string; status_boarding: string | null }[]
+      }
+
       if (p.status_boarding === 'sudah') {
         setHasil({
           status: 'sudah_boarding',
           pesanan: { ...p, jadwal: j },
           nomor_kursi: nomorKursi,
+          balita: daftarBalita,
           pesan: 'Sudah pernah di-scan'
         })
         return
@@ -268,11 +281,34 @@ function ScanContent() {
         return
       }
 
+      if (daftarBalita.length > 0) {
+        const belumBoarding = daftarBalita.filter((b) => b.status_boarding !== 'sudah')
+        if (belumBoarding.length > 0) {
+          const { error: errBalita } = await supabase
+            .from('pesanan')
+            .update({
+              status_boarding: 'sudah',
+              waktu_boarding: new Date().toISOString(),
+              petugas_boarding: profile?.nama || 'unknown',
+            })
+            .in('id', belumBoarding.map((b) => b.id))
+
+          if (errBalita) {
+            console.error('Gagal boarding balita:', errBalita)
+          }
+        }
+      }
+
       setHasil({
         status: 'valid',
         pesanan: { ...p, jadwal: j },
         nomor_kursi: nomorKursi,
-        pesan: p.is_balita ? 'Boarding Balita berhasil' : 'Boarding berhasil',
+        balita: daftarBalita,
+        pesan: p.is_balita
+          ? 'Boarding Balita berhasil'
+          : daftarBalita.length > 0
+            ? `Boarding berhasil + ${daftarBalita.length} balita`
+            : 'Boarding berhasil',
       })
     } catch (err) {
       console.error('prosesScan error:', err)
@@ -339,6 +375,9 @@ function ScanContent() {
                 <div className="text-sm mt-2 space-y-1 text-gray-900">
                   <p>Nama: <b>{hasil.pesanan.nama_penumpang}</b></p>
                   <p>Kursi: <b>{hasil.nomor_kursi}</b></p>
+                  {hasil.balita && hasil.balita.length > 0 && (
+                    <p>Balita ({hasil.balita.length}): <b>{hasil.balita.map((b) => b.nama_penumpang).join(', ')}</b></p>
+                  )}
                   <p>Kapal: {hasil.pesanan.jadwal?.rute_asal} &rarr; {hasil.pesanan.jadwal?.rute_tujuan} ({hasil.pesanan.jadwal?.jam_berangkat})</p>
                 </div>
               )}

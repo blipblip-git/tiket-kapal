@@ -149,13 +149,16 @@ function PembayaranSuperadminContent() {
         if (errKursi) throw errKursi
       }
 
-      const pembayaranPayload = pesananList.map((p) => ({
-        pesanan_id: p.id,
-        metode: metode,
-        jumlah: detail.harga,
-        status: 'sukses',
-        waktu_bayar: waktuSekarang,
-      }))
+      // Balita gratis: hanya penumpang dewasa yang dicatat pembayarannya
+      const pembayaranPayload = pesananList
+        .filter((p) => !p.is_balita)
+        .map((p) => ({
+          pesanan_id: p.id,
+          metode: metode,
+          jumlah: detail.harga,
+          status: 'sukses',
+          waktu_bayar: waktuSekarang,
+        }))
 
       await supabase.from('pembayaran').insert(pembayaranPayload)
 
@@ -171,9 +174,9 @@ function PembayaranSuperadminContent() {
 
   function handleKembali() {
     if (kanal === 'petugas') {
-      router.push('/superadmin/pusat-kontrol/petugas/jual-tiket')
+      router.push('/superadmin/pusat-kontrol/petugas/loket-jual')
     } else {
-      router.push('/superadmin/pusat-kontrol/agen/jual-tiket')
+      router.push('/superadmin/pusat-kontrol/agen/loket-jual')
     }
   }
 

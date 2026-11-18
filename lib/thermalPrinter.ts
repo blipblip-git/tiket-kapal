@@ -84,6 +84,9 @@ export async function cetakTiketThermal(tiket: any) {
       textData += '\x1B\x61\x00' 
       textData += '--------------------------------\n'
       textData += `Nama / Kursi : ${tiket.nama_penumpang} / ${tiket.kursi}\n`
+      if (tiket.nama_balita && tiket.nama_balita.length > 0) {
+        textData += `Nama Balita  : ${tiket.nama_balita.join(', ')}\n`
+      }
       textData += `Kapal        : ${tiket.kapal}\n`
       const jamPotong = tiket.jam.substring(0, 5) 
       textData += `Tgl/Jam      : ${tiket.tanggal}/${jamPotong}\n` 
@@ -188,6 +191,9 @@ export async function cetakTiketThermal(tiket: any) {
     textData += '\x1B\x61\x00' 
     textData += '--------------------------------\n'
     textData += `Nama / Kursi : ${tiket.nama_penumpang} / ${tiket.kursi}\n`
+    if (tiket.nama_balita && tiket.nama_balita.length > 0) {
+      textData += `Nama Balita  : ${tiket.nama_balita.join(', ')}\n`
+    }
     textData += `Kapal        : ${tiket.kapal}\n`
     const jamPotong = tiket.jam.substring(0, 5) 
     textData += `Tgl/Jam      : ${tiket.tanggal}/${jamPotong}\n` 
