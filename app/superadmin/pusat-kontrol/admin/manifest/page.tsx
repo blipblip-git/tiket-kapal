@@ -26,6 +26,7 @@ function ManifestSuperadminContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const lokasi = searchParams.get('lokasi') || 'Tarakan'
+  const tujuan = searchParams.get('tujuan') || ''
   const operatorIdParam = searchParams.get('operator') || ''
 
   const [profile, setProfile] = useState<Profile | null>(null)
@@ -69,10 +70,13 @@ function ManifestSuperadminContent() {
           kursi:kursi_id (nomor_kursi)
         `).eq('status', 'paid').eq('jadwal.tanggal', tanggal).eq('jadwal.rute_asal', lokasi)
 
+      if (tujuan) queryPesanan = queryPesanan.eq('jadwal.rute_tujuan', tujuan)
+
       const { data: pesananData } = await queryPesanan
       
       // 2. Ambil Jadwal (buat cadangan kalau pesanan kosong)
       let queryJadwal = supabase.from('jadwal').select('id, jam_berangkat, kapal_id, operator_id').eq('tanggal', tanggal).eq('rute_asal', lokasi)
+      if (tujuan) queryJadwal = queryJadwal.eq('rute_tujuan', tujuan)
       const { data: jadwalData } = await queryJadwal
 
       const filtered = (pesananData || []).filter((item: any) => {
@@ -140,7 +144,7 @@ function ManifestSuperadminContent() {
       setLoading(false)
     }
     fetchData()
-  }, [profile, tanggal, lokasi, operatorIdParam])
+  }, [profile, tanggal, lokasi, tujuan, operatorIdParam])
 
   const handlePrint = () => { setTimeout(() => window.print(), 100) }
   
@@ -224,10 +228,10 @@ function ManifestSuperadminContent() {
               <div className="max-w-md mx-auto">
                 <div className="flex justify-between items-start mb-3">
                   <div>
-                    <h1 className="text-xl font-bold text-gray-900 leading-tight">Manifest {lokasi}</h1>
+                    <h1 className="text-xl font-bold text-gray-900 leading-tight">Manifest {lokasi}{tujuan ? ` → ${tujuan}` : ''}</h1>
                     <p className="text-sm text-gray-600 mt-0.5">{tanggalFormatHeader}</p>
                   </div>
-                  <button onClick={() => router.push('/laporan-penjualan-admin')} className="text-xs text-blue-600 hover:underline bg-gray-50 px-2 py-1.5 rounded border border-gray-200 mt-1">
+                  <button onClick={() => router.push('/laporan-penjualan-admin?menu=manifest')} className="text-xs text-blue-600 hover:underline bg-gray-50 px-2 py-1.5 rounded border border-gray-200 mt-1">
                     &larr; Kembali
                   </button>
                 </div>
@@ -317,7 +321,7 @@ function ManifestSuperadminContent() {
             <div className="flex-shrink-0 bg-blue-50 p-4 border-b border-blue-200">
               <div className="max-w-md mx-auto text-[11px] grid grid-cols-[100px_10px_1fr] gap-y-1.5 text-gray-700">
                 <span>Tanggal</span><span>:</span><span>{tanggalFormatHeader}</span>
-                <span>Rute</span><span>:</span><span>{lokasi} - {lokasi === 'Tarakan' ? 'Tanjung Selor' : 'Tarakan'}</span>
+                <span>Rute</span><span>:</span><span>{lokasi} - {tujuan || (lokasi === 'Tarakan' ? 'Tanjung Selor' : 'Tarakan')}</span>
                 <span>Kapal</span><span>:</span><span className="font-medium text-gray-900">{rincianAktif?.nama_kapal}</span>
                 <span>Kapten</span><span>:</span><span className="font-medium text-gray-900">{rincianAktif?.nama_kapten}</span>
                 <span>Total Penumpang</span><span>:</span><span className="font-bold">{rincianAktif?.total_terjual} Orang</span>
@@ -384,7 +388,7 @@ function ManifestSuperadminContent() {
                 </div>
                 <div className="mb-4 text-sm grid grid-cols-[150px_10px_1fr] gap-y-1">
                   <span>Tanggal</span><span>:</span><span>{tanggalFormatHeader}</span>
-                  <span>Rute</span><span>:</span><span>{lokasi} - {lokasi === 'Tarakan' ? 'Tanjung Selor' : 'Tarakan'}</span>
+                  <span>Rute</span><span>:</span><span>{lokasi} - {tujuan || (lokasi === 'Tarakan' ? 'Tanjung Selor' : 'Tarakan')}</span>
                   <span>Kapal</span><span>:</span><span>{rincianAktif.nama_kapal}</span>
                   <span>Kapten</span><span>:</span><span>{rincianAktif.nama_kapten}</span>
                   <span>Total Penumpang</span><span>:</span><span className="font-bold">{rincianAktif.total_terjual} Orang</span>

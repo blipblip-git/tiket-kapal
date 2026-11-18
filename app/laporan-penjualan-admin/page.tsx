@@ -5,6 +5,15 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import { supabase, getProfile, getOperatorSession, type Profile } from '@/lib/supabase'
 import { bulanSekarang } from '@/lib/periode'
 
+type RuteKapal = { rute_asal: string; rute_tujuan: string }
+
+const WARNA_RUTE = [
+  'bg-blue-50 border-blue-200 text-blue-800 hover:bg-blue-100',
+  'bg-green-50 border-green-200 text-green-800 hover:bg-green-100',
+  'bg-purple-50 border-purple-200 text-purple-800 hover:bg-purple-100',
+  'bg-orange-50 border-orange-200 text-orange-800 hover:bg-orange-100',
+]
+
 function LaporanPenjualanAdminContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -12,6 +21,8 @@ function LaporanPenjualanAdminContent() {
   const [profile, setProfile] = useState<Profile | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  const [ruteList, setRuteList] = useState<RuteKapal[]>([])
+
 
   useEffect(() => {
     async function init() {
@@ -31,6 +42,43 @@ function LaporanPenjualanAdminContent() {
     }
     init()
   }, [router])
+
+  // Ambil daftar rute milik pemilik (operator), supaya kartu manifest mengikuti rute kapalnya
+  useEffect(() => {
+    async function muatRute() {
+      if (!profile) return
+      const operatorId = profile.role === 'superadmin' ? null : (profile.operator_id || profile.id)
+
+      const kumpulan: RuteKapal[] = []
+
+      let qRute = supabase.from('master_rute').select('rute_asal, rute_tujuan')
+      if (operatorId) qRute = qRute.eq('operator_id', operatorId)
+      const { data: dataRute } = await qRute
+      ;(dataRute || []).forEach((r: any) => {
+        if (r.rute_asal && r.rute_tujuan) kumpulan.push({ rute_asal: r.rute_asal, rute_tujuan: r.rute_tujuan })
+      })
+
+      // Cadangan: rute yang sudah pernah dipakai di jadwal operator ini
+      if (kumpulan.length === 0) {
+        let qJadwal = supabase.from('jadwal').select('rute_asal, rute_tujuan').limit(1000)
+        if (operatorId) qJadwal = qJadwal.eq('operator_id', operatorId)
+        const { data: dataJadwal } = await qJadwal
+        ;(dataJadwal || []).forEach((j: any) => {
+          if (j.rute_asal && j.rute_tujuan) kumpulan.push({ rute_asal: j.rute_asal, rute_tujuan: j.rute_tujuan })
+        })
+      }
+
+      const unik = Array.from(new Map(kumpulan.map(r => [`${r.rute_asal}|${r.rute_tujuan}`, r])).values())
+      unik.sort((a, b) => {
+        if (a.rute_asal === b.rute_asal) return a.rute_tujuan.localeCompare(b.rute_tujuan)
+        if (a.rute_asal === 'Tarakan') return -1
+        if (b.rute_asal === 'Tarakan') return 1
+        return a.rute_asal.localeCompare(b.rute_asal)
+      })
+      setRuteList(unik)
+    }
+    muatRute()
+  }, [profile])
 
   if (loading) return <p className="p-6 text-center text-gray-600 mt-10">Memuat...</p>
   if (error) return <p className="p-6 text-center text-red-600 mt-10">{error}</p>
@@ -59,9 +107,9 @@ function LaporanPenjualanAdminContent() {
     },
     {
       label: 'Manifest Kapal',
-      deskripsi: 'Daftar penumpang dan status boarding',
+      deskripsi: 'Daftar penumpang dan status boarding (per rute)',
       color: 'bg-orange-50 border-orange-200 text-orange-800 hover:bg-orange-100',
-      link: '/superadmin/pusat-kontrol/admin/manifest'
+      link: '/laporan-penjualan-admin?menu=manifest'
     }
   ]
 
@@ -119,6 +167,25 @@ function LaporanPenjualanAdminContent() {
           link: `/laporan-gabungan-bulanan?bulan=${bulanAktif}`
         }
       ]
+    },
+    'manifest': {
+      judul: 'Manifest Kapal',
+      deskripsi: 'Pilih rute keberangkatan untuk melihat manifest penumpang',
+      kartu: ruteList.length === 0
+        ? [
+            {
+              label: 'Manifest Tarakan',
+              deskripsi: 'Belum ada rute di Master Rute — menampilkan rute Tarakan',
+              color: 'bg-orange-50 border-orange-200 text-orange-800 hover:bg-orange-100',
+              link: '/superadmin/pusat-kontrol/admin/manifest?lokasi=Tarakan'
+            }
+          ]
+        : ruteList.map((r, idx) => ({
+            label: `Manifest ${r.rute_asal}`,
+            deskripsi: `Daftar penumpang rute ${r.rute_asal} → ${r.rute_tujuan}`,
+            color: WARNA_RUTE[idx % WARNA_RUTE.length],
+            link: `/superadmin/pusat-kontrol/admin/manifest?lokasi=${encodeURIComponent(r.rute_asal)}&tujuan=${encodeURIComponent(r.rute_tujuan)}`
+          }))
     }
   }
 
