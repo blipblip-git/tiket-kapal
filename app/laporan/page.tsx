@@ -40,6 +40,7 @@ function LaporanContent() {
   const searchParams = useSearchParams()
   const view = searchParams.get('view')
   const lokasiParam = searchParams.get('lokasi')
+  const tanggalParam = searchParams.get('tanggal')
 
   const [profile, setProfile] = useState<Profile | null>(null)
   const [loading, setLoading] = useState(true)
@@ -69,11 +70,16 @@ function LaporanContent() {
   }, [router])
 
   useEffect(() => {
+    // Tombol "Perincian" dari laporan bulanan mengirim ?tanggal=YYYY-MM-DD
+    if (tanggalParam && /^\d{4}-\d{2}-\d{2}$/.test(tanggalParam)) {
+      setTanggal(tanggalParam)
+      return
+    }
     const today = new Date()
     const offset = today.getTimezoneOffset() * 60000
     const localDate = new Date(today.getTime() - offset).toISOString().split('T')[0]
     setTanggal(localDate)
-  }, [])
+  }, [tanggalParam])
 
   useEffect(() => {
     async function fetchLaporan() {
