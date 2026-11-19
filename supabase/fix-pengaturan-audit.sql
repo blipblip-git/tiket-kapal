@@ -82,6 +82,56 @@ where a.operator_id is null
   and p.grup_transaksi_id::text = (a.detail ->> 'grup_transaksi_id')
   and j.operator_id is not null;
 
+-- 2c. Log warisan PT ANDALAS yang masih memakai ID LAMA.
+-- f6dcd5c8-... = operator_id Andalas sebelum akun dibuat ulang (sudah tidak ada di profiles).
+update public.audit_log a
+set operator_id = (
+  select p.id from public.profiles p
+  where p.role = 'admin_utama' and p.nomor_hp = '082338313098'
+  limit 1
+)
+where a.operator_id = 'f6dcd5c8-356e-4b13-9ed5-82275509d7e5';
+
+-- Backfill awal sempat memakai id PETUGAS sebagai operator_id (petugasnya belum
+-- punya operator_id). Log budi / syahril / wawan / jhon -> operator Andalas.
+update public.audit_log a
+set operator_id = (
+  select p.id from public.profiles p
+  where p.role = 'admin_utama' and p.nomor_hp = '082338313098'
+  limit 1
+)
+where a.operator_id in (
+  'cba2e230-9726-406a-b5d5-0cf15a2dd54f',
+  'efb09e2d-a012-4713-be1e-1b1e9eeb50a8',
+  '1dbeb166-1716-4315-ac16-5306a5b0d448',
+  '5b8db0ab-527d-44c2-8f9a-b310111615c8'
+);
+
+-- 2d. Log yatim (akun agen/petugas sudah dihapus, kursi & jadwal juga sudah dihapus).
+-- Semuanya penjualan loket/agen PT Andalas: nomor HP pelanggan di detail = 082338313098
+-- (HP admin Andalas, dipakai sebagai data pembeli saat uji coba) atau varian typo-nya,
+-- dan email petugas 08122224444 / 08125557777 / 081268560678 / 081277778888 /
+-- 081299998888 / admin@limex.com (email admin Andalas sebelum diganti).
+update public.audit_log a
+set operator_id = (
+  select p.id from public.profiles p
+  where p.role = 'admin_utama' and p.nomor_hp = '082338313098'
+  limit 1
+)
+where a.operator_id is null
+  and (
+    a.detail ->> 'nomor_hp' like '082338313%'
+    or a.detail ->> 'nomor_hp' like '082338331%'
+    or a.petugas_email in (
+      '08122224444@petugas.local',
+      '08125557777@petugas.local',
+      '081268560678@petugas.local',
+      '081277778888@petugas.local',
+      '081299998888@petugas.local',
+      'admin@limex.com'
+    )
+  );
+
 -- ---------- 3. CEK HASIL ----------
 -- Harus 0 baris: audit log yang belum punya operator_id
 select count(*) as audit_tanpa_operator from public.audit_log where operator_id is null;
