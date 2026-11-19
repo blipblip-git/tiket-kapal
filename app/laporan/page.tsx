@@ -3,6 +3,7 @@
 import { useEffect, useState, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { supabase, getProfile, getOperatorSession, type Profile } from '@/lib/supabase'
+import { idOperator, cocokOperator } from '@/lib/tenant'
 
 type RincianPenumpang = {
   id: string
@@ -87,7 +88,7 @@ function LaporanContent() {
       
       const isAdmin = profile.role === 'admin_utama'
       const lokasiTarget = isAdmin ? (lokasiParam || profile.lokasi) : profile.lokasi
-      const operatorId = profile.role !== 'superadmin' ? (profile.operator_id || profile.id) : null
+      const operatorId = idOperator(profile)
 
       let query = supabase
         .from('pesanan')
@@ -113,15 +114,20 @@ function LaporanContent() {
       if (error) { setError('Gagal memuat laporan: ' + error.message); return }
 
       if (data) {
+        // Ambil data kapal lebih dulu: nama/kapten untuk tampilan + pemilik untuk
+        // jadwal lama yang operator_id-nya NULL.
+        const semuaKapalIds = [...new Set(data.map((item: any) => item.jadwal?.kapal_id).filter(Boolean))]
+        const kapalMap = new Map()
+        if (semuaKapalIds.length > 0) {
+          const { data: kapalData } = await supabase.from('kapal').select('id, nama, nama_kapten, operator_id').in('id', semuaKapalIds)
+          kapalData?.forEach((k: any) => kapalMap.set(k.id, k))
+        }
+        const petaOperatorKapal = new Map<string, string | null>()
+        kapalMap.forEach((k: any, id: string) => petaOperatorKapal.set(id, k.operator_id || null))
+
         const filtered = data.filter((item: any) => {
           if (!item.jadwal) return false;
-          
-          // FILTER MULTI-TENANT
-          let cocokOperator = true
-          if (operatorId && item.jadwal.operator_id) {
-            cocokOperator = item.jadwal.operator_id === operatorId
-          }
-          if (!cocokOperator) return false;
+          if (!cocokOperator(item.jadwal, operatorId, petaOperatorKapal)) return false;
 
           if (isAdmin) {
             if (lokasiParam) return item.jadwal.rute_asal === lokasiParam;
@@ -174,13 +180,6 @@ function LaporanContent() {
             status_jadwal: 'open'
           }
         })
-
-        const kapalMap = new Map()
-        const kapalIds = [...new Set(filtered.map((item: any) => item.jadwal?.kapal_id).filter(Boolean))]
-        if (kapalIds.length > 0) {
-          const { data: kapalData } = await supabase.from('kapal').select('id, nama, nama_kapten').in('id', kapalIds)
-          kapalData?.forEach((k: any) => kapalMap.set(k.id, k))
-        }
 
         filtered.forEach((item: any) => {
           const jam = item.jadwal.jam_berangkat.substring(0, 5)

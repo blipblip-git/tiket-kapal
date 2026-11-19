@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase, getOperatorSession, type Profile } from '@/lib/supabase'
+import { idOperator, ambilOperatorKapal, cocokOperator } from '@/lib/tenant'
 
 type LaporanDetail = {
   id: string
@@ -59,14 +60,14 @@ export default function LaporanPenjualanKeberangkatanPage() {
     setLoading(true)
 
     const identitasPenjual = profile.nomor_hp || profile.email
-    const operatorId = profile.operator_id || profile.id
+    const operatorId = idOperator(profile)
 
     // Pakai ilike biar nemu yang ada @petugas.local atau yang murni nomor HP
     let query = supabase
       .from('pesanan')
       .select(`
         id, nama_penumpang, kode_tiket, is_balita, created_at,
-        jadwal:jadwal_id (harga, rute_asal, rute_tujuan, jam_berangkat, tanggal, operator_id),
+        jadwal:jadwal_id (harga, rute_asal, rute_tujuan, jam_berangkat, tanggal, kapal_id, operator_id),
         kursi:kursi_id (nomor_kursi),
         pembayaran:pembayaran (metode)
       `)
@@ -83,17 +84,17 @@ export default function LaporanPenjualanKeberangkatanPage() {
       return
     }
 
+    // Pemilik data lama ditentukan dari kapal (jadwal.operator_id bisa NULL).
+    const petaOperatorKapal = await ambilOperatorKapal(
+      (data || []).map((item: any) => item.jadwal?.kapal_id)
+    )
+
     const filteredData = data.filter((item: any) => {
       const cocokTanggal = item.jadwal?.tanggal === tanggal
       const cocokLokasi = item.jadwal?.rute_asal === profile.lokasi
-      
-      // FILTER MULTI-TENANT (AMAN UNTUK DATA LAMA YANG NULL)
-      let cocokOperator = true
-      if (operatorId && item.jadwal?.operator_id) {
-        cocokOperator = item.jadwal.operator_id === operatorId
-      }
-      
-      return cocokTanggal && cocokLokasi && cocokOperator
+      const cocokPemilik = cocokOperator(item.jadwal, operatorId, petaOperatorKapal)
+
+      return cocokTanggal && cocokLokasi && cocokPemilik
     })
 
     const grouped: Record<string, LaporanJam> = {}

@@ -3,6 +3,7 @@
 import { useEffect, useState, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { supabase, getProfile, getOperatorSession, formatDaftarAbk, type Profile } from '@/lib/supabase'
+import { cocokOperator } from '@/lib/tenant'
 
 type RincianPenumpang = {
   id: string
@@ -81,32 +82,28 @@ function ManifestSuperadminContent() {
       if (tujuan) queryJadwal = queryJadwal.eq('rute_tujuan', tujuan)
       const { data: jadwalData } = await queryJadwal
 
-      const filtered = (pesananData || []).filter((item: any) => {
-        if (!item.jadwal) return false;
-        
-        // FILTER MULTI-TENANT (AMAN UNTUK DATA LAMA YANG NULL)
-        let cocokOperator = true
-        if (targetOperatorId && item.jadwal.operator_id) {
-          cocokOperator = item.jadwal.operator_id === targetOperatorId
-        }
-        
-        return cocokOperator;
-      })
-
-      const jadwalFiltered = (jadwalData || []).filter((j: any) => {
-        let cocokOperator = true
-        if (targetOperatorId && j.operator_id) {
-          cocokOperator = j.operator_id === targetOperatorId
-        }
-        return cocokOperator;
-      })
-
-      const kapalIdsFromJadwal = [...new Set(jadwalFiltered.map((j: any) => j.kapal_id).filter(Boolean) || [])]
-      let kapalMap = new Map()
-      if (kapalIdsFromJadwal.length > 0) {
-        const { data: kapalData } = await supabase.from('kapal').select('*').in('id', kapalIdsFromJadwal)
+      // 3. Ambil data kapal lebih dulu: nama/kapten + pemilik untuk data lama
+      //    (jadwal.operator_id bisa NULL, jadi pemilik dilihat dari kapal).
+      const semuaKapalIds = [...new Set([
+        ...(pesananData || []).map((item: any) => item.jadwal?.kapal_id),
+        ...(jadwalData || []).map((j: any) => j.kapal_id)
+      ].filter(Boolean) as string[])]
+      const kapalMap = new Map()
+      if (semuaKapalIds.length > 0) {
+        const { data: kapalData } = await supabase.from('kapal').select('*').in('id', semuaKapalIds)
         kapalData?.forEach((k: any) => kapalMap.set(k.id, k))
       }
+      const petaOperatorKapal = new Map<string, string | null>()
+      kapalMap.forEach((k: any, id: string) => petaOperatorKapal.set(id, k.operator_id || null))
+
+      const filtered = (pesananData || []).filter((item: any) => {
+        if (!item.jadwal) return false
+        return cocokOperator(item.jadwal, targetOperatorId, petaOperatorKapal)
+      })
+
+      const jadwalFiltered = (jadwalData || []).filter((j: any) =>
+        cocokOperator(j, targetOperatorId, petaOperatorKapal)
+      )
 
       const jamSet = new Set<string>()
       // Ambil dari jadwal dulu

@@ -3,6 +3,7 @@
 import { useEffect, useState, Suspense, Fragment } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { supabase, getProfile, getOperatorSession, type Profile } from '@/lib/supabase'
+import { idOperator, cocokOperator } from '@/lib/tenant'
 import {
   NAMA_BULAN,
   bulanSekarang,
@@ -83,21 +84,18 @@ function LaporanGabunganBulananContent() {
       const awal = tanggalList[0]
       const akhir = tanggalList[tanggalList.length - 1]
       // KUNCI MULTI-TENANT: operator hanya melihat data miliknya sendiri
-      const operatorId = profile.role !== 'superadmin' ? (profile.operator_id || profile.id) : null
+      const operatorId = idOperator(profile)
 
       let queryJadwal = supabase
         .from('jadwal')
-        .select('rute_asal')
+        .select('rute_asal, kapal_id, operator_id')
         .gte('tanggal', awal)
         .lte('tanggal', akhir)
-      if (operatorId) {
-        queryJadwal = queryJadwal.eq('operator_id', operatorId)
-      }
 
       const [hasilPesanan, hasilJadwal] = await Promise.all([
         supabase
           .from('pesanan')
-          .select('id, is_balita, induk_id, jadwal:jadwal_id(rute_asal, harga, tanggal, operator_id)')
+          .select('id, is_balita, induk_id, jadwal:jadwal_id(rute_asal, harga, tanggal, kapal_id, operator_id)')
           .eq('status', 'paid')
           .gte('jadwal.tanggal', awal)
           .lte('jadwal.tanggal', akhir),
@@ -112,6 +110,19 @@ function LaporanGabunganBulananContent() {
         return
       }
 
+      // Pemilik data lama ditentukan dari kapal (jadwal.operator_id bisa NULL).
+      const petaOperatorKapal = new Map<string, string | null>()
+      const kapalIds = [
+        ...new Set([
+          ...(hasilPesanan.data || []).map((item: any) => item.jadwal?.kapal_id),
+          ...(hasilJadwal.data || []).map((j: any) => j.kapal_id)
+        ].filter(Boolean) as string[])
+      ]
+      if (kapalIds.length > 0) {
+        const { data: kapalData } = await supabase.from('kapal').select('id, operator_id').in('id', kapalIds)
+        kapalData?.forEach((k: any) => petaOperatorKapal.set(k.id, k.operator_id || null))
+      }
+
       const mapTanggal: { [tanggal: string]: { [lokasi: string]: SelLokasi } } = {}
       tanggalList.forEach((t) => { mapTanggal[t] = {} })
 
@@ -119,13 +130,14 @@ function LaporanGabunganBulananContent() {
 
       // Daerah diambil dari JADWAL bulan ini, supaya daerah 0 penjualan tetap muncul kolomnya
       ;(hasilJadwal.data || []).forEach((j: any) => {
+        if (!cocokOperator(j, operatorId, petaOperatorKapal)) return
         if (j.rute_asal) kumpulanLokasi.add(j.rute_asal)
       })
 
       ;(hasilPesanan.data || []).forEach((item: any) => {
         const jadwal = item.jadwal
         if (!jadwal || !jadwal.tanggal) return
-        if (operatorId && jadwal.operator_id && jadwal.operator_id !== operatorId) return
+        if (!cocokOperator(jadwal, operatorId, petaOperatorKapal)) return
 
         const lokasi = jadwal.rute_asal || 'Lainnya'
         kumpulanLokasi.add(lokasi)

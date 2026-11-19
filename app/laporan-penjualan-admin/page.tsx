@@ -14,6 +14,13 @@ const WARNA_RUTE = [
   'bg-orange-50 border-orange-200 text-orange-800 hover:bg-orange-100',
 ]
 
+// Rute bawaan platform. Dipakai kalau penyewa belum punya isi Master Rute
+// maupun jadwal, supaya pilihan manifest tetap lengkap dua arah.
+const RUTE_DEFAULT: RuteKapal[] = [
+  { rute_asal: 'Tarakan', rute_tujuan: 'Tanjung Selor' },
+  { rute_asal: 'Tanjung Selor', rute_tujuan: 'Tarakan' },
+]
+
 function LaporanPenjualanAdminContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -171,21 +178,12 @@ function LaporanPenjualanAdminContent() {
     'manifest': {
       judul: 'Manifest Kapal',
       deskripsi: 'Pilih rute keberangkatan untuk melihat manifest penumpang',
-      kartu: ruteList.length === 0
-        ? [
-            {
-              label: 'Manifest Tarakan',
-              deskripsi: 'Belum ada rute di Master Rute — menampilkan rute Tarakan',
-              color: 'bg-orange-50 border-orange-200 text-orange-800 hover:bg-orange-100',
-              link: '/superadmin/pusat-kontrol/admin/manifest?lokasi=Tarakan'
-            }
-          ]
-        : ruteList.map((r, idx) => ({
-            label: `Manifest ${r.rute_asal}`,
-            deskripsi: `Daftar penumpang rute ${r.rute_asal} → ${r.rute_tujuan}`,
-            color: WARNA_RUTE[idx % WARNA_RUTE.length],
-            link: `/superadmin/pusat-kontrol/admin/manifest?lokasi=${encodeURIComponent(r.rute_asal)}&tujuan=${encodeURIComponent(r.rute_tujuan)}`
-          }))
+      kartu: (ruteList.length > 0 ? ruteList : RUTE_DEFAULT).map((r, idx) => ({
+        label: `Manifest ${r.rute_asal}`,
+        deskripsi: `Daftar penumpang rute ${r.rute_asal} → ${r.rute_tujuan}`,
+        color: WARNA_RUTE[idx % WARNA_RUTE.length],
+        link: `/superadmin/pusat-kontrol/admin/manifest?lokasi=${encodeURIComponent(r.rute_asal)}&tujuan=${encodeURIComponent(r.rute_tujuan)}`
+      }))
     }
   }
 

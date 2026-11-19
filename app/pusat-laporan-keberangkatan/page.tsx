@@ -3,6 +3,7 @@
 import { useEffect, useState, Suspense } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase, getOperatorSession, getProfile, formatDaftarAbk, type Profile } from '@/lib/supabase'
+import { idOperator, cocokOperator } from '@/lib/tenant'
 
 type RincianPenumpang = {
   id: string
@@ -89,21 +90,27 @@ function PusatLaporanContent() {
 
     if (error) { setError('Gagal memuat: ' + error.message); return }
 
-    const filtered = (data || []).filter((item: any) => item.jadwal !== null)
-
-    // 2. Kumpulin semua Jam Berangkat dari Pesanan yang ada
-    const jamSet = new Set<string>()
-    filtered.forEach((item: any) => {
-      jamSet.add(item.jadwal.jam_berangkat.substring(0, 5))
-    })
-
-    // 3. Ambil Data Kapal
-    const kapalIdsFromPesanan = [...new Set(filtered.map((item: any) => item.jadwal.kapal_id).filter(Boolean))]
+    // 2. Ambil Data Kapal lebih dulu: nama/kapten + pemilik untuk data lama
+    //    (jadwal.operator_id bisa NULL, jadi pemilik dilihat dari kapal).
+    const kapalIdsFromPesanan = [...new Set((data || []).map((item: any) => item.jadwal?.kapal_id).filter(Boolean))]
     let kapalMap = new Map()
     if (kapalIdsFromPesanan.length > 0) {
       const { data: kapalData } = await supabase.from('kapal').select('*').in('id', kapalIdsFromPesanan)
       kapalData?.forEach((k: any) => kapalMap.set(k.id, k))
     }
+    const petaOperatorKapal = new Map<string, string | null>()
+    kapalMap.forEach((k: any, id: string) => petaOperatorKapal.set(id, k.operator_id || null))
+
+    const operatorId = idOperator(profile)
+    const filtered = (data || []).filter((item: any) =>
+      item.jadwal && cocokOperator(item.jadwal, operatorId, petaOperatorKapal)
+    )
+
+    // 3. Kumpulin semua Jam Berangkat dari Pesanan yang ada
+    const jamSet = new Set<string>()
+    filtered.forEach((item: any) => {
+      jamSet.add(item.jadwal.jam_berangkat.substring(0, 5))
+    })
 
     const groupedByJam: { [key: string]: LaporanPerJam } = {}
     

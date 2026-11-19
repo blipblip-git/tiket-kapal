@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase, getOperatorSession, getProfile, type Profile } from '@/lib/supabase'
+import { idOperator, ambilOperatorKapal, cocokOperator } from '@/lib/tenant'
 
 type RincianPenumpang = {
   id: string
@@ -77,22 +78,29 @@ export default function LaporanKasirPage() {
     async function fetchLaporan() {
       if (!profile || !tanggal) return
       
-      const operatorId = profile.operator_id || profile.id
+      const operatorId = idOperator(profile)
 
-      // 1. Ambil jadwal milik operator ini dulu (untuk tanggal ini)
-      const { data: jadwalData, error: errJadwal } = await supabase
+      // 1. Ambil jadwal tanggal ini, lalu saring pemiliknya (data lama bisa
+      //    operator_id NULL sehingga pemilik dilihat dari kapal).
+      const { data: jadwalSemua, error: errJadwal } = await supabase
         .from('jadwal')
-        .select('id, harga, tanggal, jam_berangkat, rute_asal, rute_tujuan, kapal_id')
+        .select('id, harga, tanggal, jam_berangkat, rute_asal, rute_tujuan, kapal_id, operator_id')
         .eq('tanggal', tanggal)
         .eq('rute_asal', profile.lokasi)
-        .eq('operator_id', operatorId) // KUNCI MULTI-TENANT
 
       if (errJadwal) {
         setError('Gagal memuat jadwal: ' + errJadwal.message)
         return
       }
 
-      if (!jadwalData || jadwalData.length === 0) {
+      const petaOperatorKapal = await ambilOperatorKapal(
+        (jadwalSemua || []).map((j: any) => j.kapal_id)
+      )
+      const jadwalData = (jadwalSemua || []).filter((j: any) =>
+        cocokOperator(j, operatorId, petaOperatorKapal)
+      )
+
+      if (jadwalData.length === 0) {
         setLaporan([])
         return
       }

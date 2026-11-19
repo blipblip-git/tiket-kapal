@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase, getProfile, getOperatorSession, type Profile } from '@/lib/supabase'
+import { idOperator, cocokOperator } from '@/lib/tenant'
 
 type DataRute = {
   dewasa: number
@@ -64,7 +65,7 @@ export default function LaporanGabunganPage() {
       if (!profile || !tanggal) return
       setLoading(true)
       
-      const operatorId = profile.role !== 'superadmin' ? (profile.operator_id || profile.id) : null
+      const operatorId = idOperator(profile)
 
       let queryPesanan = supabase
         .from('pesanan')
@@ -78,24 +79,23 @@ export default function LaporanGabunganPage() {
 
       if (error) { setError('Gagal memuat laporan: ' + error.message); setLoading(false); return }
 
+      // Peta kapal dipakai dua-duanya: nama kapal + pemilik data lama (operator_id NULL).
+      const kapalIds = [...new Set((pesananData || []).map((p: any) => p.jadwal?.kapal_id).filter(Boolean) || [])]
+      const kapalMap = new Map()
+      const petaOperatorKapal = new Map<string, string | null>()
+      if (kapalIds.length > 0) {
+        const { data: kapalData } = await supabase.from('kapal').select('id, nama, operator_id').in('id', kapalIds)
+        kapalData?.forEach((k: any) => {
+          kapalMap.set(k.id, k.nama)
+          petaOperatorKapal.set(k.id, k.operator_id || null)
+        })
+      }
+
       const filteredPesanan = (pesananData || []).filter((item: any) => {
         if (!item.jadwal) return false;
-        
-        let cocokOperator = true
-        if (operatorId && item.jadwal.operator_id) {
-          cocokOperator = item.jadwal.operator_id === operatorId
-        }
-        
-        return cocokOperator;
+        return cocokOperator(item.jadwal, operatorId, petaOperatorKapal)
       })
 
-      const kapalIds = [...new Set(filteredPesanan.map((p: any) => p.jadwal?.kapal_id).filter(Boolean) || [])]
-      const kapalMap = new Map()
-      if (kapalIds.length > 0) {
-        let queryKapal = supabase.from('kapal').select('id, nama').in('id', kapalIds)
-        const { data: kapalData } = await queryKapal
-        kapalData?.forEach((k: any) => kapalMap.set(k.id, k.nama))
-      }
 
       const jamSet = new Set<string>()
       filteredPesanan.forEach((item: any) => jamSet.add(item.jadwal.jam_berangkat.substring(0, 5)))

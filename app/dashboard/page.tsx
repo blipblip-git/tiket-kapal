@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase, getProfile, getOperatorSession, ambilNamaPerusahaan, type Profile } from '@/lib/supabase'
+import { idOperator, ambilOperatorKapal, cocokOperator } from '@/lib/tenant'
 import DashboardHeader from '@/components/DashboardHeader'
 
 type StatistikRute = {
@@ -76,24 +77,23 @@ export default function DashboardAdminPage() {
         .from('pesanan')
         .select(`
           id, is_balita,
-          jadwal:jadwal_id ( tanggal, harga, rute_asal, rute_tujuan, operator_id )
+          jadwal:jadwal_id ( tanggal, harga, rute_asal, rute_tujuan, kapal_id, operator_id )
         `)
         .eq('status', 'paid')
         .eq('jadwal.tanggal', hariIni)
 
-      const operatorId = p.operator_id || p.id
-      
+      const operatorId = idOperator(p)
+      // Data lama bisa punya operator_id NULL — pemiliknya ditentukan dari kapal.
+      const petaOperatorKapal = await ambilOperatorKapal(
+        (pesananHariIni || []).map((item: any) => item.jadwal?.kapal_id)
+      )
+
       const ruteMap: Record<string, StatistikRute> = {}
 
       if (pesananHariIni) {
         pesananHariIni.forEach((item: any) => {
           if (!item.jadwal) return;
-          
-          let cocokOperator = true
-          if (operatorId && item.jadwal.operator_id) {
-            cocokOperator = item.jadwal.operator_id === operatorId
-          }
-          if (!cocokOperator) return;
+          if (!cocokOperator(item.jadwal, operatorId, petaOperatorKapal)) return;
 
           const namaRute = `${item.jadwal.rute_asal} - ${item.jadwal.rute_tujuan}`
           

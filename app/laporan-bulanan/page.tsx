@@ -3,6 +3,7 @@
 import { useEffect, useState, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { supabase, getProfile, getOperatorSession, type Profile } from '@/lib/supabase'
+import { idOperator, ambilOperatorKapal, cocokOperator } from '@/lib/tenant'
 import {
   NAMA_BULAN,
   bulanSekarang,
@@ -66,11 +67,11 @@ function LaporanBulananContent() {
 
       const tanggalList = daftarTanggalBulan(bulanAktif)
       // KUNCI MULTI-TENANT: operator hanya boleh melihat data miliknya sendiri
-      const operatorId = profile.role !== 'superadmin' ? (profile.operator_id || profile.id) : null
+      const operatorId = idOperator(profile)
 
       const { data, error: errPesanan } = await supabase
         .from('pesanan')
-        .select('id, is_balita, induk_id, jadwal:jadwal_id(rute_asal, rute_tujuan, harga, tanggal, operator_id)')
+        .select('id, is_balita, induk_id, jadwal:jadwal_id(rute_asal, rute_tujuan, harga, tanggal, kapal_id, operator_id)')
         .eq('status', 'paid')
         .eq('jadwal.rute_asal', lokasiParam)
         .gte('jadwal.tanggal', tanggalList[0])
@@ -83,13 +84,18 @@ function LaporanBulananContent() {
         return
       }
 
+      // Pemilik data lama ditentukan dari kapal (jadwal.operator_id bisa NULL).
+      const petaOperatorKapal = await ambilOperatorKapal(
+        (data || []).map((item: any) => item.jadwal?.kapal_id)
+      )
+
       const mapTanggal: { [tanggal: string]: BarisBulanan } = {}
       tanggalList.forEach((t) => { mapTanggal[t] = { tanggal: t, kursi: 0, tiket: 0 } })
 
       ;(data || []).forEach((item: any) => {
         const jadwal = item.jadwal
         if (!jadwal || !jadwal.tanggal) return
-        if (operatorId && jadwal.operator_id && jadwal.operator_id !== operatorId) return
+        if (!cocokOperator(jadwal, operatorId, petaOperatorKapal)) return
 
         if (!mapTanggal[jadwal.tanggal]) {
           mapTanggal[jadwal.tanggal] = { tanggal: jadwal.tanggal, kursi: 0, tiket: 0 }
