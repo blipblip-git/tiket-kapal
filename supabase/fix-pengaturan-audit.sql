@@ -51,6 +51,15 @@ from public.profiles p
 where a.petugas_id = p.id
   and (a.petugas_email is null or a.petugas_email = '' or a.petugas_email = 'unknown');
 
+-- Backfill lewat email admin (akun lama yang petugas_id-nya sudah dihapus).
+update public.audit_log a
+set operator_id = p.id
+from public.profiles p
+where a.operator_id is null
+  and p.role = 'admin_utama'
+  and p.email is not null
+  and lower(a.petugas_email) = lower(p.email);
+
 -- 2b. Log lama dari akun yang sudah DIHAPUS (petugas_id tidak ada di profiles).
 -- Petakan lewat kursi penumpang -> jadwal.operator_id.
 update public.audit_log a
