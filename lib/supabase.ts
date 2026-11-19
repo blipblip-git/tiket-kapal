@@ -78,6 +78,7 @@ export type AuditLog = {
   aksi: string
   detail: any
   waktu: string
+  operator_id: string | null
 }
 
 // ==================== GET PROFILE (KHUSUS ADMIN) ====================
@@ -205,22 +206,47 @@ export async function catatAudit(
   detail?: Record<string, unknown>
 ): Promise<void> {
   try {
-    await supabase.from('audit_log').insert({
+    // operator_id wajib ikut supaya log bisa difilter per penyewa di /audit.
+    // Sesi lama belum tentu membawa operator_id, jadi ambil ulang dari DB.
+    let operatorId = petugas.operator_id || null
+    if (!operatorId && petugas.id) {
+      const { data } = await supabase
+        .from('profiles')
+        .select('operator_id')
+        .eq('id', petugas.id)
+        .maybeSingle()
+      operatorId = data?.operator_id || null
+    }
+
+    // Banyak akun login pakai nomor HP (kolom email NULL). Jangan tulis "unknown".
+    const identitas =
+      petugas.email || petugas.nomor_hp || petugas.nama || 'unknown'
+
+    const { error } = await supabase.from('audit_log').insert({
       petugas_id: petugas.id,
-      petugas_email: petugas.email || 'unknown',
+      petugas_email: identitas,
       aksi,
       detail: detail || null,
+      operator_id: operatorId || (petugas.role === 'admin_utama' ? petugas.id : null),
     })
+
+    // PostgREST mengembalikan error lewat objek, bukan throw — jangan ditelan.
+    if (error) console.error('Gagal catat audit:', error.message)
   } catch (err) {
     console.error('Gagal catat audit:', err)
   }
 }
 
 // ==================== AMBIL PENGATURAN SISTEM ====================
-export async function ambilPengaturan() {
-  const { data, error } = await supabase
-    .from('pengaturan_sistem')
-    .select('*')
+// Wajib per operator (penyewa). Tanpa operatorId hanya dipakai sebagai fallback
+// untuk data lama yang belum punya operator_id.
+export async function ambilPengaturan(operatorId?: string | null) {
+  let query = supabase.from('pengaturan_sistem').select('*')
+
+  if (operatorId) query = query.eq('operator_id', operatorId)
+
+  const { data, error } = await query
+    .order('updated_at', { ascending: false })
     .limit(1)
     .maybeSingle()
 
@@ -230,18 +256,33 @@ export async function ambilPengaturan() {
 
 // ==================== CEK AUTO-LOGOUT ====================
 export async function cekAutoLogout(profile: Profile): Promise<boolean> {
-  if (profile.role === 'admin_utama') return false
+  if (!profile || profile.role === 'admin_utama') return false
   if (profile.auto_logout === false) return false
 
-  const pengaturan = await ambilPengaturan()
+  // Sesi dari /login tidak membawa auto_logout & jam override, ambil yang terbaru.
+  let data = profile
+  if (!data.operator_id || typeof data.auto_logout === 'undefined') {
+    const { data: terbaru } = await supabase
+      .from('profiles')
+      .select('operator_id, auto_logout, jam_selesai_kerja_override, aktif')
+      .eq('id', profile.id)
+      .maybeSingle()
+
+    if (terbaru) data = { ...profile, ...terbaru } as Profile
+  }
+
+  if (data.auto_logout === false) return false
+
+  const operatorId = data.operator_id || data.id
+  const pengaturan = await ambilPengaturan(operatorId)
   if (!pengaturan) return false
   if (pengaturan.auto_logout_aktif === false) return false
 
-  const jamSelesai = profile.jam_selesai_kerja_override || pengaturan.jam_selesai_kerja
+  const jamSelesai = data.jam_selesai_kerja_override || pengaturan.jam_selesai_kerja
   if (!jamSelesai) return false
 
   const sekarang = new Date()
-  const [jamH, jamM] = jamSelesai.split(':').map(Number)
+  const [jamH, jamM] = String(jamSelesai).split(':').map(Number)
   const targetSelesai = new Date()
   targetSelesai.setHours(jamH, jamM, 0, 0)
 

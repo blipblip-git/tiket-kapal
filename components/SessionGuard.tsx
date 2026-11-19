@@ -2,7 +2,13 @@
 
 import { useEffect } from 'react'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
-import { cekValidasiSesi, supabase } from '@/lib/supabase'
+import {
+  cekValidasiSesi,
+  cekAutoLogout,
+  getOperatorSession,
+  logoutOperator,
+  supabase,
+} from '@/lib/supabase'
 
 export default function SessionGuard() {
   const pathname = usePathname()
@@ -34,17 +40,22 @@ export default function SessionGuard() {
       return
     }
 
-    // 3. CEK SESSION SUPABASE (UNTUK SUPERADMIN)
+    // 3. CEK SESI LOKAL (PETUGAS/AGEN) DULU: single session + auto-logout jam kerja
+    const sesiLokal = getOperatorSession()
+    if (sesiLokal) {
+      cekAutoLogout(sesiLokal).then((harusLogout) => {
+        if (harusLogout) {
+          console.log('Jam kerja selesai, auto-logout petugas...')
+          logoutOperator()
+        }
+      })
+      return
+    }
+
+    // 4. CEK SESSION SUPABASE (UNTUK SUPERADMIN)
     // Kalau ada sesi Supabase Auth yang valid, berarti dia Superadmin/Admin Utama. Biarkan lewat.
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (session) return
-
-      // 4. JIKA TIDAK ADA SESI SUPABASE, CEK SESSION LOKAL (PETUGAS/AGEN)
-      const sesiLokal = typeof window !== 'undefined' ? localStorage.getItem('petugas_session') : null
-
-      if (sesiLokal) {
-        return
-      }
 
       // 5. JIKA DUA-DUANYA KOSONG, BARU CEK VALIDASI & TENDANG KE LOGIN
       cekValidasiSesi().then((isValid) => {

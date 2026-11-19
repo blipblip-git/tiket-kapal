@@ -32,17 +32,27 @@ export default function PengaturanPage() {
       setProfile(p)
 
       // 2. Ambil Pengaturan Milik Operator Ini Saja
-      const { data: setting } = await supabase
+      const { data: setting, error: errSetting } = await supabase
         .from('pengaturan_sistem')
         .select('*')
         .eq('operator_id', p.id) // <-- DINDING PEMISAH
+        .order('updated_at', { ascending: false })
+        .limit(1)
         .maybeSingle()
+
+      if (errSetting) {
+        // Biasanya karena tabel belum di-GRANT / RLS masih aktif.
+        setPesan({
+          tipe: 'err',
+          teks: 'Gagal memuat pengaturan: ' + errSetting.message + ' (jalankan supabase/fix-pengaturan-audit.sql di Supabase)',
+        })
+      }
 
       if (setting) {
         setSettingId(setting.id)
-        setJamMulai(setting.jam_mulai_kerja.slice(0, 5))
-        setJamSelesai(setting.jam_selesai_kerja.slice(0, 5))
-        setAutoLogoutAktif(setting.auto_logout_aktif)
+        setJamMulai((setting.jam_mulai_kerja || '06:00').slice(0, 5))
+        setJamSelesai((setting.jam_selesai_kerja || '17:00').slice(0, 5))
+        setAutoLogoutAktif(setting.auto_logout_aktif !== false)
       }
       setLoading(false)
     }
@@ -70,6 +80,7 @@ export default function PengaturanPage() {
         .from('pengaturan_sistem')
         .update(payload)
         .eq('id', settingId)
+        .eq('operator_id', profile.id)
 
       if (error) {
         setPesan({ tipe: 'err', teks: 'Gagal menyimpan: ' + error.message })

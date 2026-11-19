@@ -88,6 +88,9 @@ export default function AuditPage() {
   function labelAksi(aksi: string) {
     const map: Record<string, string> = {
       konfirmasi_cash: '💵 Konfirmasi Cash',
+      jual_langsung_loket: '🎟️ Jual Langsung Loket',
+      jual_langsung_agen: '🎟️ Jual Langsung Agen',
+      force_majeure_refund: '⚠️ Force Majeure / Refund',
       close_jadwal: '🔒 Close Jadwal',
       print_tiket: '🖨️ Print Tiket',
       tutup_shift: '🚪 Tutup Shift',
