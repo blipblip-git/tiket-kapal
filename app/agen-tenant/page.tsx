@@ -3,6 +3,7 @@
 import { useEffect, useState, Suspense } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase, getProfile, getOperatorSession, type Profile } from '@/lib/supabase'
+import { fieldPasswordBaru } from '@/lib/password'
 
 type Agen = {
   id: string
@@ -11,7 +12,8 @@ type Agen = {
   nomor_hp: string
   lokasi: string
   aktif: boolean
-  password_plain: string
+  password_hash?: string | null
+  password_plain?: string | null
 }
 
 function AgenTenantContent() {
@@ -82,7 +84,7 @@ function AgenTenantContent() {
     setNama(a.nama)
     setNomorHp(a.nomor_hp || '')
     setLokasi(a.lokasi || 'Tarakan')
-    setPassword(a.password_plain || '')
+    setPassword('') // password lama tidak bisa ditampilkan (sudah di-hash)
     setAktif(a.aktif)
     setShowForm(true)
   }
@@ -100,7 +102,7 @@ function AgenTenantContent() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!profile) return
-    if (!nama || !nomorHp || !password) {
+    if (!nama || !nomorHp || (!editId && !password)) {
       setError('Nama, No HP, dan Password wajib diisi')
       return
     }
@@ -109,15 +111,20 @@ function AgenTenantContent() {
     setError('')
 
     try {
-      const payload = {
+      const payload: Record<string, any> = {
         id: crypto.randomUUID(), // Generate UUID otomatis
         nama,
         nomor_hp: nomorHp,
         lokasi,
         role: 'agen',
         aktif,
-        password_plain: password,
         operator_id: profile.id
+      }
+
+      // Password disimpan sebagai hash. Saat edit, kolom password dikosongkan
+      // berarti password lama TIDAK diubah.
+      if (password) {
+        Object.assign(payload, await fieldPasswordBaru(password))
       }
 
       if (editId) {
@@ -183,7 +190,8 @@ function AgenTenantContent() {
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Password *</label>
-                  <input type="text" value={password} onChange={e => setPassword(e.target.value)} className="w-full border rounded-md px-3 py-2 text-gray-900 focus:ring-purple-500 focus:border-purple-500" placeholder="Password untuk login" required />
+                  <input type="text" value={password} onChange={e => setPassword(e.target.value)} className="w-full border rounded-md px-3 py-2 text-gray-900 focus:ring-purple-500 focus:border-purple-500" placeholder={editId ? 'Kosongkan jika tidak ganti password' : 'Password untuk login'} required={!editId} />
+                  {editId && <p className="text-xs text-gray-500 mt-1">Password lama tidak bisa dilihat. Isi hanya kalau mau mengganti.</p>}
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Lokasi Operasional</label>

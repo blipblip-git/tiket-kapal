@@ -2,7 +2,6 @@
 
 import { useState, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { supabase } from '@/lib/supabase'
 
 function LoginContent() {
   const router = useRouter()
@@ -23,45 +22,23 @@ function LoginContent() {
 
     const inputLogin = noHp.trim()
     
-    // LOGIKA BARU: Cari berdasarkan nomor_hp ATAU email (tanpa nambahin @petugas.local)
+    // Login diproses di server (/api/auth/login) — password dicek ke hash di server.
     try {
-      const { data, error } = await supabase
-        .from('profiles')
-        .select('*')
-        .or(`nomor_hp.eq.${inputLogin},email.eq.${inputLogin}`)
-        .maybeSingle()
-      
-      if (error || !data) { 
-        setPesan('Akun tidak terdaftar. Pastikan Nomor HP benar.'); 
-        setLoading(false); 
-        return 
-      }
-      
-      if (!data.aktif) { 
-        setPesan('Akun dinonaktifkan.'); 
-        setLoading(false); 
-        return 
-      }
-      
-      if (data.password_plain !== password) { 
-        setPesan('Password salah.'); 
-        setLoading(false); 
-        return 
+      const response = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ identifier: inputLogin, password })
+      })
+
+      const hasil = await response.json()
+
+      if (!response.ok) {
+        setPesan(hasil.error || 'Login gagal. Coba lagi.')
+        setLoading(false)
+        return
       }
 
-      if (data.sesi_aktif) {
-        const lastUpdate = data.updated_at ? new Date(data.updated_at).getTime() : 0;
-        const now = new Date().getTime();
-        const diffSeconds = (now - lastUpdate) / 1000;
-
-        if (diffSeconds < 30) {
-          setPesan('Akun ini sedang aktif di perangkat lain. Silakan tunggu 30 detik lalu coba lagi.');
-          setLoading(false);
-          return;
-        }
-      }
-      
-      await supabase.from('profiles').update({ sesi_aktif: true, updated_at: new Date().toISOString() }).eq('id', data.id);
+      const data = hasil.profile
 
       localStorage.setItem('petugas_session', JSON.stringify({
         id: data.id, nama: data.nama, role: data.role, lokasi: data.lokasi, unit: data.unit,

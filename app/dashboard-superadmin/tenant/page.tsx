@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase, getProfile, type Profile } from '@/lib/supabase'
+import { fieldPasswordBaru } from '@/lib/password'
 
 type AdminKapal = {
   id: string
@@ -107,7 +108,7 @@ export default function ManajemenTenantPage() {
         nama_akun: formNamaAkun,
         nama_perusahaan: formNamaPerusahaan,
         role: 'admin_utama',
-        password_plain: formPassword,
+        ...(await fieldPasswordBaru(formPassword)),
         nomor_hp: formNoWa,
         aktif: true,
       })
@@ -174,7 +175,7 @@ export default function ManajemenTenantPage() {
 
     const { error: updateError } = await supabase
       .from('profiles')
-      .update({ password_plain: newPass })
+      .update(await fieldPasswordBaru(newPass))
       .eq('id', target.id)
 
     if (updateError) {
@@ -189,23 +190,26 @@ export default function ManajemenTenantPage() {
   }
 
   async function handleHapusTenant(target: AdminKapal) {
-    const konfirmasi1 = confirm(`⚠️ PERINGATAN KERAS ⚠️\n\nApakah Anda yakin ingin menghapus akun Admin Kapal "${target.nama_perusahaan || target.nama}" (${target.email})?\n\nSemua data terkait (laporan, jadwal, dll) mungkin akan kehilangan akses. Tindakan ini TIDAK BISA DIBATALKAN.`)
-    
-    if (!konfirmasi1) return
+    const akanAktifkan = !target.aktif
+    const konfirmasi = confirm(akanAktifkan
+      ? `Aktifkan kembali akun "${target.nama_perusahaan || target.nama}" (${target.email})?`
+      : `Nonaktifkan akun Admin Kapal "${target.nama_perusahaan || target.nama}" (${target.email})?\n\nAkun tidak bisa login, TAPI semua data kapal, jadwal, dan laporan tetap tersimpan dan bisa diaktifkan kembali.`)
 
-    const konfirmasi2 = confirm(`KONFIRMASI KEDUA:\n\nKetik OK untuk menghapus permanen akun ${target.email}?`)
-    if (!konfirmasi2) return
+    if (!konfirmasi) return
 
     setPesan('')
+    // Soft delete: jangan hapus baris profiles supaya data tenant tidak yatim.
     const { error } = await supabase
       .from('profiles')
-      .delete()
+      .update({ aktif: akanAktifkan, sesi_aktif: false })
       .eq('id', target.id)
 
     if (error) {
-      setPesan('Gagal menghapus akun: ' + error.message)
+      setPesan('Gagal mengubah status akun: ' + error.message)
     } else {
-      setPesan(`Akun ${target.email} berhasil dihapus.`)
+      setPesan(akanAktifkan
+        ? `Akun ${target.email} diaktifkan kembali.`
+        : `Akun ${target.email} dinonaktifkan. Data tenant tetap tersimpan.`)
       await fetchTenants()
     }
   }
@@ -360,7 +364,7 @@ export default function ManajemenTenantPage() {
                           onClick={() => handleHapusTenant(t)}
                           className="bg-red-600 text-white px-2 py-1 rounded text-xs hover:bg-red-500 font-bold"
                         >
-                          🗑️ Hapus
+                          🗑️ {t.aktif ? 'Nonaktifkan' : 'Aktifkan'}
                         </button>
                       </div>
                     </td>

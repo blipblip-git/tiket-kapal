@@ -16,7 +16,8 @@ export type Profile = {
   aktif: boolean
   dinonaktifkan_oleh: string | null
   waktu_dinonaktifkan: string | null
-  password_plain: string | null
+  password_plain: string | null // kolom lama (plaintext), hanya untuk migrasi akun lama
+  password_hash?: string | null // hash PBKDF2, dipakai login sekarang
   email_dummy: string | null
   auto_logout: boolean
   jam_selesai_kerja_override: string | null

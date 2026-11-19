@@ -73,6 +73,17 @@ export default function DaftarPenyewaPage() {
     setIsModalOpen(true)
   }
 
+  async function headerSuperadmin() {
+    const { data: { session } } = await supabase.auth.getSession()
+    if (!session?.access_token) {
+      throw new Error('Sesi Superadmin tidak ditemukan. Login ulang di /superadmin.')
+    }
+    return {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${session.access_token}`
+    }
+  }
+
   async function handleSimpan(e: React.FormEvent) {
     e.preventDefault()
     setIsSubmitting(true)
@@ -94,7 +105,7 @@ export default function DaftarPenyewaPage() {
       } else {
         const response = await fetch('/api/superadmin/tambah-penyewa', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: await headerSuperadmin(),
           body: JSON.stringify(formData)
         })
         const result = await response.json()
@@ -111,21 +122,26 @@ export default function DaftarPenyewaPage() {
     }
   }
 
-  async function handleHapus(id: string, nama: string) {
-    if (!confirm(`Yakin mau hapus penyewa ${nama}? Akses login mereka akan hilang selamanya.`)) return
-    
+  async function handleUbahStatus(p: Penyewa) {
+    const akanAktifkan = !p.aktif
+    const pesanKonfirmasi = akanAktifkan
+      ? `Aktifkan kembali penyewa ${p.nama}? Mereka bisa login lagi.`
+      : `Nonaktifkan akses login ${p.nama}?\n\nData kapal, jadwal, dan laporan TETAP TERSIMPAN dan bisa diaktifkan kembali.`
+
+    if (!confirm(pesanKonfirmasi)) return
+
     try {
-      const response = await fetch('/api/superadmin/hapus-penyewa', {
+      const response = await fetch('/api/superadmin/status-penyewa', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id })
+        headers: await headerSuperadmin(),
+        body: JSON.stringify({ id: p.id, aktif: akanAktifkan })
       })
       const result = await response.json()
-      if (!response.ok) throw new Error(result.error || 'Gagal menghapus')
-      alert('Penyewa berhasil dihapus.')
+      if (!response.ok) throw new Error(result.error || 'Gagal mengubah status')
+      alert(result.message || 'Status penyewa berhasil diubah.')
       fetchPenyewa()
     } catch (err: any) {
-      alert('Gagal menghapus: ' + err.message)
+      alert('Gagal mengubah status: ' + err.message)
     }
   }
 
@@ -185,7 +201,9 @@ export default function DaftarPenyewaPage() {
                       <td className="px-6 py-4">{new Date(p.created_at).toLocaleDateString('id-ID')}</td>
                       <td className="px-6 py-4 text-center">
                         <button onClick={() => handleBukaEdit(p)} className="text-blue-400 hover:text-blue-300 text-xs font-medium mr-3">Edit</button>
-                        <button onClick={() => handleHapus(p.id, p.nama)} className="text-red-400 hover:text-red-300 text-xs font-medium">Hapus</button>
+                        <button onClick={() => handleUbahStatus(p)} className={p.aktif ? 'text-red-400 hover:text-red-300 text-xs font-medium' : 'text-green-400 hover:text-green-300 text-xs font-medium'}>
+                          {p.aktif ? 'Nonaktifkan' : 'Aktifkan'}
+                        </button>
                       </td>
                     </tr>
                   ))

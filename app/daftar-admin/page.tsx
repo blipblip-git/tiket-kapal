@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
+import { fieldPasswordBaru } from '@/lib/password'
 import Link from 'next/link'
 
 export default function DaftarAdminPage() {
@@ -72,7 +73,7 @@ export default function DaftarAdminPage() {
         nama: namaAkun, // Nama tampilan diambil dari nama akun
         nama_akun: namaAkun,
         role: 'admin_utama',
-        password_plain: password,
+        ...(await fieldPasswordBaru(password)),
         nomor_hp: nomorWa,
         aktif: true,
       })

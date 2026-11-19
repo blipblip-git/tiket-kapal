@@ -1,8 +1,15 @@
 import { NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
+import { wajibSuperadmin } from '@/lib/serverAuth'
+import { hashPasswordServer, kolomPasswordHashBelumAda } from '@/lib/passwordServer'
+
 
 export async function POST(request: Request) {
   try {
+    // WAJIB: hanya Superadmin yang login lewat /superadmin yang boleh tambah penyewa.
+    const auth = await wajibSuperadmin(request)
+    if (!auth.ok) return auth.response
+    const { admin } = auth
+
     const body = await request.json()
     const { email, password, nama, nama_perusahaan, nomor_hp } = body
 
@@ -10,28 +17,18 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Data tidak lengkap' }, { status: 400 })
     }
 
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
-    const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
-
-    if (!supabaseUrl) {
-      return NextResponse.json({ error: 'NEXT_PUBLIC_SUPABASE_URL belum diset di server' }, { status: 500 })
+    const emailBersih = String(email).trim().toLowerCase()
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailBersih)) {
+      return NextResponse.json({ error: 'Format email tidak valid' }, { status: 400 })
     }
 
-    if (!serviceKey) {
-      // Env var ini wajib ada di Environment Variables Vercel, bukan cuma di .env.local lokal.
-      console.error('tambah-penyewa: SUPABASE_SERVICE_ROLE_KEY kosong di server')
-      return NextResponse.json({
-        error: 'SUPABASE_SERVICE_ROLE_KEY belum diset di server (Vercel -> Settings -> Environment Variables)'
-      }, { status: 500 })
+    if (String(password).length < 6) {
+      return NextResponse.json({ error: 'Password minimal 6 karakter' }, { status: 400 })
     }
 
-    const supabaseAdmin = createClient(supabaseUrl, serviceKey, {
-      auth: { autoRefreshToken: false, persistSession: false }
-    })
-
-    const { data: authData, error: authError } = await supabaseAdmin.auth.admin.createUser({
-      email: email,
-      password: password,
+    const { data: authData, error: authError } = await admin.auth.admin.createUser({
+      email: emailBersih,
+      password: String(password),
       email_confirm: true,
     })
 
@@ -39,21 +36,38 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Auth Error: ' + authError.message }, { status: 400 })
     }
 
-    const { error: profileError } = await supabaseAdmin
+    const profilDasar = {
+      id: authData.user.id,
+      email: emailBersih,
+      nama: String(nama).trim(),
+      nama_perusahaan: nama_perusahaan ? String(nama_perusahaan).trim() : null,
+      nomor_hp: nomor_hp ? String(nomor_hp).trim() : null,
+      role: 'admin_utama',
+      aktif: true,
+    }
+
+    // Password TIDAK disimpan sebagai teks biasa.
+    let profileError = (await admin
       .from('profiles')
-      .insert({
-        id: authData.user.id,
-        email: email.trim().toLowerCase(),
-        nama: nama.trim(),
-        nama_perusahaan: nama_perusahaan ? nama_perusahaan.trim() : null,
-        nomor_hp: nomor_hp ? nomor_hp.trim() : null,
-        role: 'admin_utama',
-        aktif: true,
-        password_plain: password
-      })
+      .insert({ ...profilDasar, password_hash: hashPasswordServer(String(password)) })
+    ).error
+
+    if (!profileError) {
+      // Best-effort: bersihkan plaintext lama kalau kolomnya masih ada.
+      await admin.from('profiles').update({ password_plain: null }).eq('id', authData.user.id)
+    }
+
+    // Kalau SQL migrasi belum dijalankan, tetap jalan dengan cara lama.
+    if (profileError && kolomPasswordHashBelumAda(profileError)) {
+      console.warn('tambah-penyewa: kolom password_hash belum ada, fallback sementara ke password_plain')
+      profileError = (await admin
+        .from('profiles')
+        .insert({ ...profilDasar, password_plain: String(password) })
+      ).error
+    }
 
     if (profileError) {
-      await supabaseAdmin.auth.admin.deleteUser(authData.user.id)
+      await admin.auth.admin.deleteUser(authData.user.id)
       return NextResponse.json({ error: 'Profile Error: ' + profileError.message }, { status: 500 })
     }
 

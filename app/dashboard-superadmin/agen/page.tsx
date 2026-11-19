@@ -3,12 +3,14 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase, type Profile } from '@/lib/supabase'
+import { fieldPasswordBaru } from '@/lib/password'
 
 type Agen = {
   id: string
   nama: string
   email: string
-  password_plain: string
+  password_hash?: string | null
+  password_plain?: string | null
   nomor_hp: string | null
   lokasi: string | null
   aktif: boolean
@@ -104,7 +106,7 @@ export default function ManajemenAgenPage() {
       role: 'agen', 
       lokasi: inputLokasi, 
       aktif: true, 
-      password_plain: inputPass,
+      ...(await fieldPasswordBaru(inputPass)),
       nomor_hp: inputHp
     })
 
@@ -126,23 +128,29 @@ export default function ManajemenAgenPage() {
     e.preventDefault()
     if (!modalEdit) return
     setPesan(null)
-    if (!inputNama || !inputHp || !inputPass) {
-      setPesan({ tipe: 'err', teks: 'Nama, No HP, dan Password wajib diisi.' })
+    if (!inputNama || !inputHp) {
+      setPesan({ tipe: 'err', teks: 'Nama dan No HP wajib diisi.' })
       return
     }
 
     setModalLoading(true)
     const v_email = inputHp + '@petugas.local'
 
+    const updateData: Record<string, any> = {
+      nama: inputNama,
+      email: v_email,
+      lokasi: inputLokasi,
+      nomor_hp: inputHp
+    }
+
+    // Password hanya diganti kalau kolomnya diisi.
+    if (inputPass) {
+      Object.assign(updateData, await fieldPasswordBaru(inputPass))
+    }
+
     const { error } = await supabase
       .from('profiles')
-      .update({
-        nama: inputNama,
-        email: v_email,
-        lokasi: inputLokasi,
-        password_plain: inputPass,
-        nomor_hp: inputHp
-      })
+      .update(updateData)
       .eq('id', modalEdit.id)
 
     setModalLoading(false)
@@ -177,7 +185,7 @@ export default function ManajemenAgenPage() {
     setModalEdit(a)
     setInputNama(a.nama)
     setInputHp(a.nomor_hp || a.email.replace('@petugas.local', ''))
-    setInputPass(a.password_plain || '')
+    setInputPass('') // password lama tidak bisa ditampilkan (sudah di-hash)
     setInputLokasi(a.lokasi || 'Tarakan')
   }
 
@@ -186,7 +194,7 @@ export default function ManajemenAgenPage() {
     if (noHp.startsWith('0')) {
       noHp = '62' + noHp.slice(1)
     }
-    const pesan = `Halo ${a.nama}, ini pesan dari Admin Platform. Berikut informasi akun Agen Anda:\n\nNama Agen: ${a.nama}\nLogin (No HP): ${a.nomor_hp || a.email.replace('@petugas.local', '')}\nPassword: ${a.password_plain || '(belum di-set)'}\n\nSilakan login di menu Petugas/Agen dan jangan bagikan password ini.`
+    const pesan = `Halo ${a.nama}, ini pesan dari Admin Platform. Berikut informasi akun Agen Anda:\n\nNama Agen: ${a.nama}\nLogin (No HP): ${a.nomor_hp || a.email.replace('@petugas.local', '')}\n\nPassword TIDAK bisa dikirim lewat chat demi keamanan. Silakan hubungi Admin Platform untuk reset password bila lupa.`
     const url = `https://wa.me/${noHp}?text=${encodeURIComponent(pesan)}`
     window.open(url, '_blank')
   }
@@ -248,7 +256,7 @@ export default function ManajemenAgenPage() {
                   <td className="px-4 py-3 font-bold text-white">{a.nama}</td>
                   <td className="px-4 py-3 text-gray-300">
                     <div>{a.nomor_hp || a.email.replace('@petugas.local', '')}</div>
-                    <div className="text-xs text-gray-500">{a.password_plain}</div>
+                    <div className="text-xs text-gray-500">{a.password_hash || a.password_plain ? '•••••••• (tersimpan aman)' : '-'}</div>
                   </td>
                   <td className="px-4 py-3 text-center text-gray-300">{a.lokasi || '-'}</td>
                   <td className="px-4 py-3 text-center">
@@ -322,7 +330,8 @@ export default function ManajemenAgenPage() {
               </select>
 
               <label className="block text-sm font-medium text-gray-300 mb-1">Password</label>
-              <input type="text" value={inputPass} onChange={(e) => setInputPass(e.target.value)} className="w-full border border-gray-600 rounded bg-gray-700 px-3 py-2 mb-6 text-white focus:outline-none focus:border-blue-500" required />
+              <input type="text" value={inputPass} onChange={(e) => setInputPass(e.target.value)} className="w-full border border-gray-600 rounded bg-gray-700 px-3 py-2 mb-6 text-white focus:outline-none focus:border-blue-500" placeholder="Kosongkan jika tidak ganti password" />
+              <p className="text-xs text-gray-400 -mt-5 mb-4">Password lama tidak bisa dilihat. Isi hanya kalau mau mengganti.</p>
 
               <div className="flex justify-end gap-2">
                 <button type="button" onClick={() => setModalEdit(null)} className="px-4 py-2 text-gray-300 hover:bg-gray-700 rounded">Batal</button>

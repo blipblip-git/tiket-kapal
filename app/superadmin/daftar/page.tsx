@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
+import { fieldPasswordBaru } from '@/lib/password'
 
 export default function DaftarSuperAdminPage() {
   const router = useRouter()
@@ -45,7 +46,7 @@ export default function DaftarSuperAdminPage() {
         email: email,
         nama: 'Super Admin',
         role: 'admin_utama',
-        password_plain: password,
+        ...(await fieldPasswordBaru(password)),
         nomor_hp: nomorWa,
         aktif: true,
       })

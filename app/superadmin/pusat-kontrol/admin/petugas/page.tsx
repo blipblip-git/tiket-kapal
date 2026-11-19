@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase, getProfile, getOperatorSession, type Profile } from '@/lib/supabase'
+import { fieldPasswordBaru } from '@/lib/password'
 
 type RoleType = 'terminal_keberangkatan'
 
@@ -133,7 +134,7 @@ export default function AdminPetugasPage() {
       lokasi: inputLokasi, 
       unit: inputUnit, 
       aktif: true, 
-      password_plain: inputPass,
+      ...(await fieldPasswordBaru(inputPass)),
       operator_id: me.id
     })
 
@@ -153,7 +154,7 @@ export default function AdminPetugasPage() {
     setEditId(p.id)
     setEditNama(p.nama)
     setEditHp(p.nomor_hp || '')
-    setEditPass(p.password_plain || '')
+    setEditPass('') // password lama tidak bisa ditampilkan (sudah di-hash)
     setEditLokasi((p as any).lokasi || 'Tarakan')
     setEditUnit((p as any).unit || '')
     setPesan(null)
@@ -164,22 +165,28 @@ export default function AdminPetugasPage() {
   }
 
   async function handleSimpanEdit(id: string) {
-    if (!editNama || !editHp || !editPass || !editUnit) {
-      setPesan({ tipe: 'err', teks: 'Nama, No HP, Password, dan Unit wajib diisi.' })
+    if (!editNama || !editHp || !editUnit) {
+      setPesan({ tipe: 'err', teks: 'Nama, No HP, dan Unit wajib diisi.' })
       return
     }
 
     setEditLoading(true)
 
-    // PERBAIKAN: Update email jadi null, pakai nomor_hp
-    const { error } = await supabase.from('profiles').update({
-      nama: editNama, 
+    const updateData: Record<string, any> = {
+      nama: editNama,
       nomor_hp: editHp,
       email: null,
-      lokasi: editLokasi, 
-      unit: editUnit, 
-      password_plain: editPass
-    }).eq('id', id)
+      lokasi: editLokasi,
+      unit: editUnit
+    }
+
+    // Password hanya diganti kalau kolomnya diisi.
+    if (editPass) {
+      Object.assign(updateData, await fieldPasswordBaru(editPass))
+    }
+
+    // PERBAIKAN: Update email jadi null, pakai nomor_hp
+    const { error } = await supabase.from('profiles').update(updateData).eq('id', id)
 
     setEditLoading(false)
     if (error) {
@@ -203,7 +210,7 @@ export default function AdminPetugasPage() {
       noHpMurni = '62' + noHpMurni.slice(1)
     }
     
-    const pesan = `Halo ${p.nama}, ini pesan dari Admin. Berikut informasi akun Anda:\n\nNo HP: ${p.nomor_hp || noHpMurni}\nPassword: ${p.password_plain || '(belum di-set)'}\nRole: Petugas Keberangkatan\nUnit: ${(p as any).unit || '-'}\nLokasi: ${(p as any).lokasi}\n\nSilakan login dan jangan bagikan password ini.`
+    const pesan = `Halo ${p.nama}, ini pesan dari Admin. Berikut informasi akun Anda:\n\nNo HP: ${p.nomor_hp || noHpMurni}\nRole: Petugas Keberangkatan\nUnit: ${(p as any).unit || '-'}\nLokasi: ${(p as any).lokasi}\n\nPassword TIDAK dikirim lewat chat demi keamanan. Minta Admin mereset password bila lupa.`
     const url = `https://wa.me/${noHpMurni}?text=${encodeURIComponent(pesan)}`
     window.open(url, '_blank')
   }
@@ -280,7 +287,7 @@ export default function AdminPetugasPage() {
                           <td className="px-4 py-2 text-gray-600 font-medium">Petugas Keberangkatan</td>
                           <td className="px-4 py-2 space-y-1">
                              <input type="tel" value={editHp} onChange={(e) => setEditHp(e.target.value)} className="border rounded px-2 py-1 w-full text-gray-900" />
-                             <input type="text" value={editPass} onChange={(e) => setEditPass(e.target.value)} className="border rounded px-2 py-1 w-full text-gray-900" />
+                             <input type="text" value={editPass} onChange={(e) => setEditPass(e.target.value)} className="border rounded px-2 py-1 w-full text-gray-900" placeholder="Kosongkan jika tidak ganti password" />
                           </td>
                           <td className="px-4 py-2 text-center">
                             <select value={editLokasi} onChange={(e) => setEditLokasi(e.target.value)} className="border rounded px-2 py-1 text-gray-900 w-full">
@@ -308,7 +315,7 @@ export default function AdminPetugasPage() {
                         <td className="px-4 py-3 text-gray-600">
                           {/* PERBAIKAN: Pake nomor_hp, bukan email */}
                           <div>{p.nomor_hp || '-'}</div>
-                          <div className="text-xs text-gray-400">{p.password_plain || '-'}</div>
+                          <div className="text-xs text-gray-400">{p.password_hash || p.password_plain ? '••••••••' : '-'}</div>
                         </td>
                         <td className="px-4 py-3 text-center">
                           {p.aktif ? (

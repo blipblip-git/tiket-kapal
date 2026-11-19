@@ -2,7 +2,8 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { supabase } from '@/lib/supabase'
+import { supabase, getOperatorSession } from '@/lib/supabase'
+import { fieldPasswordBaru } from '@/lib/password'
 
 export default function GantiPasswordPage() {
   const router = useRouter()
@@ -30,24 +31,40 @@ export default function GantiPasswordPage() {
       return
     }
 
-    // 1. Update password di Supabase Auth
-    const { error } = await supabase.auth.updateUser({
-      password: passwordBaru
-    })
+    // 1. Kalau akun ini juga punya Supabase Auth (Superadmin/Admin), sinkronkan password-nya
+    const { data: { user } } = await supabase.auth.getUser()
 
-    if (error) {
-      setPesan('Gagal ganti password: ' + error.message)
+    if (user) {
+      const { error } = await supabase.auth.updateUser({
+        password: passwordBaru
+      })
+
+      if (error) {
+        setPesan('Gagal ganti password: ' + error.message)
+        setLoading(false)
+        return
+      }
+    }
+
+    // 2. Simpan HASH password di tabel profiles (plaintext tidak pernah disimpan)
+    const sesiLokal = getOperatorSession()
+    const idProfil = user?.id || sesiLokal?.id
+
+    if (!idProfil) {
+      setPesan('Sesi login tidak ditemukan. Silakan login ulang.')
       setLoading(false)
       return
     }
 
-    // 2. Update password_plain di tabel profiles (untuk keperluan admin reset manual)
-    const { data: { user } } = await supabase.auth.getUser()
-    if (user) {
-      await supabase
-        .from('profiles')
-        .update({ password_plain: passwordBaru })
-        .eq('id', user.id)
+    const { error: errorHash } = await supabase
+      .from('profiles')
+      .update(await fieldPasswordBaru(passwordBaru))
+      .eq('id', idProfil)
+
+    if (errorHash) {
+      setPesan('Gagal menyimpan password baru: ' + errorHash.message)
+      setLoading(false)
+      return
     }
 
     setPesan('Password berhasil diganti! Silakan login ulang dengan password baru.')

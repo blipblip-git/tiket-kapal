@@ -1,56 +1,87 @@
 import { NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
+import { uuidValid, wajibSuperadmin } from '@/lib/serverAuth'
 
+
+/**
+ * NONAKTIFKAN penyewa (soft delete).
+ *
+ * Dulu endpoint ini MENGHAPUS baris profiles + auth.users. Akibatnya data milik
+ * penyewa (kapal, jadwal, template jadwal, pesanan, laporan) jadi yatim karena
+ * operator_id menunjuk ke akun yang sudah hilang. Sekarang akun hanya dinonaktifkan:
+ * - tidak bisa login (aktif = false)
+ * - semua data & form tetap utuh
+ * - bisa diaktifkan kembali lewat /api/superadmin/status-penyewa
+ * Superadmin & data platform tidak terpengaruh.
+ */
 export async function POST(request: Request) {
   try {
+    const auth = await wajibSuperadmin(request)
+    if (!auth.ok) return auth.response
+    const { admin, profile: superadmin } = auth
+
     const body = await request.json()
     const { id } = body
 
-    if (!id) {
-      return NextResponse.json({ error: 'ID Penyewa tidak ditemukan' }, { status: 400 })
+    if (!uuidValid(id)) {
+      return NextResponse.json({ error: 'ID Penyewa tidak valid' }, { status: 400 })
     }
 
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
-    const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+    const { data: target, error: errorCari } = await admin
+      .from('profiles')
+      .select('id, nama, role')
+      .eq('id', id)
+      .maybeSingle()
 
-    if (!supabaseUrl) {
-      return NextResponse.json({ error: 'NEXT_PUBLIC_SUPABASE_URL belum diset di server' }, { status: 500 })
+    if (errorCari) {
+      return NextResponse.json({ error: 'Gagal memeriksa penyewa: ' + errorCari.message }, { status: 500 })
     }
 
-    if (!serviceKey) {
-      // Env var ini wajib ada di Environment Variables Vercel, bukan cuma di .env.local lokal.
-      console.error('hapus-penyewa: SUPABASE_SERVICE_ROLE_KEY kosong di server')
-      return NextResponse.json({
-        error: 'SUPABASE_SERVICE_ROLE_KEY belum diset di server (Vercel -> Settings -> Environment Variables)'
-      }, { status: 500 })
+    if (!target) {
+      return NextResponse.json({ error: 'Penyewa tidak ditemukan' }, { status: 404 })
     }
 
-    // Inisialisasi Supabase Admin
-    const supabaseAdmin = createClient(supabaseUrl, serviceKey, {
-      auth: { autoRefreshToken: false, persistSession: false }
+    if ((target.role || '').trim().toLowerCase() === 'superadmin') {
+      return NextResponse.json({ error: 'Akun Superadmin tidak boleh dinonaktifkan dari sini' }, { status: 403 })
+    }
+
+    const updateData: Record<string, unknown> = {
+      aktif: false,
+      sesi_aktif: false,
+      dinonaktifkan_oleh: superadmin.nama || 'Superadmin',
+      waktu_dinonaktifkan: new Date().toISOString(),
+    }
+
+    const percobaanPertama = await admin
+      .from('profiles')
+      .update(updateData)
+      .eq('id', id)
+      .select('id')
+
+    // Kalau kolom audit (dinonaktifkan_oleh/waktu_dinonaktifkan) belum ada, tetap nonaktifkan.
+    const hasil = percobaanPertama.error &&
+      /dinonaktifkan_oleh|waktu_dinonaktifkan|does not exist|column/i.test(percobaanPertama.error.message)
+      ? await admin
+          .from('profiles')
+          .update({ aktif: false, sesi_aktif: false })
+          .eq('id', id)
+          .select('id')
+      : percobaanPertama
+
+    if (hasil.error) {
+      return NextResponse.json({ error: 'Gagal menonaktifkan penyewa: ' + hasil.error.message }, { status: 500 })
+    }
+
+    if (!hasil.data || hasil.data.length === 0) {
+      return NextResponse.json({ error: 'Penyewa gagal dinonaktifkan (0 baris berubah)' }, { status: 500 })
+    }
+
+    return NextResponse.json({
+      success: true,
+      message: 'Akses login penyewa dinonaktifkan. Data kapal, jadwal, dan laporan tetap tersimpan.'
     })
 
-    // 1. Hapus dari tabel profiles dulu
-    const { error: profileError } = await supabaseAdmin
-      .from('profiles')
-      .delete()
-      .eq('id', id)
-
-    if (profileError) {
-      return NextResponse.json({ error: 'Gagal hapus profil: ' + profileError.message }, { status: 500 })
-    }
-
-    // 2. Hapus dari tabel auth.users (Supabase Auth)
-    const { error: authError } = await supabaseAdmin.auth.admin.deleteUser(id)
-
-    if (authError) {
-      return NextResponse.json({ error: 'Gagal hapus akun Auth: ' + authError.message }, { status: 500 })
-    }
-
-    return NextResponse.json({ success: true, message: 'Penyewa berhasil dihapus' })
-
   } catch (error: any) {
-    console.error('Error hapus penyewa:', error)
+    console.error('Error nonaktifkan penyewa:', error)
     return NextResponse.json({ error: 'Server Error: ' + error.message }, { status: 500 })
   }
 }

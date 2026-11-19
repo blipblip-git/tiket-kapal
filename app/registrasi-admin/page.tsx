@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
+import { fieldPasswordBaru } from '@/lib/password'
 import Link from 'next/link'
 
 export default function RegistrasiAdminPage() {
@@ -75,7 +76,7 @@ export default function RegistrasiAdminPage() {
         nama_akun: namaAkun,
         nama_perusahaan: namaPerusahaan,
         role: 'admin_utama',
-        password_plain: password,
+        ...(await fieldPasswordBaru(password)),
         nomor_hp: nomorWa,
         aktif: true,
       })
