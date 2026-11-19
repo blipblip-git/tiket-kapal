@@ -24,22 +24,23 @@ type BarisBulanan = {
 function LaporanBulananContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
-  const lokasiParam = searchParams.get('lokasi') || 'Tarakan'
+  const lokasiParam = searchParams.get('lokasi') || ''
   const bulanParam = searchParams.get('bulan')
 
   const [profile, setProfile] = useState<Profile | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [baris, setBaris] = useState<BarisBulanan[]>([])
+  const [tujuanRute, setTujuanRute] = useState('')
 
   const bulanAktif = parseBulan(bulanParam) ? (bulanParam as string) : bulanSekarang()
   const infoBulan = parseBulan(bulanAktif)
   const tahunAktif = infoBulan ? infoBulan.tahun : new Date().getFullYear()
   const nomorBulanAktif = infoBulan ? infoBulan.bulan : new Date().getMonth() + 1
 
-  const lokasiTujuan = lokasiParam === 'Tarakan' ? 'Tanjung Selor' : 'Tarakan'
-  const ruteLengkap = `${lokasiParam} - ${lokasiTujuan}`
-  const menuKembali = lokasiParam === 'Tarakan' ? 'tarakan' : 'tanjung-selor'
+  // Rute diambil dari data penjualan itu sendiri, bukan nama daerah bawaan.
+  const ruteLengkap = tujuanRute ? `${lokasiParam} - ${tujuanRute}` : (lokasiParam || '-')
+  const menuKembali = lokasiParam ? `kota:${encodeURIComponent(lokasiParam)}` : ''
 
   useEffect(() => {
     async function init() {
@@ -64,6 +65,13 @@ function LaporanBulananContent() {
       if (!profile) return
       setLoading(true)
       setError('')
+
+      if (!lokasiParam) {
+        setBaris([])
+        setTujuanRute('')
+        setLoading(false)
+        return
+      }
 
       const tanggalList = daftarTanggalBulan(bulanAktif)
       // KUNCI MULTI-TENANT: operator hanya boleh melihat data miliknya sendiri
@@ -91,11 +99,14 @@ function LaporanBulananContent() {
 
       const mapTanggal: { [tanggal: string]: BarisBulanan } = {}
       tanggalList.forEach((t) => { mapTanggal[t] = { tanggal: t, kursi: 0, tiket: 0 } })
+      const kumpulanTujuan = new Set<string>()
 
       ;(data || []).forEach((item: any) => {
         const jadwal = item.jadwal
         if (!jadwal || !jadwal.tanggal) return
         if (!cocokOperator(jadwal, operatorId, petaOperatorKapal)) return
+
+        if (jadwal.rute_tujuan) kumpulanTujuan.add(jadwal.rute_tujuan)
 
         if (!mapTanggal[jadwal.tanggal]) {
           mapTanggal[jadwal.tanggal] = { tanggal: jadwal.tanggal, kursi: 0, tiket: 0 }
@@ -110,6 +121,7 @@ function LaporanBulananContent() {
       })
 
       setBaris(tanggalList.map((t) => mapTanggal[t]))
+      setTujuanRute(Array.from(kumpulanTujuan).join(' / '))
       setLoading(false)
     }
     fetchData()
@@ -125,6 +137,17 @@ function LaporanBulananContent() {
   const bukaPerincian = (tanggal: string) => {
     router.push(`/laporan?view=penjualan&lokasi=${encodeURIComponent(lokasiParam)}&tanggal=${tanggal}`)
   }
+
+  if (!lokasiParam) return (
+    <div className="min-h-[60vh] flex items-center justify-center p-6">
+      <div className="bg-white border border-gray-200 rounded-xl p-8 text-center max-w-md">
+        <p className="text-sm text-gray-600 mb-4">Pilih lokasi keberangkatan dulu dari halaman Laporan Penjualan.</p>
+        <button onClick={() => router.push('/laporan-penjualan-admin')} className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded text-sm font-bold transition">
+          Buka Laporan Penjualan
+        </button>
+      </div>
+    </div>
+  )
 
   if (loading) return <p className="p-6 text-center text-gray-600 mt-10">Memuat...</p>
   if (error) return <p className="p-6 text-center text-red-600 mt-10">{error}</p>
@@ -157,7 +180,7 @@ function LaporanBulananContent() {
           </div>
           <div className="flex gap-2 flex-shrink-0">
             <button onClick={handlePrint} className="bg-blue-600 hover:bg-blue-700 text-white px-2 py-1.5 md:px-4 md:py-2 rounded text-[10px] md:text-sm font-bold transition shadow-sm">🖨️ Cetak</button>
-            <button onClick={() => router.push(`/laporan-penjualan-admin?menu=${menuKembali}`)} className="bg-gray-100 hover:bg-gray-200 text-gray-700 px-2 py-1.5 md:px-4 md:py-2 rounded text-[10px] md:text-sm font-bold transition">Kembali</button>
+            <button onClick={() => router.push(menuKembali ? `/laporan-penjualan-admin?menu=${menuKembali}` : '/laporan-penjualan-admin')} className="bg-gray-100 hover:bg-gray-200 text-gray-700 px-2 py-1.5 md:px-4 md:py-2 rounded text-[10px] md:text-sm font-bold transition">Kembali</button>
           </div>
         </div>
 

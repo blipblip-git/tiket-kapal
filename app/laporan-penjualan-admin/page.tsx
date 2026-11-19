@@ -4,21 +4,22 @@ import { useEffect, useState, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { supabase, getProfile, getOperatorSession, type Profile } from '@/lib/supabase'
 import { bulanSekarang } from '@/lib/periode'
+import { idOperator, ambilOperatorKapal, cocokOperator } from '@/lib/tenant'
 
 type RuteKapal = { rute_asal: string; rute_tujuan: string }
+
+type Kartu = {
+  label: string
+  deskripsi: string
+  color: string
+  link: string
+}
 
 const WARNA_RUTE = [
   'bg-blue-50 border-blue-200 text-blue-800 hover:bg-blue-100',
   'bg-green-50 border-green-200 text-green-800 hover:bg-green-100',
   'bg-purple-50 border-purple-200 text-purple-800 hover:bg-purple-100',
   'bg-orange-50 border-orange-200 text-orange-800 hover:bg-orange-100',
-]
-
-// Rute bawaan platform. Dipakai kalau penyewa belum punya isi Master Rute
-// maupun jadwal, supaya pilihan manifest tetap lengkap dua arah.
-const RUTE_DEFAULT: RuteKapal[] = [
-  { rute_asal: 'Tarakan', rute_tujuan: 'Tanjung Selor' },
-  { rute_asal: 'Tanjung Selor', rute_tujuan: 'Tarakan' },
 ]
 
 function LaporanPenjualanAdminContent() {
@@ -29,6 +30,7 @@ function LaporanPenjualanAdminContent() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [ruteList, setRuteList] = useState<RuteKapal[]>([])
+  const [ruteLoading, setRuteLoading] = useState(true)
 
 
   useEffect(() => {
@@ -50,116 +52,120 @@ function LaporanPenjualanAdminContent() {
     init()
   }, [router])
 
-  // Ambil daftar rute milik pemilik (operator), supaya kartu manifest mengikuti rute kapalnya
+  // Ambil rute milik penyewa sendiri (Master Rute, cadangan: jadwal kapalnya).
+  // Tidak ada rute bawaan: kalau penyewa belum input, daftar ini kosong.
   useEffect(() => {
     async function muatRute() {
       if (!profile) return
-      const operatorId = profile.role === 'superadmin' ? null : (profile.operator_id || profile.id)
+      const operatorId = idOperator(profile)
 
       const kumpulan: RuteKapal[] = []
 
-      let qRute = supabase.from('master_rute').select('rute_asal, rute_tujuan')
+      let qRute = supabase.from('master_rute').select('rute_asal, rute_tujuan, operator_id').order('created_at', { ascending: true })
       if (operatorId) qRute = qRute.eq('operator_id', operatorId)
       const { data: dataRute } = await qRute
       ;(dataRute || []).forEach((r: any) => {
         if (r.rute_asal && r.rute_tujuan) kumpulan.push({ rute_asal: r.rute_asal, rute_tujuan: r.rute_tujuan })
       })
 
-      // Cadangan: rute yang sudah pernah dipakai di jadwal operator ini
+      // Cadangan: rute yang sudah pernah dipakai di jadwal milik penyewa ini
+      // (termasuk jadwal lama yang operator_id-nya NULL).
       if (kumpulan.length === 0) {
-        let qJadwal = supabase.from('jadwal').select('rute_asal, rute_tujuan').limit(1000)
-        if (operatorId) qJadwal = qJadwal.eq('operator_id', operatorId)
-        const { data: dataJadwal } = await qJadwal
+        const { data: dataJadwal } = await supabase
+          .from('jadwal')
+          .select('rute_asal, rute_tujuan, kapal_id, operator_id')
+          .limit(1000)
+        const petaOperatorKapal = await ambilOperatorKapal(
+          (dataJadwal || []).map((j: any) => j.kapal_id)
+        )
         ;(dataJadwal || []).forEach((j: any) => {
-          if (j.rute_asal && j.rute_tujuan) kumpulan.push({ rute_asal: j.rute_asal, rute_tujuan: j.rute_tujuan })
+          if (!j.rute_asal || !j.rute_tujuan) return
+          if (!cocokOperator(j, operatorId, petaOperatorKapal)) return
+          kumpulan.push({ rute_asal: j.rute_asal, rute_tujuan: j.rute_tujuan })
         })
       }
 
       const unik = Array.from(new Map(kumpulan.map(r => [`${r.rute_asal}|${r.rute_tujuan}`, r])).values())
-      unik.sort((a, b) => {
-        if (a.rute_asal === b.rute_asal) return a.rute_tujuan.localeCompare(b.rute_tujuan)
-        if (a.rute_asal === 'Tarakan') return -1
-        if (b.rute_asal === 'Tarakan') return 1
-        return a.rute_asal.localeCompare(b.rute_asal)
-      })
+      // Urutan mengikuti urutan input penyewa (bukan urutan nama daerah).
       setRuteList(unik)
+      setRuteLoading(false)
     }
     muatRute()
   }, [profile])
 
-  if (loading) return <p className="p-6 text-center text-gray-600 mt-10">Memuat...</p>
   if (error) return <p className="p-6 text-center text-red-600 mt-10">{error}</p>
+  if (loading || ruteLoading) return <p className="p-6 text-center text-gray-600 mt-10">Memuat...</p>
   if (!profile) return null
 
   const bulanAktif = bulanSekarang()
 
-  const menuUtama = [
-    {
-      label: 'Laporan Tarakan',
-      deskripsi: 'Rekap penjualan keberangkatan dari Tarakan',
-      color: 'bg-blue-50 border-blue-200 text-blue-800 hover:bg-blue-100',
-      link: '/laporan-penjualan-admin?menu=tarakan'
-    },
-    {
-      label: 'Laporan Tanjung Selor',
-      deskripsi: 'Rekap penjualan keberangkatan dari Tanjung Selor',
-      color: 'bg-green-50 border-green-200 text-green-800 hover:bg-green-100',
-      link: '/laporan-penjualan-admin?menu=tanjung-selor'
-    },
-    {
+  // Semua kartu dibentuk dari data milik penyewa sendiri (Master Rute, atau
+  // jadwal kapalnya sebagai cadangan). Penyewa baru / belum input = tanpa kartu.
+  const kotaList = Array.from(new Set(ruteList.map(r => r.rute_asal)))
+  const warnaKota = (idx: number) => WARNA_RUTE[idx % WARNA_RUTE.length]
+
+  const menuUtama: Kartu[] = kotaList.map((kota, idx) => ({
+    label: `Laporan ${kota}`,
+    deskripsi: `Rekap penjualan keberangkatan dari ${kota}`,
+    color: warnaKota(idx),
+    link: `/laporan-penjualan-admin?menu=kota:${encodeURIComponent(kota)}`
+  }))
+
+  if (kotaList.length >= 2) {
+    menuUtama.push({
       label: 'Laporan Gabungan',
-      deskripsi: 'Perbandingan pendapatan Tarakan & Tanjung Selor',
+      deskripsi: `Perbandingan pendapatan ${kotaList.join(' & ')}`,
       color: 'bg-purple-50 border-purple-200 text-purple-800 hover:bg-purple-100',
       link: '/laporan-penjualan-admin?menu=gabungan'
-    },
-    {
+    })
+  }
+
+  if (ruteList.length > 0) {
+    menuUtama.push({
       label: 'Manifest Kapal',
       deskripsi: 'Daftar penumpang dan status boarding (per rute)',
       color: 'bg-orange-50 border-orange-200 text-orange-800 hover:bg-orange-100',
       link: '/laporan-penjualan-admin?menu=manifest'
-    }
-  ]
+    })
+  }
 
-  const subMenu: { [key: string]: { judul: string; deskripsi: string; kartu: typeof menuUtama } } = {
-    'tarakan': {
-      judul: 'Laporan Tarakan',
-      deskripsi: 'Keberangkatan dari Tarakan',
+  const subMenu: { [key: string]: { judul: string; deskripsi: string; kartu: Kartu[] } } = {}
+
+  kotaList.forEach((kota, idx) => {
+    subMenu[`kota:${kota}`] = {
+      judul: `Laporan ${kota}`,
+      deskripsi: `Keberangkatan dari ${kota}`,
       kartu: [
         {
           label: 'Laporan Penjualan Harian',
           deskripsi: 'Rekap per jam, petugas, dan rincian penumpang untuk 1 tanggal',
-          color: 'bg-blue-50 border-blue-200 text-blue-800 hover:bg-blue-100',
-          link: '/laporan?view=penjualan&lokasi=Tarakan'
+          color: warnaKota(idx),
+          link: `/laporan?view=penjualan&lokasi=${encodeURIComponent(kota)}`
         },
         {
           label: 'Laporan Penjualan Bulanan',
           deskripsi: 'Ringkasan per tanggal dalam 1 bulan (tanggal 1 s/d akhir bulan)',
           color: 'bg-indigo-50 border-indigo-200 text-indigo-800 hover:bg-indigo-100',
-          link: `/laporan-bulanan?lokasi=Tarakan&bulan=${bulanAktif}`
+          link: `/laporan-bulanan?lokasi=${encodeURIComponent(kota)}&bulan=${bulanAktif}`
         }
       ]
-    },
-    'tanjung-selor': {
-      judul: 'Laporan Tanjung Selor',
-      deskripsi: 'Keberangkatan dari Tanjung Selor',
-      kartu: [
-        {
-          label: 'Laporan Penjualan Harian',
-          deskripsi: 'Rekap per jam, petugas, dan rincian penumpang untuk 1 tanggal',
-          color: 'bg-green-50 border-green-200 text-green-800 hover:bg-green-100',
-          link: '/laporan?view=penjualan&lokasi=Tanjung%20Selor'
-        },
-        {
-          label: 'Laporan Penjualan Bulanan',
-          deskripsi: 'Ringkasan per tanggal dalam 1 bulan (tanggal 1 s/d akhir bulan)',
-          color: 'bg-indigo-50 border-indigo-200 text-indigo-800 hover:bg-indigo-100',
-          link: `/laporan-bulanan?lokasi=Tanjung%20Selor&bulan=${bulanAktif}`
-        }
-      ]
-    },
-    'gabungan': {
+    }
+  })
+
+  // Kompatibilitas tautan lama (bookmark / tombol Kembali versi sebelumnya).
+  const aliasMenuLama: { [slug: string]: string } = {
+    tarakan: 'Tarakan',
+    'tanjung-selor': 'Tanjung Selor'
+  }
+  Object.entries(aliasMenuLama).forEach(([slug, kota]) => {
+    const menuKota = subMenu[`kota:${kota}`]
+    if (menuKota) subMenu[slug] = menuKota
+  })
+
+  if (kotaList.length >= 2) {
+    subMenu.gabungan = {
       judul: 'Laporan Gabungan',
-      deskripsi: 'Tarakan & Tanjung Selor (daerah lain muncul otomatis)',
+      deskripsi: `${kotaList.join(' & ')} (daerah lain muncul otomatis)`,
       kartu: [
         {
           label: 'Laporan Gabungan Harian',
@@ -169,26 +175,29 @@ function LaporanPenjualanAdminContent() {
         },
         {
           label: 'Laporan Gabungan Bulanan',
-          deskripsi: 'Ringkasan per tanggal + kolom daerah lain (mis. Nunukan) otomatis',
+          deskripsi: 'Ringkasan per tanggal + kolom daerah lain otomatis',
           color: 'bg-indigo-50 border-indigo-200 text-indigo-800 hover:bg-indigo-100',
           link: `/laporan-gabungan-bulanan?bulan=${bulanAktif}`
         }
       ]
-    },
-    'manifest': {
+    }
+  }
+
+  if (ruteList.length > 0) {
+    subMenu.manifest = {
       judul: 'Manifest Kapal',
       deskripsi: 'Pilih rute keberangkatan untuk melihat manifest penumpang',
-      kartu: (ruteList.length > 0 ? ruteList : RUTE_DEFAULT).map((r, idx) => ({
+      kartu: ruteList.map((r, idx) => ({
         label: `Manifest ${r.rute_asal}`,
         deskripsi: `Daftar penumpang rute ${r.rute_asal} → ${r.rute_tujuan}`,
-        color: WARNA_RUTE[idx % WARNA_RUTE.length],
+        color: warnaKota(idx),
         link: `/superadmin/pusat-kontrol/admin/manifest?lokasi=${encodeURIComponent(r.rute_asal)}&tujuan=${encodeURIComponent(r.rute_tujuan)}`
       }))
     }
   }
 
   const subAktif = menuParam ? subMenu[menuParam] : null
-  const menuTampil = subAktif ? subAktif.kartu : menuUtama
+  const menuTampil: Kartu[] = subAktif ? subAktif.kartu : menuUtama
 
   return (
     <div className="min-h-screen bg-gray-50 p-4 md:p-6">
@@ -204,18 +213,27 @@ function LaporanPenjualanAdminContent() {
           </button>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6">
-          {menuTampil.map((menu, idx) => (
-            <button
-              key={idx}
-              onClick={() => router.push(menu.link)}
-              className={`flex flex-col items-start p-6 rounded-xl border-2 transition-all shadow-sm ${menu.color}`}
-            >
-              <h2 className="text-xl font-bold mb-2">{menu.label}</h2>
-              <p className="text-sm opacity-80 text-left">{menu.deskripsi}</p>
-            </button>
-          ))}
-        </div>
+        {menuTampil.length === 0 ? (
+          <div className="bg-white border border-gray-200 rounded-xl p-8 text-center">
+            <p className="text-sm text-gray-600">
+              Belum ada data rute untuk akun ini. Kartu laporan akan muncul otomatis setelah
+              pemilik kapal menambahkan rute dan jadwal kapal.
+            </p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6">
+            {menuTampil.map((menu, idx) => (
+              <button
+                key={idx}
+                onClick={() => router.push(menu.link)}
+                className={`flex flex-col items-start p-6 rounded-xl border-2 transition-all shadow-sm ${menu.color}`}
+              >
+                <h2 className="text-xl font-bold mb-2">{menu.label}</h2>
+                <p className="text-sm opacity-80 text-left">{menu.deskripsi}</p>
+              </button>
+            ))}
+          </div>
+        )}
 
       </div>
     </div>

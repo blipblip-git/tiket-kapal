@@ -25,14 +25,8 @@ type BarisGabungan = {
   perLokasi: { [lokasi: string]: SelLokasi }
 }
 
-// Tarakan & Tanjung Selor selalu di depan, daerah lain (mis. Nunukan) menyusul alfabetis
+// Semua kota diurutkan alfabetis; tidak ada daerah yang diprioritaskan.
 function urutkanLokasi(a: string, b: string) {
-  const prioritas = ['Tarakan', 'Tanjung Selor']
-  const posisiA = prioritas.indexOf(a)
-  const posisiB = prioritas.indexOf(b)
-  if (posisiA !== -1 && posisiB !== -1) return posisiA - posisiB
-  if (posisiA !== -1) return -1
-  if (posisiB !== -1) return 1
   return a.localeCompare(b)
 }
 

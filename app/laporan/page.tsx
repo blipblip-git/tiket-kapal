@@ -271,7 +271,11 @@ function LaporanContent() {
   if (error) return <p className="p-6 text-center text-red-600">{error}</p>
   if (!profile) return null
 
-  const ruteLengkap = `${lokasiParam || profile.lokasi} - ${lokasiParam === 'Tarakan' ? 'Tanjung Selor' : (lokasiParam === 'Tanjung Selor' ? 'Tarakan' : (profile.lokasi === 'Tarakan' ? 'Tanjung Selor' : 'Tarakan'))}`
+  // Rute diambil dari data penjualan, bukan nama daerah bawaan.
+  const ruteDariData = Array.from(new Set(
+    laporan.flatMap(l => l.rincian.map(r => r.rute)).filter(Boolean)
+  ))
+  const ruteLengkap = ruteDariData.length > 0 ? ruteDariData.join(' / ') : (lokasiParam || profile.lokasi || '-')
 
   const now = new Date()
   const hariIniStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
