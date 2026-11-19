@@ -5,9 +5,11 @@ type DashboardHeaderProps = {
   judul: string
   subJudul?: string
   aksi?: React.ReactNode
+  onRefresh?: () => void
+  refreshing?: boolean
 }
 
-export default function DashboardHeader({ namaPerusahaan, judul, subJudul, aksi }: DashboardHeaderProps) {
+export default function DashboardHeader({ namaPerusahaan, judul, subJudul, aksi, onRefresh, refreshing }: DashboardHeaderProps) {
   return (
     <div className="bg-white p-4 rounded-xl shadow-md border border-gray-100 mb-4 flex-shrink-0">
       <div className="flex justify-between items-start gap-3">
@@ -18,7 +20,20 @@ export default function DashboardHeader({ namaPerusahaan, judul, subJudul, aksi 
           <h1 className="text-lg md:text-xl font-bold text-gray-900 leading-tight mt-0.5">{judul}</h1>
           {subJudul && <p className="text-sm text-gray-600 mt-0.5 font-medium">{subJudul}</p>}
         </div>
-        {aksi && <div className="flex items-center gap-2 flex-shrink-0">{aksi}</div>}
+        <div className="flex items-center gap-2 flex-shrink-0">
+          {onRefresh && (
+            <button
+              onClick={onRefresh}
+              disabled={refreshing}
+              title="Muat ulang data"
+              aria-label="Muat ulang data"
+              className="text-sm bg-gray-100 text-gray-700 border border-gray-300 px-2.5 py-1.5 rounded hover:bg-gray-200 font-bold shadow-sm disabled:opacity-50"
+            >
+              <span className={refreshing ? 'inline-block animate-spin' : 'inline-block'}>🔄</span>
+            </button>
+          )}
+          {aksi}
+        </div>
       </div>
     </div>
   )

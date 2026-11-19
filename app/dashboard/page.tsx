@@ -18,6 +18,8 @@ export default function DashboardAdminPage() {
   const [profile, setProfile] = useState<Profile | null>(null)
   const [namaPerusahaan, setNamaPerusahaan] = useState('')
   const [loading, setLoading] = useState(true)
+  const [refreshing, setRefreshing] = useState(false)
+  const [reloadKey, setReloadKey] = useState(0)
   const [error, setError] = useState('')
   const [statPerRute, setStatPerRute] = useState<StatistikRute[]>([])
   const [tanggalHariIni, setTanggalHariIni] = useState('')
@@ -41,6 +43,8 @@ export default function DashboardAdminPage() {
     setTanggalHariIni(today.toLocaleDateString('id-ID', { weekday: 'long', day: '2-digit', month: 'long', year: 'numeric' }))
 
     async function loadData() {
+      if (reloadKey > 0) setRefreshing(true)
+
       const { data: textData } = await supabase
         .from('pengaturan_teks')
         .select('data_teks')
@@ -111,10 +115,11 @@ export default function DashboardAdminPage() {
       }
 
       setStatPerRute(Object.values(ruteMap).sort((a, b) => b.pendapatan - a.pendapatan))
+      setRefreshing(false)
       setLoading(false)
     }
     loadData()
-  }, [router])
+  }, [router, reloadKey])
 
   async function handleLogout() {
     if (profile) {
@@ -146,6 +151,8 @@ export default function DashboardAdminPage() {
           namaPerusahaan={namaPerusahaan || profile.nama_perusahaan || profile.nama}
           judul={`${teks.judul_dashboard} ${teks.sub_judul}`}
           subJudul={profile.nama}
+          onRefresh={() => setReloadKey((k) => k + 1)}
+          refreshing={refreshing}
           aksi={
             <>
               <button onClick={() => router.push('/ganti-password')} className="bg-gray-600 text-white px-2 py-1.5 md:px-4 md:py-2 rounded hover:bg-gray-700 text-[10px] md:text-sm font-medium">

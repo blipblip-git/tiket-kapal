@@ -22,11 +22,15 @@ function PilihJadwalContent() {
   const operatorId = searchParams.get('operator') || ''
 
   const [loading, setLoading] = useState(true)
+  const [refreshing, setRefreshing] = useState(false)
+  const [reloadKey, setReloadKey] = useState(0)
   const [jadwalTersedia, setJadwalTersedia] = useState<JadwalItem[]>([])
   const [showEmptyPopup, setShowEmptyPopup] = useState(false)
 
   useEffect(() => {
     async function fetchJadwal() {
+      if (reloadKey > 0) setRefreshing(true)
+
       if (!asal || !tujuan || !tanggal) {
         router.push('/')
         return
@@ -175,11 +179,12 @@ function PilihJadwalContent() {
       } catch (err) {
         setShowEmptyPopup(true)
       } finally {
+        setRefreshing(false)
         setLoading(false)
       }
     }
     fetchJadwal()
-  }, [asal, tujuan, tanggal, operatorId, router])
+  }, [asal, tujuan, tanggal, operatorId, router, reloadKey])
 
   const handlePilihJadwal = (jadwalId: string) => {
     router.push(`/kursi?jadwal=${jadwalId}`)
@@ -209,10 +214,19 @@ function PilihJadwalContent() {
       <div className="bg-white shadow-sm p-4 sticky top-0 z-10">
         <div className="max-w-md mx-auto flex items-center gap-3">
           <button onClick={() => router.push('/')} className="text-gray-500 hover:text-gray-900 font-bold text-xl">&larr;</button>
-          <div>
+          <div className="flex-1 min-w-0">
             <h1 className="text-lg font-bold text-gray-900 leading-tight">Pilih Jadwal</h1>
             <p className="text-xs text-gray-600">{asal} - {tujuan} | {tanggal}</p>
           </div>
+          <button
+            onClick={() => setReloadKey((k) => k + 1)}
+            disabled={refreshing}
+            title="Muat ulang jadwal"
+            aria-label="Muat ulang jadwal"
+            className="text-sm bg-gray-100 text-gray-700 border border-gray-300 px-2.5 py-1.5 rounded hover:bg-gray-200 font-bold disabled:opacity-50"
+          >
+            <span className={refreshing ? 'inline-block animate-spin' : 'inline-block'}>🔄</span>
+          </button>
         </div>
       </div>
 

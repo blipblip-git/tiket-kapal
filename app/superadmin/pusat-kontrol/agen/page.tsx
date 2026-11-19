@@ -13,6 +13,7 @@ export default function EditTeksAgenPage() {
 
   const [teks, setTeks] = useState({
     judul_dashboard: 'Dashboard Agen',
+    sub_judul: 'Tarakan - Agen Tarakan',
     menu_jual: 'Jual Tiket',
     menu_laporan: 'Laporan Penjualan',
     menu_cetak: 'Cetak Ulang Tiket',
@@ -23,6 +24,18 @@ export default function EditTeksAgenPage() {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) { router.push('/superadmin'); return }
 
+      const { data: profil } = await supabase
+        .from('profiles')
+        .select('role')
+        .eq('id', user.id)
+        .single()
+
+      if (profil?.role !== 'superadmin') {
+        setPesan('Halaman ini khusus Superadmin.')
+        setLoading(false)
+        return
+      }
+
       const { data } = await supabase
         .from('pengaturan_teks')
         .select('data_teks')
@@ -30,7 +43,7 @@ export default function EditTeksAgenPage() {
         .single()
 
       if (data && data.data_teks) {
-        setTeks(data.data_teks as any)
+        setTeks((lama) => ({ ...lama, ...(data.data_teks as any) }))
       }
       setLoading(false)
     }
@@ -60,8 +73,15 @@ export default function EditTeksAgenPage() {
   return (
     <div className="h-screen bg-gray-100 flex flex-col relative">
       
-      {/* TOMBOL PENSIL DI POJOK KANAN ATAS */}
-      <div className="absolute top-4 right-4 z-50">
+      {/* BAR ATAS: KEMBALI + MODE PRATINJAU + TOMBOL EDIT */}
+      <div className="absolute top-4 left-4 right-4 z-50 flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2">
+          <button onClick={() => router.push('/superadmin/pusat-kontrol')} className="bg-white text-gray-700 border border-gray-300 px-3 py-2 rounded-lg text-xs font-bold shadow hover:bg-gray-50">
+            &larr; Kembali
+          </button>
+          <span className="text-[10px] bg-blue-100 text-blue-700 px-2 py-1 rounded-full border border-blue-300 font-bold">Mode Pratinjau</span>
+        </div>
+        <div className="flex items-center gap-2">
         {isEditMode ? (
           <button 
             onClick={handleSimpan}
@@ -78,10 +98,17 @@ export default function EditTeksAgenPage() {
             ✏️ Edit Tampilan
           </button>
         )}
+        </div>
       </div>
 
       {/* TAMPILAN ASLI DASHBOARD AGEN (PREVIEW) */}
       <div className="max-w-md w-full mx-auto p-4 flex-1 flex flex-col pt-16">
+
+        {pesan && (
+          <div className={`mb-3 p-2 rounded text-xs font-bold ${pesan.includes('Berhasil') ? 'bg-green-100 text-green-800 border border-green-300' : 'bg-red-100 text-red-700 border border-red-300'}`}>
+            {pesan}
+          </div>
+        )}
         
         {/* HEADER */}
         <div className="bg-white p-4 rounded-xl shadow-md border border-gray-100 mb-4">
@@ -97,7 +124,7 @@ export default function EditTeksAgenPage() {
               ) : (
                 <h1 className="text-lg font-bold text-gray-900 leading-tight">{teks.judul_dashboard}</h1>
               )}
-              <p className="text-sm text-gray-600 mt-1 font-medium">Tarakan - Agen Tarakan</p>
+              <p className="text-sm text-gray-600 mt-1 font-medium">Tarakan - Agen Tarakan <span className="text-[10px] text-gray-400">(otomatis: lokasi - nama agen)</span></p>
             </div>
             <button className="text-xs bg-red-600 text-white px-3 py-1.5 rounded font-bold shadow-sm opacity-50 cursor-not-allowed">
               Logout

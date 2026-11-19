@@ -233,9 +233,20 @@ function CariTiketContent() {
               <h1 className="text-xl font-bold text-gray-900 leading-tight">Jual Tiket</h1>
               <p className="text-sm text-gray-600 mt-0.5">Petugas {lokasiAktif} : {profile.nama}</p>
             </div>
-            <button onClick={() => router.push('/dashboard/keberangkatan')} className="text-xs text-blue-600 hover:underline bg-gray-50 px-2 py-1.5 rounded border border-gray-200 mt-1">
-              &larr; Kembali
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => loadJadwal(tanggal, lokasiAktif)}
+                disabled={isRefreshing || !tanggal || !lokasiAktif}
+                title="Muat ulang jadwal"
+                aria-label="Muat ulang jadwal"
+                className="text-xs text-gray-700 bg-white px-2 py-1.5 rounded border border-gray-300 hover:bg-gray-100 mt-1 disabled:opacity-50"
+              >
+                <span className={isRefreshing ? 'inline-block animate-spin' : 'inline-block'}>🔄</span>
+              </button>
+              <button onClick={() => router.push('/dashboard/keberangkatan')} className="text-xs text-blue-600 hover:underline bg-gray-50 px-2 py-1.5 rounded border border-gray-200 mt-1">
+                &larr; Kembali
+              </button>
+            </div>
           </div>
 
           <div>

@@ -14,6 +14,16 @@ export default function ManajemenPetugasPage() {
     router.push(path + suffix)
   }
 
+  // Halaman ini bisa dibuka dari Pusat Kontrol (Superadmin) atau dari
+  // dashboard Admin Utama (kelola petugas milik penyewa sendiri).
+  function kembali() {
+    if (typeof window !== 'undefined' && window.history.length > 1) {
+      router.back()
+      return
+    }
+    router.push('/dashboard')
+  }
+
   return (
     <div className="min-h-screen bg-gray-50 py-8 px-4">
       <div className="max-w-4xl mx-auto">
@@ -26,9 +36,9 @@ export default function ManajemenPetugasPage() {
                 <span className="w-2 h-2 rounded-full bg-green-500"></span> Mode Pusat Kontrol
               </span>
             </h1>
-            <p className="text-sm text-gray-500 mt-1">Pilih jenis akun petugas yang ingin dikelola.</p>
+            <p className="text-sm text-gray-500 mt-1">Pilih jenis akun petugas yang ingin dikelola. (Halaman ini untuk akun login, bukan revisi tulisan.)</p>
           </div>
-          <button onClick={() => router.push('/dashboard')} className="text-sm text-blue-600 hover:underline px-2">
+          <button onClick={kembali} className="text-sm text-blue-600 hover:underline px-2">
             ← Kembali
           </button>
         </div>

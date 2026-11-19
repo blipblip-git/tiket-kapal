@@ -2,96 +2,130 @@
 
 import { useRouter } from 'next/navigation'
 import { useEffect, useState } from 'react'
-import { supabase, getProfile, getOperatorSession, type Profile } from '@/lib/supabase'
+import { supabase, type Profile } from '@/lib/supabase'
+
+// Pusat Kontrol = "mother file" untuk SEMUA kamar penyewa (khusus Superadmin).
+// Isi kartu dibagi 2 jenis:
+// 1. Editor TEKS  -> mengubah tulisan/tombol yang dibaca dashboard role terkait.
+// 2. Kelola AKUN  -> CRUD akun petugas (bukan editor tampilan).
+type Kartu = {
+  path: string
+  ikon: string
+  judul: string
+  ket: string
+  jenis: 'teks' | 'akun'
+}
+
+const KARTU: Kartu[] = [
+  {
+    path: '/superadmin/pusat-kontrol/kota',
+    ikon: '📍',
+    judul: 'Master Rute (Daerah)',
+    ket: 'Daftar daerah tujuan untuk semua penyewa + singkatan cetak.',
+    jenis: 'teks',
+  },
+  {
+    path: '/superadmin/pusat-kontrol/admin',
+    ikon: '👨‍💼',
+    judul: 'Teks: Admin Utama',
+    ket: 'Atur judul, tombol, dan nama menu di dashboard Admin Utama.',
+    jenis: 'teks',
+  },
+  {
+    path: '/superadmin/pusat-kontrol/petugas',
+    ikon: '📷',
+    judul: 'Teks: Petugas',
+    ket: 'Atur judul & nama menu dashboard Petugas Keberangkatan.',
+    jenis: 'teks',
+  },
+  {
+    path: '/superadmin/pusat-kontrol/agen',
+    ikon: '🤝',
+    judul: 'Teks: Agen',
+    ket: 'Atur judul, ikon, dan nama menu dashboard Agen.',
+    jenis: 'teks',
+  },
+  {
+    path: '/superadmin/pusat-kontrol/admin/petugas',
+    ikon: '🧑‍✈️',
+    judul: 'Akun Petugas',
+    ket: 'Tambah / edit / hapus akun petugas keberangkatan & kolektor.',
+    jenis: 'akun',
+  },
+]
 
 export default function PusatKontrolPage() {
   const router = useRouter()
   const [loading, setLoading] = useState(true)
   const [profile, setProfile] = useState<Profile | null>(null)
+  const [error, setError] = useState('')
 
   useEffect(() => {
     async function cekSesi() {
-      // 1. Cek Supabase Auth (Superadmin)
       const { data: { user } } = await supabase.auth.getUser()
-      
-      // 2. Cek Custom Session (Agen/Petugas)
-      let p = await getProfile()
-      if (!p) {
-        const sesiLokal = getOperatorSession()
-        if (sesiLokal) p = sesiLokal as unknown as Profile
-      }
-
-      // Kalau DUA-DUANYA kosong, baru tendang ke login
-      if (!user && !p) {
+      if (!user) {
         router.push('/superadmin')
         return
       }
 
-      setProfile(p)
+      const { data: p } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', user.id)
+        .single()
+
+      if (!p || p.role !== 'superadmin') {
+        setError('Halaman ini khusus Superadmin.')
+        setLoading(false)
+        return
+      }
+
+      setProfile(p as Profile)
       setLoading(false)
     }
     cekSesi()
   }, [router])
 
   if (loading) return <p className="p-6 text-center text-gray-400 bg-gray-900 min-h-screen flex items-center justify-center">Memuat...</p>
+  if (error) return <p className="p-6 text-center text-red-500 bg-gray-900 min-h-screen flex items-center justify-center">{error}</p>
+  if (!profile) return null
 
   return (
     <div className="min-h-screen bg-gray-900 p-6 flex flex-col items-center justify-center">
       <div className="w-full max-w-5xl">
-        
+
         <div className="flex justify-between items-center mb-8">
           <div>
             <h1 className="text-2xl font-bold text-white">Pusat Kontrol Website</h1>
-            <p className="text-sm text-gray-400">Mother File: Atur tampilan dasar untuk semua kamar penyewa.</p>
+            <p className="text-sm text-gray-400">Mother File: atur teks & akun untuk semua kamar penyewa.</p>
           </div>
-          <button onClick={() => router.push(profile?.role === 'agen' || profile?.role === 'terminal_keberangkatan' ? '/dashboard' : '/dashboard-superadmin')} className="bg-gray-700 text-white px-4 py-2 rounded hover:bg-gray-600 text-sm font-medium">
+          <button onClick={() => router.push('/dashboard-superadmin')} className="bg-gray-700 text-white px-4 py-2 rounded hover:bg-gray-600 text-sm font-medium">
             &larr; Kembali
           </button>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-          
-          {/* 1. KAMUS KOTA */}
-          <button 
-            onClick={() => router.push('/superadmin/pusat-kontrol/kota')}
-            className="bg-gray-800 border border-gray-700 p-6 rounded-xl hover:bg-gray-750 transition text-left flex flex-col items-start h-40 justify-center shadow-lg group"
-          >
-            <div className="text-4xl mb-3 group-hover:scale-110 transition">📍</div>
-            <h2 className="text-lg font-bold text-white mb-1">Master Rute (Daerah)</h2>
-            <p className="text-xs text-gray-400">Daftar daerah tujuan untuk semua penyewa + singkatan cetak.</p>
-          </button>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
 
-          {/* 2. ADMIN UTAMA */}
-          <button 
-            onClick={() => router.push('/superadmin/pusat-kontrol/admin')}
-            className="bg-gray-800 border border-gray-700 p-6 rounded-xl hover:bg-gray-750 transition text-left flex flex-col items-start h-40 justify-center shadow-lg group"
-          >
-            <div className="text-4xl mb-3 group-hover:scale-110 transition">👨‍💼</div>
-            <h2 className="text-lg font-bold text-white mb-1">Admin Utama</h2>
-            <p className="text-xs text-gray-400">Atur teks & tombol di dashboard Admin.</p>
-          </button>
-
-          {/* 3. PETUGAS */}
-          <button 
-            onClick={() => router.push('/superadmin/pusat-kontrol/admin/petugas')}
-            className="bg-gray-800 border border-gray-700 p-6 rounded-xl hover:bg-gray-750 transition text-left flex flex-col items-start h-40 justify-center shadow-lg group"
-          >
-            <div className="text-4xl mb-3 group-hover:scale-110 transition">📷</div>
-            <h2 className="text-lg font-bold text-white mb-1">Petugas Keberangkatan</h2>
-            <p className="text-xs text-gray-400">Kelola akun & lokasi petugas keberangkatan.</p>
-          </button>
-
-          {/* 4. AGEN */}
-          <button 
-            onClick={() => router.push('/superadmin/pusat-kontrol/agen')}
-            className="bg-gray-800 border border-gray-700 p-6 rounded-xl hover:bg-gray-750 transition text-left flex flex-col items-start h-40 justify-center shadow-lg group"
-          >
-            <div className="text-4xl mb-3 group-hover:scale-110 transition">🤝</div>
-            <h2 className="text-lg font-bold text-white mb-1">Agen</h2>
-            <p className="text-xs text-gray-400">Atur teks & tombol di dashboard Agen.</p>
-          </button>
+          {KARTU.map((k) => (
+            <button
+              key={k.path}
+              onClick={() => router.push(k.path)}
+              className="bg-gray-800 border border-gray-700 p-6 rounded-xl hover:bg-gray-750 transition text-left flex flex-col items-start h-40 justify-center shadow-lg group"
+            >
+              <div className="text-4xl mb-3 group-hover:scale-110 transition">{k.ikon}</div>
+              <h2 className="text-lg font-bold text-white mb-1">{k.judul}</h2>
+              <p className="text-xs text-gray-400">{k.ket}</p>
+              <span className={`mt-2 text-[10px] font-bold px-2 py-0.5 rounded-full border ${k.jenis === 'teks' ? 'bg-blue-900/60 text-blue-200 border-blue-700' : 'bg-emerald-900/60 text-emerald-200 border-emerald-700'}`}>
+                {k.jenis === 'teks' ? 'Editor Teks' : 'Kelola Akun'}
+              </span>
+            </button>
+          ))}
 
         </div>
+
+        <p className="text-xs text-gray-500 mt-6">
+          Catatan: kartu <b>Editor Teks</b> mengubah tulisan. Kartu <b>Kelola Akun</b> hanya mengelola akun login petugas.
+        </p>
       </div>
     </div>
   )
