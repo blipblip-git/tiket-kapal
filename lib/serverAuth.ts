@@ -27,6 +27,19 @@ export function pesanServiceKeyKosong() {
   }, { status: 500 })
 }
 
+// Klien memakai ANON key (publik). Dipakai sebagai cadangan kalau kunci server
+// di environment bukan service_role penuh (mis. "sb_secret_..." yang tidak
+// punya GRANT SELECT di sebagian tabel). Tabel yang dibaca tetap dibatasi RLS.
+export function buatClientAnon(): SupabaseClient | null {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL
+  const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+  if (!url || !anonKey) return null
+
+  return createClient(url, anonKey, {
+    auth: { autoRefreshToken: false, persistSession: false }
+  })
+}
+
 export function uuidValid(id: unknown): id is string {
   return typeof id === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)
 }

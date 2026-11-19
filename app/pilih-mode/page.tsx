@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { getOperatorSession } from '@/lib/supabase'
+import { adalahKolektor } from '@/lib/kolektor'
 import type { Profile } from '@/lib/supabase'
 
 export default function PilihModePage() {
@@ -22,6 +23,13 @@ export default function PilihModePage() {
     }
 
     // ==================== KUNCI AKSES BERDASARKAN ROLE ====================
+    // Cek kolektor lebih dulu: akun kolektor lama bisa tersimpan sebagai
+    // petugas_loket + unit "Kolektor" (database belum menerima role baru).
+    if (adalahKolektor(sesi)) {
+      router.replace('/dashboard/kolektor')
+      return
+    }
+
     if (sesi.role === 'petugas_loket') {
       localStorage.setItem('mode_kerja', 'loket')
       router.replace('/dashboard/loket')
@@ -38,11 +46,6 @@ export default function PilihModePage() {
       localStorage.setItem('mode_kerja', 'terminal')
       // PERBAIKAN: Arahkan ke dashboard keberangkatan, bukan langsung ke scan
       router.replace('/dashboard/keberangkatan')
-      return
-    }
-
-    if (sesi.role === 'kolektor') {
-      router.replace('/dashboard/kolektor')
       return
     }
 

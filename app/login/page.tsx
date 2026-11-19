@@ -2,6 +2,7 @@
 
 import { useState, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
+import { adalahKolektor } from '@/lib/kolektor'
 
 function LoginContent() {
   const router = useRouter()
@@ -56,7 +57,7 @@ function LoginContent() {
           window.location.href = '/dashboard/keberangkatan';
         } else if (data.role === 'agen') {
           window.location.href = '/dashboard/agen';
-        } else if (data.role === 'kolektor') {
+        } else if (data.role === 'kolektor' || adalahKolektor(data)) {
           window.location.href = '/dashboard/kolektor';
         } else {
           window.location.href = '/pilih-mode';

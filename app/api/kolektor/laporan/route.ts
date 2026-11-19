@@ -9,15 +9,49 @@
 // - Browser kolektor tidak lagi membaca tabel pesanan/pembayaran langsung.
 
 import { NextResponse } from 'next/server'
-import { buatClientAdmin, pesanServiceKeyKosong } from '@/lib/serverAuth'
+import type { SupabaseClient } from '@supabase/supabase-js'
+import { buatClientAdmin, buatClientAnon, pesanServiceKeyKosong } from '@/lib/serverAuth'
 import { verifikasiTokenSesi } from '@/lib/sessionToken'
+import { adalahKolektor } from '@/lib/kolektor'
 
 const ROLE_PENJUAL = ['agen', 'terminal_keberangkatan', 'petugas_loket', 'petugas_mobile']
+const KOLOM_PROFIL = 'id, nama, role, lokasi, unit, operator_id, aktif'
+
+async function bacaProfil(klien: SupabaseClient, id: string) {
+  return klien.from('profiles').select(KOLOM_PROFIL).eq('id', id).maybeSingle()
+}
+
+// Hasil cek sekali per proses: apakah kunci server punya GRANT SELECT.
+let serverBisaBaca: boolean | null = null
+
+/**
+ * Klien untuk membaca data laporan.
+ * Utamakan service role; kalau kuncinya tidak punya GRANT SELECT (sebagian
+ * project memakai kunci "sb_secret_..." yang dibatasi), pakai anon key yang
+ * memang sudah dipakai browser. Penyaringan lokasi tetap di server.
+ */
+async function pilihKlienBaca(): Promise<SupabaseClient | null> {
+  const admin = buatClientAdmin()
+
+  if (admin && serverBisaBaca !== false) {
+    if (serverBisaBaca === true) return admin
+
+    const { error } = await admin.from('pesanan').select('id').limit(1)
+    if (!error || !/permission denied/i.test(error.message)) {
+      serverBisaBaca = true
+      return admin
+    }
+    serverBisaBaca = false
+  }
+
+  return buatClientAnon() ?? admin
+}
 
 type ProfilPenjual = {
   nama: string | null
   email: string | null
   nomor_hp: string | null
+  unit?: string | null
 }
 
 /** Semua variasi identitas penjual (nama / email / nomor HP). */
@@ -57,8 +91,8 @@ function tambahVariasiHp(hasil: string[], nomor: string) {
 }
 
 export async function GET(request: Request) {
-  const admin = buatClientAdmin()
-  if (!admin) return pesanServiceKeyKosong()
+  const klien = await pilihKlienBaca()
+  if (!klien) return pesanServiceKeyKosong()
 
   const header = request.headers.get('authorization') || ''
   const token = header.toLowerCase().startsWith('bearer ') ? header.slice(7).trim() : ''
@@ -70,16 +104,12 @@ export async function GET(request: Request) {
     )
   }
 
-  const { data: profil, error: errorProfil } = await admin
-    .from('profiles')
-    .select('id, nama, role, lokasi, operator_id, aktif')
-    .eq('id', sesi.sub)
-    .maybeSingle()
+  const { data: profil, error: errorProfil } = await bacaProfil(klien, sesi.sub)
 
   if (errorProfil) {
     return NextResponse.json({ error: 'Gagal memeriksa akun: ' + errorProfil.message }, { status: 500 })
   }
-  if (!profil || String(profil.role || '').trim().toLowerCase() !== 'kolektor' || profil.aktif === false) {
+  if (!profil || !adalahKolektor(profil) || profil.aktif === false) {
     return NextResponse.json({ error: 'Akses ditolak. Akun ini bukan kolektor aktif.' }, { status: 403 })
   }
 
@@ -98,9 +128,9 @@ export async function GET(request: Request) {
   }
 
   // 1) Daftar penjual lokal: agen/petugas di lokasi kolektor + operator yang sama.
-  let qPenjual = admin
+  let qPenjual = klien
     .from('profiles')
-    .select('nama, email, nomor_hp, role, lokasi')
+    .select('nama, email, nomor_hp, role, lokasi, unit')
     .in('role', ROLE_PENJUAL)
     .eq('lokasi', lokasi)
 
@@ -115,9 +145,12 @@ export async function GET(request: Request) {
   }
 
   const identitasLokal = new Set<string>()
-  ;(dataPenjual || []).forEach((p: ProfilPenjual) => {
-    identitasPenjual(p).forEach((x) => identitasLokal.add(x))
-  })
+  ;(dataPenjual || [])
+    // Akun kolektor sendiri (petugas_loket + unit "Kolektor") bukan penjual.
+    .filter((p: ProfilPenjual) => !adalahKolektor({ unit: p.unit }))
+    .forEach((p: ProfilPenjual) => {
+      identitasPenjual(p).forEach((x) => identitasLokal.add(x))
+    })
 
   const profilPublik = { nama: profil.nama || null, lokasi }
 
@@ -126,7 +159,7 @@ export async function GET(request: Request) {
   }
 
   // 2) Penjualan tanggal tersebut.
-  const { data: dataPesanan, error: errorPesanan } = await admin
+  const { data: dataPesanan, error: errorPesanan } = await klien
     .from('pesanan')
     .select(`
       id, nama_penumpang, kode_tiket, kanal, status, status_boarding, waktu_boarding, petugas_jual, is_balita,
@@ -149,7 +182,7 @@ export async function GET(request: Request) {
   // 3) Metode pembayaran (Cash / QRIS).
   let pembayaran: { pesanan_id: string; metode: string | null }[] = []
   if (pesanan.length > 0) {
-    const { data: dataPembayaran, error: errorPembayaran } = await admin
+    const { data: dataPembayaran, error: errorPembayaran } = await klien
       .from('pembayaran')
       .select('pesanan_id, metode')
       .in('pesanan_id', pesanan.map((p: any) => p.id))

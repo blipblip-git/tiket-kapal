@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase, getOperatorSession, type Profile } from '@/lib/supabase'
+import { adalahKolektor } from '@/lib/kolektor'
 
 // Dashboard akun KOLEKTOR: penagih uang cash dari agen & petugas di lokasi
 // yang sama (Tarakan / Tanjung Selor / KTT / dst).
@@ -18,7 +19,7 @@ export default function DashboardKolektorPage() {
       router.replace('/login')
       return
     }
-    if (sesi.role !== 'kolektor') {
+    if (!adalahKolektor(sesi)) {
       router.replace('/pilih-mode')
       return
     }

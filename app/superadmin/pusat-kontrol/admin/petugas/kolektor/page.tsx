@@ -4,8 +4,7 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase, getProfile, getOperatorSession, type Profile } from '@/lib/supabase'
 import { fieldPasswordBaru } from '@/lib/password'
-
-const DAFTAR_LOKASI = ['Tarakan', 'Tanjung Selor', 'Malinau', 'Nunukan', 'KTT', 'Bunyu']
+import { DAFTAR_LOKASI, UNIT_KOLEKTOR, adalahKolektor } from '@/lib/kolektor'
 
 // Kolektor = akun penagih uang cash dari agen & petugas DI LOKASI YANG SAMA.
 // Akun ini hanya bisa membuka Laporan Penjualan Harian (read-only) dan cetak.
@@ -24,6 +23,7 @@ export default function AdminPetugasKolektorPage() {
   const [inputPass, setInputPass] = useState('')
   const [inputLokasi, setInputLokasi] = useState('Tarakan')
   const [modalLoading, setModalLoading] = useState(false)
+  const [modalPesan, setModalPesan] = useState<string | null>(null)
 
   // Edit inline
   const [editId, setEditId] = useState<string | null>(null)
@@ -58,10 +58,12 @@ export default function AdminPetugasKolektorPage() {
   }, [router])
 
   async function loadKolektor(operatorId: string) {
+    // Akun kolektor bisa tersimpan dengan role 'kolektor' (database sudah
+    // di-update) atau role 'petugas_loket' + unit "Kolektor" (database lama).
     const { data, error } = await supabase
       .from('profiles')
       .select('*')
-      .eq('role', 'kolektor')
+      .or(`role.eq.kolektor,and(role.eq.petugas_loket,unit.eq.${UNIT_KOLEKTOR})`)
       .eq('operator_id', operatorId)
       .order('nama', { ascending: true })
 
@@ -69,7 +71,7 @@ export default function AdminPetugasKolektorPage() {
       setPesan({ tipe: 'err', teks: 'Gagal load data: ' + error.message })
       return
     }
-    setKolektor((data || []) as Profile[])
+    setKolektor(((data || []) as Profile[]).filter((p) => adalahKolektor(p)))
   }
 
   async function toggleAktif(target: Profile) {
@@ -116,28 +118,40 @@ export default function AdminPetugasKolektorPage() {
     }
 
     setModalLoading(true)
+    setModalPesan(null)
 
-    const { error } = await supabase.from('profiles').insert({
+    const dasar = {
       id: crypto.randomUUID(),
       email: null,
       nomor_hp: inputHp.trim(),
       nama: inputNama.trim(),
-      role: 'kolektor',
       lokasi: inputLokasi,
-      unit: 'Kolektor',
       aktif: true,
       ...(await fieldPasswordBaru(inputPass)),
       operator_id: me.id
-    })
+    }
+
+    // 1) Coba pakai role khusus 'kolektor' (butuh supabase/role-kolektor.sql).
+    let { error } = await supabase
+      .from('profiles')
+      .insert({ ...dasar, role: 'kolektor', unit: UNIT_KOLEKTOR })
+
+    // 2) Database lama menolak role 'kolektor' (check constraint profiles_role_check).
+    //    Simpan sebagai petugas_loket + unit "Kolektor" — aplikasi tetap
+    //    mengenalinya sebagai kolektor lewat adalahKolektor().
+    if (error && /check constraint|profiles_role_check/i.test(error.message)) {
+      const hasil = await supabase
+        .from('profiles')
+        .insert({ ...dasar, role: 'petugas_loket', unit: UNIT_KOLEKTOR })
+      error = hasil.error
+    }
 
     setModalLoading(false)
     if (error) {
-      setPesan({
-        tipe: 'err',
-        teks: /check constraint/i.test(error.message)
-          ? 'Role "kolektor" belum diizinkan database. Jalankan SQL supabase/role-kolektor.sql dulu.'
-          : 'Gagal simpan: ' + error.message
-      })
+      const teks = /check constraint|profiles_role_check/i.test(error.message)
+        ? 'Database masih menolak akun baru (check constraint profiles.role). Jalankan SQL di supabase/role-kolektor.sql lalu coba lagi.'
+        : 'Gagal simpan: ' + error.message
+      setModalPesan(teks)
       return
     }
 
@@ -224,7 +238,7 @@ export default function AdminPetugasKolektorPage() {
             </p>
           </div>
           <div className="flex gap-3">
-            <button onClick={() => setModalTambah(true)} className="bg-green-600 text-white px-4 py-2 rounded shadow hover:bg-green-700 text-sm font-medium">
+            <button onClick={() => { setModalPesan(null); setModalTambah(true) }} className="bg-green-600 text-white px-4 py-2 rounded shadow hover:bg-green-700 text-sm font-medium">
               + Tambah Kolektor
             </button>
             <button onClick={() => router.push('/superadmin/pusat-kontrol/admin/petugas')} className="text-sm text-blue-600 hover:underline px-2">
@@ -327,6 +341,11 @@ export default function AdminPetugasKolektorPage() {
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-lg shadow-xl max-w-sm w-full p-6">
             <h3 className="text-lg font-bold mb-4 text-gray-800">Tambah Kolektor</h3>
+            {modalPesan && (
+              <div className="mb-4 px-3 py-2 rounded bg-red-50 border border-red-200 text-xs font-medium text-red-700">
+                {modalPesan}
+              </div>
+            )}
             <form onSubmit={handleTambah}>
               <label className="block text-sm font-medium text-gray-700 mb-1">Nama Lengkap</label>
               <input type="text" value={inputNama} onChange={(e) => setInputNama(e.target.value)} className="w-full border rounded px-3 py-2 mb-3 text-gray-900" required />

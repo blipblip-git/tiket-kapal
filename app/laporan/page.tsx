@@ -4,6 +4,7 @@ import { useEffect, useState, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { supabase, getProfile, getOperatorSession, type Profile } from '@/lib/supabase'
 import { idOperator, cocokOperator } from '@/lib/tenant'
+import { adalahKolektor } from '@/lib/kolektor'
 
 type RincianPenumpang = {
   id: string
@@ -65,7 +66,7 @@ function LaporanContent() {
       }
       if (!currentProfile) { router.push('/login'); return }
       // Kolektor hanya punya satu laporan: penjualan harian.
-      if (currentProfile.role === 'kolektor') {
+      if (adalahKolektor(currentProfile)) {
         const mode = new URLSearchParams(window.location.search).get('view')
         if (mode !== 'penjualan') {
           router.replace('/laporan?view=penjualan')
@@ -95,7 +96,7 @@ function LaporanContent() {
       if (!profile || !view || !tanggal) return
       
       const isAdmin = profile.role === 'admin_utama'
-      const isKolektor = profile.role === 'kolektor'
+      const isKolektor = adalahKolektor(profile)
       const lokasiTarget = isAdmin ? (lokasiParam || profile.lokasi) : profile.lokasi
       const operatorId = idOperator(profile)
 
@@ -449,7 +450,7 @@ function LaporanContent() {
             <h1 className="text-lg md:text-2xl font-bold text-gray-900">Laporan Rekapan</h1>
             <p className="text-xs md:text-sm font-bold text-blue-600 mt-0.5">{tanggalFormatHeader}</p>
           </div>
-          <button onClick={() => router.push(profile.role === 'kolektor' ? '/dashboard/kolektor' : '/laporan-penjualan-admin')} className="text-[10px] md:text-sm bg-gray-100 hover:bg-gray-200 text-gray-700 px-3 py-1.5 rounded-md font-medium transition">
+          <button onClick={() => router.push(adalahKolektor(profile) ? '/dashboard/kolektor' : '/laporan-penjualan-admin')} className="text-[10px] md:text-sm bg-gray-100 hover:bg-gray-200 text-gray-700 px-3 py-1.5 rounded-md font-medium transition">
             &larr; Kembali
           </button>
         </div>
