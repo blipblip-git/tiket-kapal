@@ -51,6 +51,28 @@ from public.profiles p
 where a.petugas_id = p.id
   and (a.petugas_email is null or a.petugas_email = '' or a.petugas_email = 'unknown');
 
+-- 2b. Log lama dari akun yang sudah DIHAPUS (petugas_id tidak ada di profiles).
+-- Petakan lewat kursi penumpang -> jadwal.operator_id.
+update public.audit_log a
+set operator_id = j.operator_id
+from public.kursi k
+join public.jadwal j on j.id = k.jadwal_id
+where a.operator_id is null
+  and jsonb_typeof(a.detail -> 'daftar_penumpang') = 'array'
+  and (a.detail -> 'daftar_penumpang' -> 0 ->> 'kursi_id') is not null
+  and k.id::text = (a.detail -> 'daftar_penumpang' -> 0 ->> 'kursi_id')
+  and j.operator_id is not null;
+
+-- Sisanya lewat grup_transaksi_id -> pesanan.jadwal_id -> jadwal.operator_id.
+update public.audit_log a
+set operator_id = j.operator_id
+from public.pesanan p
+join public.jadwal j on j.id = p.jadwal_id
+where a.operator_id is null
+  and (a.detail ->> 'grup_transaksi_id') is not null
+  and p.grup_transaksi_id::text = (a.detail ->> 'grup_transaksi_id')
+  and j.operator_id is not null;
+
 -- ---------- 3. CEK HASIL ----------
 -- Harus 0 baris: audit log yang belum punya operator_id
 select count(*) as audit_tanpa_operator from public.audit_log where operator_id is null;
