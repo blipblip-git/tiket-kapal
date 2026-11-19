@@ -31,10 +31,41 @@ export default function GantiPasswordPage() {
       return
     }
 
-    // 1. Kalau akun ini juga punya Supabase Auth (Superadmin/Admin), sinkronkan password-nya
+    // 1. Tentukan akun yang sedang ganti password.
+    //    Sesi lokal (/login) diutamakan supaya sisa sesi Supabase Auth di browser
+    //    yang sama (misalnya login Superadmin) tidak ikut berubah password-nya.
     const { data: { user } } = await supabase.auth.getUser()
+    const sesiLokal = getOperatorSession()
+    const idProfil = sesiLokal?.id || user?.id
 
-    if (user) {
+    if (!idProfil) {
+      setPesan('Sesi login tidak ditemukan. Silakan login ulang.')
+      setLoading(false)
+      return
+    }
+
+    // 2. Password lama WAJIB benar (dicek ke hash di server, bukan di browser).
+    const identifier = sesiLokal?.email || sesiLokal?.nomor_hp || ''
+    if (!identifier) {
+      setPesan('Sesi login tidak lengkap. Silakan logout lalu login ulang.')
+      setLoading(false)
+      return
+    }
+
+    const cekLama = await fetch('/api/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ identifier, password: passwordLama })
+    })
+
+    if (!cekLama.ok) {
+      setPesan('Password lama salah.')
+      setLoading(false)
+      return
+    }
+
+    // 3. Kalau akun ini juga punya Supabase Auth, sinkronkan password-nya.
+    if (user && user.id === idProfil) {
       const { error } = await supabase.auth.updateUser({
         password: passwordBaru
       })
@@ -46,20 +77,12 @@ export default function GantiPasswordPage() {
       }
     }
 
-    // 2. Simpan HASH password di tabel profiles (plaintext tidak pernah disimpan)
-    const sesiLokal = getOperatorSession()
-    const idProfil = user?.id || sesiLokal?.id
-
-    if (!idProfil) {
-      setPesan('Sesi login tidak ditemukan. Silakan login ulang.')
-      setLoading(false)
-      return
-    }
-
+    // 4. Simpan HASH password di tabel profiles (plaintext tidak pernah disimpan)
     const { error: errorHash } = await supabase
       .from('profiles')
       .update(await fieldPasswordBaru(passwordBaru))
       .eq('id', idProfil)
+      .select('id')
 
     if (errorHash) {
       setPesan('Gagal menyimpan password baru: ' + errorHash.message)
@@ -71,8 +94,9 @@ export default function GantiPasswordPage() {
     setLoading(false)
     
     setTimeout(() => {
-      // Logout paksa setelah ganti password
-      supabase.auth.signOut()
+      // Logout paksa setelah ganti password (hanya akun yang barusan diganti)
+      if (user && user.id === idProfil) supabase.auth.signOut()
+      localStorage.removeItem('petugas_session')
       router.push('/login')
     }, 2000)
   }

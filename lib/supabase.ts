@@ -81,8 +81,17 @@ export type AuditLog = {
 }
 
 // ==================== GET PROFILE (KHUSUS ADMIN) ====================
-export async function getProfile(): Promise<Profile | null> {
+// Catatan: login petugas/penyewa sekarang lewat /login (server) dan disimpan di
+// localStorage. Sesi Supabase Auth yang masih tertinggal di browser yang sama
+// (misalnya sisa login Superadmin) TIDAK boleh menimpa sesi lokal itu.
+export async function getProfile(opsi?: { utamakanAuth?: boolean }): Promise<Profile | null> {
+  const sesiLokal = getOperatorSession()
   const { data: { user } } = await supabase.auth.getUser()
+
+  if (!opsi?.utamakanAuth) {
+    if (sesiLokal && (!user || user.id !== sesiLokal.id)) return sesiLokal
+  }
+
   if (!user) return null
 
   const { data, error } = await supabase

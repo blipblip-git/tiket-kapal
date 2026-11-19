@@ -44,7 +44,7 @@ export default function ManajemenTenantPage() {
 
   useEffect(() => {
     async function init() {
-      const p = await getProfile()
+      const p = await getProfile({ utamakanAuth: true })
       if (!p || p.role !== 'admin_utama') {
         router.push('/login')
         return
