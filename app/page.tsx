@@ -2,6 +2,19 @@
 
 import { useState, useEffect, useRef, Suspense } from 'react'
 import { useRouter } from 'next/navigation'
+import { supabase } from '@/lib/supabase'
+
+// Cadangan kalau tabel master_kota belum bisa dibaca.
+const DAFTAR_KOTA_CADANGAN = [
+  'Tarakan',
+  'Tanjung Selor',
+  'Nunukan',
+  'Malinau',
+  'Bunyu',
+  'KTT',
+  'Tana Kuning',
+  'Sungai Nyamuk'
+]
 
 function BerandaContent() {
   const router = useRouter()
@@ -34,16 +47,26 @@ function BerandaContent() {
     }
   }
 
-  const daftarKota = [
-    'Tarakan',
-    'Tanjung Selor',
-    'Nunukan',
-    'Malinau',
-    'Bunyu',
-    'KTT',
-    'Tana Kuning',
-    'Sungai Nyamuk'
-  ]
+  const [daftarKota, setDaftarKota] = useState<string[]>(DAFTAR_KOTA_CADANGAN)
+
+  // Rute online WAJIB sama persis dengan Master Rute (master_kota), karena
+  // template jadwal menyimpan rute_asal/tujuan memakai nama_kota.
+  useEffect(() => {
+    async function ambilMasterRute() {
+      const { data } = await supabase
+        .from('master_kota')
+        .select('nama_kota')
+        .order('nama_kota')
+
+      if (data && data.length > 0) {
+        const unik = Array.from(
+          new Set(data.map((k: any) => (k.nama_kota || '').trim()).filter(Boolean))
+        )
+        setDaftarKota(unik)
+      }
+    }
+    ambilMasterRute()
+  }, [])
 
   // LOGIKA RESET TANGGAL JAM 16.00 WITA
   const getTanggalDefault = () => {

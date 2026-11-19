@@ -18,6 +18,12 @@ export default function MotherFilePetugasPage() {
     menu_jual: '',
     menu_laporan: '',
     menu_cetak: '',
+    judul_akun_petugas: '',
+    ket_akun_petugas: '',
+    menu_akun_keberangkatan: '',
+    ket_akun_keberangkatan: '',
+    menu_akun_kolektor: '',
+    ket_akun_kolektor: '',
   })
 
   useEffect(() => {
@@ -55,6 +61,12 @@ export default function MotherFilePetugasPage() {
           menu_jual: 'Jual Tiket',
           menu_laporan: 'Pusat Laporan',
           menu_cetak: 'Cetak Ulang Tiket',
+          judul_akun_petugas: 'Manajemen Petugas',
+          ket_akun_petugas: 'Pilih jenis akun petugas yang ingin dikelola. (Halaman ini untuk akun login, bukan revisi tulisan.)',
+          menu_akun_keberangkatan: 'Manajemen Petugas',
+          ket_akun_keberangkatan: 'Akun petugas keberangkatan (scan boarding & manifest) per lokasi.',
+          menu_akun_kolektor: 'Manajemen Petugas Kolektor',
+          ket_akun_kolektor: 'Akun penagih uang cash dari agen & petugas di lokasi yang sama (Tarakan, Tanjung Selor, KTT, dst).',
         })
       }
       setLoading(false)
@@ -62,7 +74,7 @@ export default function MotherFilePetugasPage() {
     cekSesiDanAmbilData()
   }, [router])
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     setTeks({ ...teks, [e.target.name]: e.target.value })
     setPesan('')
   }
@@ -138,6 +150,37 @@ export default function MotherFilePetugasPage() {
               <div>
                 <label className="block text-xs font-bold text-gray-400 mb-1">Menu Cetak Ulang</label>
                 <input type="text" name="menu_cetak" value={teks.menu_cetak} onChange={handleChange} className="w-full bg-gray-900 border border-gray-600 rounded px-3 py-2 text-white text-sm focus:border-blue-500 outline-none" />
+              </div>
+            </div>
+          </div>
+
+          <div className="border-t border-gray-700 pt-4 mt-2">
+            <h3 className="text-sm font-bold text-white mb-1">Halaman Akun Petugas</h3>
+            <p className="text-[11px] text-gray-400 mb-3">Tulisan di halaman Pusat Kontrol &rsaquo; Akun Petugas (dilihat juga oleh Admin Utama penyewa).</p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-xs font-bold text-gray-400 mb-1">Judul Halaman</label>
+                <input type="text" name="judul_akun_petugas" value={teks.judul_akun_petugas} onChange={handleChange} className="w-full bg-gray-900 border border-gray-600 rounded px-3 py-2 text-white text-sm focus:border-blue-500 outline-none" />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-gray-400 mb-1">Keterangan Halaman</label>
+                <textarea name="ket_akun_petugas" value={teks.ket_akun_petugas} onChange={handleChange} rows={2} className="w-full bg-gray-900 border border-gray-600 rounded px-3 py-2 text-white text-sm focus:border-blue-500 outline-none" />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-gray-400 mb-1">Kartu: Nama Petugas Keberangkatan</label>
+                <input type="text" name="menu_akun_keberangkatan" value={teks.menu_akun_keberangkatan} onChange={handleChange} className="w-full bg-gray-900 border border-gray-600 rounded px-3 py-2 text-white text-sm focus:border-blue-500 outline-none" />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-gray-400 mb-1">Kartu: Keterangan Petugas Keberangkatan</label>
+                <textarea name="ket_akun_keberangkatan" value={teks.ket_akun_keberangkatan} onChange={handleChange} rows={2} className="w-full bg-gray-900 border border-gray-600 rounded px-3 py-2 text-white text-sm focus:border-blue-500 outline-none" />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-gray-400 mb-1">Kartu: Nama Petugas Kolektor</label>
+                <input type="text" name="menu_akun_kolektor" value={teks.menu_akun_kolektor} onChange={handleChange} className="w-full bg-gray-900 border border-gray-600 rounded px-3 py-2 text-white text-sm focus:border-blue-500 outline-none" />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-gray-400 mb-1">Kartu: Keterangan Petugas Kolektor</label>
+                <textarea name="ket_akun_kolektor" value={teks.ket_akun_kolektor} onChange={handleChange} rows={2} className="w-full bg-gray-900 border border-gray-600 rounded px-3 py-2 text-white text-sm focus:border-blue-500 outline-none" />
               </div>
             </div>
           </div>

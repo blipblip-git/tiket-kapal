@@ -35,7 +35,7 @@ const KARTU: Kartu[] = [
     path: '/superadmin/pusat-kontrol/petugas',
     ikon: '📷',
     judul: 'Teks: Petugas',
-    ket: 'Atur judul & nama menu dashboard Petugas Keberangkatan.',
+    ket: 'Judul dashboard, menu petugas, dan tulisan halaman Akun Petugas.',
     jenis: 'teks',
   },
   {
@@ -49,7 +49,7 @@ const KARTU: Kartu[] = [
     path: '/superadmin/pusat-kontrol/admin/petugas',
     ikon: '🧑‍✈️',
     judul: 'Akun Petugas',
-    ket: 'Tambah / edit / hapus akun petugas keberangkatan & kolektor.',
+    ket: 'Tambah / edit / hapus akun. Tulisan halaman diatur di "Teks: Petugas".',
     jenis: 'akun',
   },
 ]
