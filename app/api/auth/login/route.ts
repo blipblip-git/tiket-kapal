@@ -39,7 +39,7 @@ function catatGagal(kunci: string) {
 }
 
 const KOLOM_DASAR =
-  'id, email, nama, role, lokasi, unit, nomor_hp, operator_id, nama_perusahaan, aktif, sesi_aktif, updated_at'
+  'id, email, nama, role, lokasi, unit, nomor_hp, operator_id, nama_perusahaan, aktif, sesi_aktif'
 const KOLOM_LENGKAP = `${KOLOM_DASAR}, password_plain, password_hash`
 const KOLOM_TANPA_HASH = `${KOLOM_DASAR}, password_plain`
 const KOLOM_TANPA_PLAIN = `${KOLOM_DASAR}, password_hash`
@@ -55,8 +55,7 @@ type ProfilLogin = {
   operator_id: string | null
   nama_perusahaan: string | null
   aktif: boolean | null
-  sesi_aktif: boolean | null
-  updated_at: string | null
+  sesi_aktif: boolean | string | null
   password_plain?: string | null
   password_hash?: string | null
 }
@@ -163,16 +162,8 @@ export async function POST(request: Request) {
       }, { status: 403 })
     }
 
-    // Sesi tunggal: 1 akun hanya aktif di 1 perangkat.
-    if (profil.sesi_aktif) {
-      const updateTerakhir = profil.updated_at ? new Date(profil.updated_at).getTime() : 0
-      const selisihDetik = (Date.now() - updateTerakhir) / 1000
-      if (selisihDetik < 30) {
-        return NextResponse.json({
-          error: 'Akun ini sedang aktif di perangkat lain. Silakan tunggu 30 detik lalu coba lagi.'
-        }, { status: 409 })
-      }
-    }
+    // Catat sesi aktif (best-effort; tidak boleh menggagalkan login).
+    await admin.from('profiles').update({ sesi_aktif: true }).eq('id', profil.id)
 
     // Migrasi otomatis akun lama: plaintext -> hash, lalu hapus plaintext-nya.
     if (!hash && hasil.adaKolomHash && profil.password_plain) {
@@ -191,11 +182,6 @@ export async function POST(request: Request) {
         }
       }
     }
-
-    await admin
-      .from('profiles')
-      .update({ sesi_aktif: true, updated_at: new Date().toISOString() })
-      .eq('id', profil.id)
 
     catatanPercobaan.delete(kunci)
 
