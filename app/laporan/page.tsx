@@ -145,22 +145,59 @@ function LaporanContent() {
         const metodeMap = new Map()
         pembayaranData?.forEach((p: any) => metodeMap.set(p.pesanan_id, p.metode))
 
-        const petugasMap = new Map()
+        // Peta identitas penjual -> nama asli.
+        // Kolom petugas_jual bisa berisi email, nomor HP, atau nama (tergantung form
+        // jual & akun lama), jadi semua variasi dinormalisasi dulu sebelum dicocokkan.
+        const petugasMap = new Map<string, string>()
         let queryProfiles = supabase
           .from('profiles')
-          .select('email, nomor_hp, nama')
-          .in('role', ['agen', 'terminal_keberangkatan'])
+          .select('nama, email, nomor_hp, role')
 
         if (profile.role !== 'superadmin') {
-          queryProfiles = queryProfiles.eq('operator_id', operatorId)
+          // Sertakan akun lama yang operator_id-nya masih NULL.
+          queryProfiles = queryProfiles.or(`operator_id.eq.${operatorId},operator_id.is.null`)
         }
 
         const { data: profilesData } = await queryProfiles
 
         profilesData?.forEach((p: any) => {
-          if (p.email) petugasMap.set(p.email, p.nama)
-          if (p.nomor_hp) petugasMap.set(p.nomor_hp, p.nama)
+          const nama = String(p.nama || '').trim()
+          if (!nama) return
+          if (p.email) petugasMap.set(String(p.email).trim().toLowerCase(), nama)
+          const digit = String(p.nomor_hp || '').replace(/\D/g, '')
+          if (digit) {
+            petugasMap.set(digit, nama)
+            petugasMap.set(digit.replace(/^62/, '0'), nama)
+            petugasMap.set(digit.replace(/^0/, '62'), nama)
+            if (digit.length > 9) petugasMap.set(digit.slice(-9), nama)
+          }
+          petugasMap.set(nama.toLowerCase(), nama)
         })
+
+        const namaPenjual = (identitas: string | null | undefined, kanal: string) => {
+          const bawaan = kanal === 'online' ? 'ONLINE' : 'Agen'
+          if (!identitas) return bawaan
+          const mentah = String(identitas).trim()
+          if (!mentah) return bawaan
+
+          const email = mentah.toLowerCase()
+          const langsung = petugasMap.get(email) || petugasMap.get(mentah)
+          if (langsung) return langsung
+
+          const digitMentah = email.includes('@') ? email.split('@')[0] : email
+          const digit = digitMentah.replace(/\D/g, '')
+          if (digit) {
+            const variasi = [digit, digit.replace(/^62/, '0'), digit.replace(/^0/, '62')]
+            if (digit.length > 9) variasi.push(digit.slice(-9))
+            for (const v of variasi) {
+              const ketemu = petugasMap.get(v)
+              if (ketemu) return ketemu
+            }
+          }
+
+          // Akun penjual tidak ditemukan (mis. sudah dihapus): jangan tampilkan email/no HP mentah.
+          return bawaan
+        }
 
         const jamSet = new Set<string>()
         filtered.forEach((item: any) => jamSet.add(item.jadwal.jam_berangkat.substring(0, 5)))
@@ -217,10 +254,7 @@ function LaporanContent() {
 
           const dataKapal = kapalMap.get(item.jadwal.kapal_id)
           
-          let namaPetugas = 'ONLINE'
-          if (item.petugas_jual) {
-            namaPetugas = petugasMap.get(item.petugas_jual) || item.petugas_jual
-          }
+          const namaPetugas = namaPenjual(item.petugas_jual, item.kanal || 'loket')
 
           group.rincian.push({
             id: item.id,
@@ -397,26 +431,29 @@ function LaporanContent() {
                   <div className="overflow-x-auto flex-1">
                     <table className="w-full table-fixed border-collapse text-gray-900">
                       <colgroup>
-                        <col className="w-[6%] md:w-[48px]" />
-                        <col />
-                        <col className="w-[14%] md:w-[100px]" />
-                        <col className="w-[14%] md:w-[118px]" />
-                        <col className="w-[14%] md:w-[118px]" />
-                        <col className="w-[14%] md:w-[118px]" />
-                        <col className="w-[12%] md:w-[72px]" />
+                        <col className="w-[5%]" />
+                        <col className="w-[24%]" />
+                        <col className="w-[12%]" />
+                        <col className="w-[18%]" />
+                        <col className="w-[18%]" />
+                        <col className="w-[15%]" />
+                        <col className="w-[8%]" />
                       </colgroup>
                       <thead>
                         <tr className="bg-gray-200 border-b">
-                          <th className="border p-1 text-[9px] md:text-xs w-[6%] md:w-[48px]" rowSpan={2}>No</th>
+                          <th className="border p-1 text-[9px] md:text-xs" rowSpan={2}>No</th>
                           <th className="border p-1 text-[9px] md:text-xs text-center" rowSpan={2}>Jam / Kapal</th>
                           <th className="border p-1 text-[9px] md:text-xs" colSpan={4}>Total</th>
-                          <th className="border p-1 text-[9px] md:text-xs w-[12%] md:w-[72px]" rowSpan={2}>Aksi</th>
+                          <th className="border p-1 text-[9px] md:text-xs" rowSpan={2}>Aksi</th>
                         </tr>
                         <tr className="bg-gray-200 border-b">
-                          <th className="border p-1 text-[9px] md:text-xs w-[14%] md:w-[100px] whitespace-nowrap">Kursi Dewasa/Balita</th>
-                          <th className="border p-1 text-[9px] md:text-xs w-[14%] md:w-[118px]">Cash</th>
-                          <th className="border p-1 text-[9px] md:text-xs w-[14%] md:w-[118px]">Qris</th>
-                          <th className="border p-1 text-[9px] md:text-xs w-[14%] md:w-[118px]">Jual</th>
+                          <th className="border p-1 text-[9px] md:text-xs leading-tight">
+                            <div>Kursi</div>
+                            <div>Dewasa/Balita</div>
+                          </th>
+                          <th className="border p-1 text-[9px] md:text-xs">Cash</th>
+                          <th className="border p-1 text-[9px] md:text-xs">Qris</th>
+                          <th className="border p-1 text-[9px] md:text-xs">Jual</th>
                         </tr>
                       </thead>
                       <tbody className="bg-white divide-y divide-gray-200">
@@ -469,26 +506,29 @@ function LaporanContent() {
                   <div className="overflow-x-auto">
                     <table className="w-full table-fixed border-collapse text-gray-900">
                       <colgroup>
-                        <col className="w-[6%] md:w-[48px]" />
-                        <col />
-                        <col className="w-[14%] md:w-[100px]" />
-                        <col className="w-[14%] md:w-[118px]" />
-                        <col className="w-[14%] md:w-[118px]" />
-                        <col className="w-[14%] md:w-[118px]" />
-                        <col className="w-[12%] md:w-[72px]" />
+                        <col className="w-[5%]" />
+                        <col className="w-[24%]" />
+                        <col className="w-[12%]" />
+                        <col className="w-[18%]" />
+                        <col className="w-[18%]" />
+                        <col className="w-[15%]" />
+                        <col className="w-[8%]" />
                       </colgroup>
                       <thead>
                         <tr className="bg-gray-200 border-b">
-                          <th className="border p-1 text-[9px] md:text-xs w-[6%] md:w-[48px]" rowSpan={2}>No</th>
+                          <th className="border p-1 text-[9px] md:text-xs" rowSpan={2}>No</th>
                           <th className="border p-1 text-[9px] md:text-xs text-center uppercase" rowSpan={2}>Petugas</th>
                           <th className="border p-1 text-[9px] md:text-xs" colSpan={4}>Total</th>
-                          <th className="border p-1 text-[9px] md:text-xs w-[12%] md:w-[72px]" rowSpan={2}>Aksi</th>
+                          <th className="border p-1 text-[9px] md:text-xs" rowSpan={2}>Aksi</th>
                         </tr>
                         <tr className="bg-gray-200 border-b">
-                          <th className="border p-1 text-[9px] md:text-xs w-[14%] md:w-[100px] whitespace-nowrap">Kursi Dewasa/Balita</th>
-                          <th className="border p-1 text-[9px] md:text-xs w-[14%] md:w-[118px]">Cash</th>
-                          <th className="border p-1 text-[9px] md:text-xs w-[14%] md:w-[118px]">Qris</th>
-                          <th className="border p-1 text-[9px] md:text-xs w-[14%] md:w-[118px]">Jual</th>
+                          <th className="border p-1 text-[9px] md:text-xs leading-tight">
+                            <div>Kursi</div>
+                            <div>Dewasa/Balita</div>
+                          </th>
+                          <th className="border p-1 text-[9px] md:text-xs">Cash</th>
+                          <th className="border p-1 text-[9px] md:text-xs">Qris</th>
+                          <th className="border p-1 text-[9px] md:text-xs">Jual</th>
                         </tr>
                       </thead>
                       <tbody className="bg-white divide-y divide-gray-200">
@@ -769,10 +809,20 @@ function LaporanContent() {
             </div>
           </div>
           <table className="w-full text-sm border-collapse border border-gray-400">
+            <colgroup>
+              <col style={{ width: '12%' }} />
+              <col style={{ width: '16%' }} />
+              <col style={{ width: '24%' }} />
+              <col style={{ width: '24%' }} />
+              <col style={{ width: '24%' }} />
+            </colgroup>
             <thead>
               <tr className="bg-gray-200 text-center text-gray-900">
                 <th className="border border-gray-400 px-2 py-2" rowSpan={2}>Jam</th>
-                <th className="border border-gray-400 px-2 py-2" rowSpan={2}>Kursi Dewasa/Balita</th>
+                <th className="border border-gray-400 px-2 py-2 leading-tight" rowSpan={2}>
+                  <div>Kursi</div>
+                  <div>Dewasa/Balita</div>
+                </th>
                 <th className="border border-gray-400 px-2 py-2" colSpan={3}>Penjualan</th>
               </tr>
               <tr className="bg-gray-200 text-center text-gray-900">
@@ -811,10 +861,20 @@ function LaporanContent() {
               </div>
             </div>
             <table className="w-full text-sm border-collapse border border-gray-400">
+              <colgroup>
+                <col style={{ width: '26%' }} />
+                <col style={{ width: '16%' }} />
+                <col style={{ width: '20%' }} />
+                <col style={{ width: '20%' }} />
+                <col style={{ width: '18%' }} />
+              </colgroup>
               <thead>
                 <tr className="bg-gray-200 text-center text-gray-900">
                   <th className="border border-gray-400 px-2 py-2">Petugas</th>
-                  <th className="border border-gray-400 px-2 py-2">Kursi Dewasa/Balita</th>
+                  <th className="border border-gray-400 px-2 py-2 leading-tight">
+                    <div>Kursi</div>
+                    <div>Dewasa/Balita</div>
+                  </th>
                   <th className="border border-gray-400 px-2 py-2">Cash</th>
                   <th className="border border-gray-400 px-2 py-2">Qris</th>
                   <th className="border border-gray-400 px-2 py-2">Total</th>
