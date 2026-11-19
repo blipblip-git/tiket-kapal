@@ -24,15 +24,32 @@ type LaporanPerJam = {
   rute: string
 }
 
+type DaerahManifest = {
+  asal: string
+  tujuan: string[]
+}
+
+// Warna kartu daerah (diputar otomatis sesuai urutan rute)
+const WARNA_KARTU = [
+  { kartu: 'bg-blue-50 border-blue-200 hover:bg-blue-100', judul: 'text-blue-900', panah: 'text-blue-700' },
+  { kartu: 'bg-green-50 border-green-200 hover:bg-green-100', judul: 'text-green-900', panah: 'text-green-700' },
+  { kartu: 'bg-purple-50 border-purple-200 hover:bg-purple-100', judul: 'text-purple-900', panah: 'text-purple-700' },
+  { kartu: 'bg-orange-50 border-orange-200 hover:bg-orange-100', judul: 'text-orange-900', panah: 'text-orange-700' },
+  { kartu: 'bg-teal-50 border-teal-200 hover:bg-teal-100', judul: 'text-teal-900', panah: 'text-teal-700' },
+  { kartu: 'bg-rose-50 border-rose-200 hover:bg-rose-100', judul: 'text-rose-900', panah: 'text-rose-700' },
+]
+
 function SyahbandarContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
-  const lokasi = searchParams.get('lokasi') || 'Tarakan'
+  const lokasi = searchParams.get('lokasi') || ''
+  const tujuan = searchParams.get('tujuan') || ''
   const operatorId = searchParams.get('operator') || ''
 
   const [profile, setProfile] = useState<Profile | null>(null)
   const [loading, setLoading] = useState(true)
   const [laporan, setLaporan] = useState<LaporanPerJam[]>([])
+  const [daftarDaerah, setDaftarDaerah] = useState<DaerahManifest[]>([])
   const [tanggal, setTanggal] = useState(() => {
     const today = new Date()
     const offset = today.getTimezoneOffset() * 60000
@@ -56,8 +73,59 @@ function SyahbandarContent() {
     init()
   }, [router])
 
+  // Kartu daerah dibuat OTOMATIS dari semua rute yang ada di sistem (master_rute)
+  useEffect(() => {
+    async function muatDaerah() {
+      const kumpulan: { rute_asal: string; rute_tujuan: string }[] = []
+
+      let qRute = supabase.from('master_rute').select('rute_asal, rute_tujuan')
+      if (operatorId) qRute = qRute.eq('operator_id', operatorId)
+      const { data: dataRute } = await qRute
+      ;(dataRute || []).forEach((r: any) => {
+        if (r.rute_asal && r.rute_tujuan) kumpulan.push({ rute_asal: r.rute_asal, rute_tujuan: r.rute_tujuan })
+      })
+
+      // Cadangan: kalau master_rute kosong, pakai rute yang sudah pernah dipakai di jadwal
+      if (kumpulan.length === 0) {
+        let qJadwal = supabase.from('jadwal').select('rute_asal, rute_tujuan').limit(1000)
+        if (operatorId) qJadwal = qJadwal.eq('operator_id', operatorId)
+        const { data: dataJadwal } = await qJadwal
+        ;(dataJadwal || []).forEach((j: any) => {
+          if (j.rute_asal && j.rute_tujuan) kumpulan.push({ rute_asal: j.rute_asal, rute_tujuan: j.rute_tujuan })
+        })
+      }
+
+      const grupMap = new Map<string, Set<string>>()
+      kumpulan.forEach(r => {
+        if (!grupMap.has(r.rute_asal)) grupMap.set(r.rute_asal, new Set())
+        grupMap.get(r.rute_asal)!.add(r.rute_tujuan)
+      })
+
+      const hasil: DaerahManifest[] = Array.from(grupMap.entries()).map(([asal, tujuanSet]) => ({
+        asal,
+        tujuan: Array.from(tujuanSet).sort((a, b) => a.localeCompare(b))
+      }))
+
+      const posisi = (nama: string) => (nama === 'Tarakan' ? 0 : nama === 'Tanjung Selor' ? 1 : 2)
+      hasil.sort((a, b) => {
+        const selisih = posisi(a.asal) - posisi(b.asal)
+        return selisih !== 0 ? selisih : a.asal.localeCompare(b.asal)
+      })
+
+      setDaftarDaerah(hasil)
+    }
+    muatDaerah()
+  }, [operatorId])
+
   useEffect(() => {
     async function fetchData() {
+      // Belum pilih daerah → tampilkan kartu portal dulu, jangan tarik manifest
+      if (!lokasi) {
+        setLaporan([])
+        setLoading(false)
+        return
+      }
+
       setLoading(true)
 
       let queryTemplate = supabase.from('template_jadwal').select('jam_berangkat').eq('rute_asal', lokasi)
@@ -67,6 +135,11 @@ function SyahbandarContent() {
           jadwal:jadwal_id (jam_berangkat, rute_asal, rute_tujuan, kapal_id, operator_id),
           kursi:kursi_id (nomor_kursi)
         `).eq('status', 'paid').eq('jadwal.tanggal', tanggal).eq('jadwal.rute_asal', lokasi)
+
+      if (tujuan) {
+        queryJadwal = queryJadwal.eq('rute_tujuan', tujuan)
+        queryPesanan = queryPesanan.eq('jadwal.rute_tujuan', tujuan)
+      }
 
       if (operatorId) {
         queryTemplate = queryTemplate.eq('operator_id', operatorId)
@@ -99,7 +172,7 @@ function SyahbandarContent() {
           nama_kapal: dataKapal?.nama || '-', 
           nama_kapten: dataKapal?.nama_kapten || '-',
           nama_abk: dataKapal?.nama_abk || [],
-          rute: jadwalCocok ? `${jadwalCocok.rute_asal} - ${jadwalCocok.rute_tujuan}` : `${lokasi} - -`
+          rute: jadwalCocok ? `${jadwalCocok.rute_asal} - ${jadwalCocok.rute_tujuan}` : `${lokasi} - ${tujuan || '-'}`
         }
       })
 
@@ -127,7 +200,7 @@ function SyahbandarContent() {
       setLoading(false)
     }
     fetchData()
-  }, [tanggal, lokasi, operatorId])
+  }, [tanggal, lokasi, tujuan, operatorId])
 
   const handlePrint = () => { setTimeout(() => window.print(), 100) }
   
@@ -205,16 +278,60 @@ function SyahbandarContent() {
       `}} />
 
       <div className="h-[100dvh] w-full bg-gray-50 flex flex-col overflow-hidden print:hidden">
-        {!expandedJam ? (
+        {!lokasi ? (
+          <>
+            <div className="flex-shrink-0 bg-white shadow-sm z-10 px-4 py-3 md:py-4">
+              <div className="max-w-md mx-auto flex justify-between items-start">
+                <div>
+                  <h1 className="text-xl font-bold text-gray-900 leading-tight">Portal Syahbandar</h1>
+                  <p className="text-sm text-gray-600 mt-0.5">Pilih daerah untuk melihat dan mencetak manifest penumpang.</p>
+                </div>
+                <button onClick={() => router.push('/login')} className="text-xs text-blue-600 hover:underline bg-gray-50 px-2 py-1.5 rounded border border-gray-200 mt-1">
+                  &larr; Keluar
+                </button>
+              </div>
+            </div>
+
+            <div className="flex-1 overflow-y-auto w-full p-4">
+              <div className="max-w-md mx-auto space-y-2">
+                {daftarDaerah.length === 0 ? (
+                  <div className="bg-white p-4 rounded-lg border border-gray-200 text-center shadow-sm">
+                    <p className="text-gray-500 text-xs">Belum ada rute terdaftar di sistem.</p>
+                  </div>
+                ) : (
+                  daftarDaerah.map((d, idx) => {
+                    const warna = WARNA_KARTU[idx % WARNA_KARTU.length]
+                    const paramOperator = operatorId ? `&operator=${encodeURIComponent(operatorId)}` : ''
+                    return (
+                      <button
+                        key={d.asal}
+                        onClick={() => router.push(`/syahbandar?lokasi=${encodeURIComponent(d.asal)}${paramOperator}`)}
+                        className={`w-full text-left rounded-lg border shadow-sm px-4 py-3 transition flex justify-between items-center ${warna.kartu}`}
+                      >
+                        <div className="min-w-0">
+                          <p className={`font-bold text-sm ${warna.judul}`}>Manifest {d.asal}</p>
+                          <p className="text-[11px] text-gray-600 mt-0.5 truncate">
+                            {d.tujuan.map(t => `${d.asal} → ${t}`).join(' • ')}
+                          </p>
+                        </div>
+                        <span className={`text-lg font-bold ml-3 ${warna.panah}`}>&rarr;</span>
+                      </button>
+                    )
+                  })
+                )}
+              </div>
+            </div>
+          </>
+        ) : !expandedJam ? (
           <>
             <div className="flex-shrink-0 bg-white shadow-sm z-10 px-4 py-3 md:py-4">
               <div className="max-w-md mx-auto">
                 <div className="flex justify-between items-start mb-3">
                   <div>
-                    <h1 className="text-xl font-bold text-gray-900 leading-tight">Manifest {lokasi}</h1>
+                    <h1 className="text-xl font-bold text-gray-900 leading-tight">Manifest {lokasi}{tujuan ? ` → ${tujuan}` : ''}</h1>
                     <p className="text-sm text-gray-600 mt-0.5">{tanggalFormatHeader}</p>
                   </div>
-                  <button onClick={() => router.push('/login')} className="text-xs text-blue-600 hover:underline bg-gray-50 px-2 py-1.5 rounded border border-gray-200 mt-1">
+                  <button onClick={() => router.push(`/syahbandar${operatorId ? `?operator=${encodeURIComponent(operatorId)}` : ''}`)} className="text-xs text-blue-600 hover:underline bg-gray-50 px-2 py-1.5 rounded border border-gray-200 mt-1">
                     &larr; Kembali
                   </button>
                 </div>
@@ -370,7 +487,7 @@ function SyahbandarContent() {
                 </div>
                 <div className="mb-4 text-sm grid grid-cols-[160px_10px_1fr] gap-y-1">
                   <span>Tanggal</span><span>:</span><span>{tanggalFormatHeader}</span>
-                  <span>Rute</span><span>:</span><span>{rincianAktif.rute || `${lokasi} - -`}</span>
+                  <span>Rute</span><span>:</span><span>{rincianAktif.rute || `${lokasi} - ${tujuan || '-'}`}</span>
                   <span>Kapal</span><span>:</span><span>{rincianAktif.nama_kapal}</span>
                   <span className="font-medium">Nama Kapten</span><span>:</span><span>{rincianAktif.nama_kapten || '-'}</span>
                   <span className="font-medium">ABK</span><span>:</span><span className="break-words">{formatDaftarAbk(rincianAktif.nama_abk)}</span>
