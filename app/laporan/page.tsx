@@ -364,7 +364,7 @@ function LaporanContent() {
   const jmlBalita = dataRincianAktif.filter(p => p.is_balita).length
 
   return (
-    <div className="h-[100dvh] w-full bg-gray-100 p-3 md:p-6 print:p-0 print:bg-white flex flex-col overflow-hidden">
+    <div className="h-[100dvh] w-full bg-gray-100 p-3 md:p-6 print:p-0 print:bg-white flex flex-col overflow-hidden print:h-auto print:overflow-visible">
       <style dangerouslySetInnerHTML={{__html: `
         @media print {
           @page { 
@@ -398,7 +398,7 @@ function LaporanContent() {
         }
       `}} />
 
-      <div className="max-w-6xl w-full mx-auto flex flex-col h-full">
+      <div className="max-w-6xl w-full mx-auto flex flex-col h-full print:h-auto">
         
         <div className="flex justify-between items-start mb-4 bg-white p-3 md:p-4 rounded shadow-sm border border-gray-200 print-hidden flex-shrink-0">
           <div>
@@ -810,15 +810,19 @@ function LaporanContent() {
           </div>
           <table className="w-full text-sm border-collapse border border-gray-400">
             <colgroup>
-              <col style={{ width: '12%' }} />
+              <col style={{ width: '5%' }} />
+              <col style={{ width: '9%' }} />
+              <col style={{ width: '22%' }} />
               <col style={{ width: '16%' }} />
-              <col style={{ width: '24%' }} />
-              <col style={{ width: '24%' }} />
-              <col style={{ width: '24%' }} />
+              <col style={{ width: '17%' }} />
+              <col style={{ width: '17%' }} />
+              <col style={{ width: '14%' }} />
             </colgroup>
             <thead>
               <tr className="bg-gray-200 text-center text-gray-900">
+                <th className="border border-gray-400 px-2 py-2" rowSpan={2}>No</th>
                 <th className="border border-gray-400 px-2 py-2" rowSpan={2}>Jam</th>
+                <th className="border border-gray-400 px-2 py-2" rowSpan={2}>Kapal</th>
                 <th className="border border-gray-400 px-2 py-2 leading-tight" rowSpan={2}>
                   <div>Kursi</div>
                   <div>Dewasa/Balita</div>
@@ -828,13 +832,15 @@ function LaporanContent() {
               <tr className="bg-gray-200 text-center text-gray-900">
                 <th className="border border-gray-400 px-2 py-1">Cash</th>
                 <th className="border border-gray-400 px-2 py-1">Qris</th>
-                <th className="border border-gray-400 px-2 py-1">Total</th>
+                <th className="border border-gray-400 px-2 py-1">Jual</th>
               </tr>
             </thead>
             <tbody>
-              {[...laporanBelumClosed, ...laporanSudahClosed].sort((a,b)=>a.jam.localeCompare(b.jam)).map((l) => (
+              {[...laporanBelumClosed, ...laporanSudahClosed].sort((a,b)=>a.jam.localeCompare(b.jam)).map((l, idx) => (
                 <tr key={l.jam} className="text-center text-gray-900">
+                  <td className="border border-gray-400 px-2 py-1">{idx + 1}</td>
                   <td className="border border-gray-400 px-2 py-1 font-bold">{l.jam}</td>
+                  <td className="border border-gray-400 px-2 py-1">{l.nama_kapal}</td>
                   <td className="border border-gray-400 px-2 py-1">{l.total_dewasa}/{l.total_balita}</td>
                   <td className="border border-gray-400 px-2 py-1 text-right">Rp {l.total_cash.toLocaleString('id-ID')}</td>
                   <td className="border border-gray-400 px-2 py-1 text-right">Rp {l.total_qris.toLocaleString('id-ID')}</td>
@@ -842,7 +848,7 @@ function LaporanContent() {
                 </tr>
               ))}
               <tr className="font-bold bg-gray-300 text-center text-gray-900">
-                <td className="border border-gray-400 px-2 py-1" colSpan={2}>TOTAL</td>
+                <td className="border border-gray-400 px-2 py-1" colSpan={4}>TOTAL</td>
                 <td className="border border-gray-400 px-2 py-1 text-right">Rp {totalCashHarian.toLocaleString('id-ID')}</td>
                 <td className="border border-gray-400 px-2 py-1 text-right">Rp {totalQrisHarian.toLocaleString('id-ID')}</td>
                 <td className="border border-gray-400 px-2 py-1 text-right">Rp {totalPenjualanHarian.toLocaleString('id-ID')}</td>
@@ -862,14 +868,16 @@ function LaporanContent() {
             </div>
             <table className="w-full text-sm border-collapse border border-gray-400">
               <colgroup>
+                <col style={{ width: '6%' }} />
                 <col style={{ width: '26%' }} />
                 <col style={{ width: '16%' }} />
-                <col style={{ width: '20%' }} />
-                <col style={{ width: '20%' }} />
                 <col style={{ width: '18%' }} />
+                <col style={{ width: '18%' }} />
+                <col style={{ width: '16%' }} />
               </colgroup>
               <thead>
                 <tr className="bg-gray-200 text-center text-gray-900">
+                  <th className="border border-gray-400 px-2 py-2">No</th>
                   <th className="border border-gray-400 px-2 py-2">Petugas</th>
                   <th className="border border-gray-400 px-2 py-2 leading-tight">
                     <div>Kursi</div>
@@ -877,12 +885,13 @@ function LaporanContent() {
                   </th>
                   <th className="border border-gray-400 px-2 py-2">Cash</th>
                   <th className="border border-gray-400 px-2 py-2">Qris</th>
-                  <th className="border border-gray-400 px-2 py-2">Total</th>
+                  <th className="border border-gray-400 px-2 py-2">Jual</th>
                 </tr>
               </thead>
               <tbody>
-                {getRekapPetugas(selectedJam).map((pt) => (
+                {getRekapPetugas(selectedJam).map((pt, idx) => (
                   <tr key={pt.nama} className="text-center text-gray-900">
+                    <td className="border border-gray-400 px-2 py-1">{idx + 1}</td>
                     <td className="border border-gray-400 px-2 py-1 font-bold text-center">{pt.nama}</td>
                     <td className="border border-gray-400 px-2 py-1">{pt.dewasa}/{pt.balita}</td>
                     <td className="border border-gray-400 px-2 py-1 text-right">Rp {pt.cash.toLocaleString('id-ID')}</td>
@@ -899,7 +908,7 @@ function LaporanContent() {
                   const tTotal = dataPt.reduce((s, x) => s + x.total, 0);
                   return (
                     <tr className="font-bold bg-gray-300 text-center text-gray-900">
-                      <td className="border border-gray-400 px-2 py-1 text-center">TOTAL</td>
+                      <td className="border border-gray-400 px-2 py-1 text-center" colSpan={2}>TOTAL</td>
                       <td className="border border-gray-400 px-2 py-1">{tDewasa}/{tBalita}</td>
                       <td className="border border-gray-400 px-2 py-1 text-right">Rp {tCash.toLocaleString('id-ID')}</td>
                       <td className="border border-gray-400 px-2 py-1 text-right">Rp {tQris.toLocaleString('id-ID')}</td>

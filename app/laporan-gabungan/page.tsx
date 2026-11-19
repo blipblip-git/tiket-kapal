@@ -170,7 +170,7 @@ export default function LaporanGabunganPage() {
   const grandTotalPendapatan = totalPendapatanTarakan + totalPendapatanTjSelor
 
   return (
-    <div className="h-[100dvh] w-full bg-gray-100 p-3 md:p-6 print:p-0 print:bg-white flex flex-col overflow-hidden">
+    <div className="h-[100dvh] w-full bg-gray-100 p-3 md:p-6 print:p-0 print:bg-white flex flex-col overflow-hidden print:h-auto print:overflow-visible">
       <style dangerouslySetInnerHTML={{__html: `
         @media print {
           @page { size: A4; margin: 15mm; }
@@ -183,7 +183,7 @@ export default function LaporanGabunganPage() {
         }
       `}} />
 
-      <div className="max-w-4xl w-full mx-auto flex flex-col h-full">
+      <div className="max-w-4xl w-full mx-auto flex flex-col h-full print:h-auto">
         
         <div className="flex justify-between items-start mb-3 bg-white p-3 rounded shadow-sm border border-gray-200 print-hidden flex-shrink-0">
           <div>
@@ -201,7 +201,7 @@ export default function LaporanGabunganPage() {
           <input type="date" value={tanggal} onChange={(e) => setTanggal(e.target.value)} className="border rounded px-2 py-1 text-[10px] md:text-sm text-gray-900" />
         </div>
 
-        <div className="bg-white rounded shadow border border-gray-200 overflow-hidden flex-1 flex flex-col min-h-0 print:border-none print:shadow-none">
+        <div className="bg-white rounded shadow border border-gray-200 overflow-hidden flex-1 flex flex-col min-h-0 print-hidden">
           <div className="overflow-y-auto flex-1">
             <table className="w-full table-fixed border-collapse text-gray-900">
               <thead className="bg-gray-100 border-b sticky top-0 z-10">
@@ -213,9 +213,9 @@ export default function LaporanGabunganPage() {
                   <th className="border p-1 text-[9px] md:text-xs w-[16%] text-center align-middle" rowSpan={2}>Total Penjualan</th>
                 </tr>
                 <tr className="bg-gray-100">
-                  <th className="border p-1 text-[8px] md:text-xs text-center">Kursi Dewasa/Balita</th>
+                  <th className="border p-1 text-[8px] md:text-xs text-center leading-tight"><div>Kursi</div><div>Dewasa/Balita</div></th>
                   <th className="border p-1 text-[8px] md:text-xs text-center">Pendapatan</th>
-                  <th className="border p-1 text-[8px] md:text-xs text-center">Kursi Dewasa/Balita</th>
+                  <th className="border p-1 text-[8px] md:text-xs text-center leading-tight"><div>Kursi</div><div>Dewasa/Balita</div></th>
                   <th className="border p-1 text-[8px] md:text-xs text-center">Pendapatan</th>
                 </tr>
               </thead>
@@ -271,9 +271,9 @@ export default function LaporanGabunganPage() {
                 <th className="border border-gray-400 px-2 py-1" rowSpan={2}>Total Penjualan</th>
               </tr>
               <tr className="bg-gray-200 text-center text-gray-900">
-                <th className="border border-gray-400 px-2 py-1">Kursi Dewasa/Balita</th>
+                <th className="border border-gray-400 px-2 py-1 leading-tight"><div>Kursi</div><div>Dewasa/Balita</div></th>
                 <th className="border border-gray-400 px-2 py-1">Pendapatan</th>
-                <th className="border border-gray-400 px-2 py-1">Kursi Dewasa/Balita</th>
+                <th className="border border-gray-400 px-2 py-1 leading-tight"><div>Kursi</div><div>Dewasa/Balita</div></th>
                 <th className="border border-gray-400 px-2 py-1">Pendapatan</th>
               </tr>
             </thead>
