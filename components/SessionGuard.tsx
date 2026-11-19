@@ -5,6 +5,7 @@ import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import {
   cekValidasiSesi,
   cekAutoLogout,
+  cekStatusOperator,
   getOperatorSession,
   logoutOperator,
   supabase,
@@ -46,6 +47,14 @@ export default function SessionGuard() {
       cekAutoLogout(sesiLokal).then((harusLogout) => {
         if (harusLogout) {
           console.log('Jam kerja selesai, auto-logout petugas...')
+          logoutOperator()
+        }
+      })
+
+      // 3b. Akun/perusahaan dinonaktifkan atau dihapus Superadmin -> tendang.
+      cekStatusOperator(sesiLokal).then((masihAktif) => {
+        if (!masihAktif) {
+          console.log('Akun atau perusahaan dinonaktifkan, mengalihkan ke login...')
           logoutOperator()
         }
       })

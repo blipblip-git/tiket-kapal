@@ -180,6 +180,42 @@ export async function cekValidasiSesi(): Promise<boolean> {
   return false
 }
 
+// ==================== SATPAM: CEK STATUS AKUN STAF (NONAKTIF / DIHAPUS) ====================
+// Dipakai SessionGuard: kalau Superadmin menonaktifkan penyewa, semua stafnya
+// langsung terlempar ke /login pada navigasi berikutnya.
+export async function cekStatusOperator(sesi: Profile | null): Promise<boolean> {
+  if (!sesi?.id) return false
+  try {
+    const { data, error } = await supabase
+      .from('profiles')
+      .select('aktif, operator_id')
+      .eq('id', sesi.id)
+      .maybeSingle()
+
+    // Gangguan jaringan/DB: jangan tendang pengguna.
+    if (error) return true
+
+    // Profil sudah dihapus permanen oleh Superadmin.
+    if (!data) return false
+    if (data.aktif === false) return false
+
+    // Staf/agen: ikut status perusahaan penyewanya.
+    if (data.operator_id) {
+      const { data: induk } = await supabase
+        .from('profiles')
+        .select('aktif')
+        .eq('id', data.operator_id)
+        .maybeSingle()
+
+      if (!induk || induk.aktif === false) return false
+    }
+
+    return true
+  } catch {
+    return true
+  }
+}
+
 // ==================== LOGOUT ====================
 export async function logout() {
   await supabase.auth.signOut()

@@ -13,7 +13,14 @@ type Agen = {
   password_plain?: string | null
   nomor_hp: string | null
   lokasi: string | null
+  operator_id: string | null
   aktif: boolean
+}
+
+type Tenan = {
+  id: string
+  nama: string
+  nama_perusahaan: string | null
 }
 
 const DAFTAR_LOKASI = ['Tarakan', 'Tanjung Selor', 'Malinau', 'Nunukan', 'KTT', 'Bunyu']
@@ -25,6 +32,7 @@ export default function ManajemenAgenPage() {
   const [error, setError] = useState('')
   
   const [agenList, setAgenList] = useState<Agen[]>([])
+  const [tenanList, setTenanList] = useState<Tenan[]>([])
   const [pesan, setPesan] = useState<{ tipe: 'ok' | 'err'; teks: string } | null>(null)
   const [aksiLoading, setAksiLoading] = useState<string | null>(null)
 
@@ -36,6 +44,7 @@ export default function ManajemenAgenPage() {
   const [inputHp, setInputHp] = useState('')
   const [inputPass, setInputPass] = useState('')
   const [inputLokasi, setInputLokasi] = useState('Tarakan')
+  const [inputTenant, setInputTenant] = useState('')
   const [modalLoading, setModalLoading] = useState(false)
 
   useEffect(() => {
@@ -66,7 +75,7 @@ export default function ManajemenAgenPage() {
       }
 
       setProfile(p as Profile)
-      await loadAgen()
+      await Promise.all([loadAgen(), loadTenan()])
       setLoading(false)
     }
     init()
@@ -86,12 +95,37 @@ export default function ManajemenAgenPage() {
     setAgenList((data || []) as Agen[])
   }
 
+  async function loadTenan() {
+    const { data, error } = await supabase
+      .from('profiles')
+      .select('id, nama, nama_perusahaan')
+      .eq('role', 'admin_utama')
+      .neq('email', 'superadmin@gmail.com')
+      .order('nama_perusahaan', { ascending: true })
+
+    if (error) {
+      setPesan({ tipe: 'err', teks: 'Gagal load daftar penyewa: ' + error.message })
+      return
+    }
+    setTenanList((data || []) as Tenan[])
+  }
+
+  function namaTenan(id: string | null) {
+    if (!id) return 'Tanpa penyewa'
+    const t = tenanList.find((x) => x.id === id)
+    return t ? (t.nama_perusahaan || t.nama) : 'Penyewa tidak ditemukan'
+  }
+
   // ==================== TAMBAH ====================
   async function handleTambah(e: React.FormEvent) {
     e.preventDefault()
     setPesan(null)
     if (!inputNama || !inputHp || !inputPass) {
       setPesan({ tipe: 'err', teks: 'Nama, No HP, dan Password wajib diisi.' })
+      return
+    }
+    if (!inputTenant) {
+      setPesan({ tipe: 'err', teks: 'Pilih perusahaan penyewa dulu. Agen wajib terikat ke satu penyewa.' })
       return
     }
 
@@ -107,7 +141,8 @@ export default function ManajemenAgenPage() {
       lokasi: inputLokasi, 
       aktif: true, 
       ...(await fieldPasswordBaru(inputPass)),
-      nomor_hp: inputHp
+      nomor_hp: inputHp,
+      operator_id: inputTenant
     })
 
     setModalLoading(false)
@@ -142,6 +177,9 @@ export default function ManajemenAgenPage() {
       lokasi: inputLokasi,
       nomor_hp: inputHp
     }
+
+    // Agen wajib terikat ke satu penyewa.
+    if (inputTenant) updateData.operator_id = inputTenant
 
     // Password hanya diganti kalau kolomnya diisi.
     if (inputPass) {
@@ -187,6 +225,7 @@ export default function ManajemenAgenPage() {
     setInputHp(a.nomor_hp || a.email.replace('@petugas.local', ''))
     setInputPass('') // password lama tidak bisa ditampilkan (sudah di-hash)
     setInputLokasi(a.lokasi || 'Tarakan')
+    setInputTenant(a.operator_id || '')
   }
 
   function kirimWA(a: Agen) {
@@ -215,7 +254,15 @@ export default function ManajemenAgenPage() {
           </div>
           <div className="flex gap-3">
             <button
-              onClick={() => setModalTambah(true)}
+              onClick={() => {
+                setInputNama('')
+                setInputHp('')
+                setInputPass('')
+                setInputLokasi('Tarakan')
+                setInputTenant('')
+                setPesan(null)
+                setModalTambah(true)
+              }}
               className="bg-green-600 text-white px-4 py-2 rounded shadow hover:bg-green-700 text-sm font-bold"
             >
               + Tambah Agen
@@ -241,6 +288,7 @@ export default function ManajemenAgenPage() {
             <thead className="bg-gray-700 text-gray-300">
               <tr>
                 <th className="text-left px-4 py-3">Nama Agen</th>
+                <th className="text-left px-4 py-3">Penyewa</th>
                 <th className="text-left px-4 py-3">No. HP / Pass</th>
                 <th className="text-center px-4 py-3">Lokasi</th>
                 <th className="text-center px-4 py-3">Status</th>
@@ -249,11 +297,16 @@ export default function ManajemenAgenPage() {
             </thead>
             <tbody>
               {agenList.length === 0 && (
-                <tr><td colSpan={5} className="text-center py-8 text-gray-500">Belum ada agen terdaftar.</td></tr>
+                <tr><td colSpan={6} className="text-center py-8 text-gray-500">Belum ada agen terdaftar.</td></tr>
               )}
               {agenList.map((a) => (
                 <tr key={a.id} className="border-t border-gray-700 hover:bg-gray-750">
                   <td className="px-4 py-3 font-bold text-white">{a.nama}</td>
+                  <td className="px-4 py-3 text-gray-300">
+                    {a.operator_id ? namaTenan(a.operator_id) : (
+                      <span className="text-red-400 text-xs font-bold">Tanpa penyewa</span>
+                    )}
+                  </td>
                   <td className="px-4 py-3 text-gray-300">
                     <div>{a.nomor_hp || a.email.replace('@petugas.local', '')}</div>
                     <div className="text-xs text-gray-500">{a.password_hash || a.password_plain ? '•••••••• (tersimpan aman)' : '-'}</div>
@@ -287,6 +340,12 @@ export default function ManajemenAgenPage() {
           <div className="bg-gray-800 rounded-xl shadow-2xl border border-gray-600 max-w-sm w-full p-6 text-white">
             <h3 className="text-lg font-bold mb-4">Tambah Agen Baru</h3>
             <form onSubmit={handleTambah}>
+              <label className="block text-sm font-medium text-gray-300 mb-1">Perusahaan Penyewa</label>
+              <select value={inputTenant} onChange={(e) => setInputTenant(e.target.value)} className="w-full border border-gray-600 rounded bg-gray-700 px-3 py-2 mb-3 text-white focus:outline-none focus:border-blue-500" required>
+                <option value="">-- Pilih Penyewa --</option>
+                {tenanList.map((t) => <option key={t.id} value={t.id}>{t.nama_perusahaan || t.nama}</option>)}
+              </select>
+
               <label className="block text-sm font-medium text-gray-300 mb-1">Nama Agen</label>
               <input type="text" value={inputNama} onChange={(e) => setInputNama(e.target.value)} className="w-full border border-gray-600 rounded bg-gray-700 px-3 py-2 mb-3 text-white focus:outline-none focus:border-blue-500" placeholder="Contoh: Agen Loket Tarakan" required />
 
@@ -318,6 +377,12 @@ export default function ManajemenAgenPage() {
           <div className="bg-gray-800 rounded-xl shadow-2xl border border-gray-600 max-w-sm w-full p-6 text-white">
             <h3 className="text-lg font-bold mb-4">Edit Agen: {modalEdit.nama}</h3>
             <form onSubmit={handleEdit}>
+              <label className="block text-sm font-medium text-gray-300 mb-1">Perusahaan Penyewa</label>
+              <select value={inputTenant} onChange={(e) => setInputTenant(e.target.value)} className="w-full border border-gray-600 rounded bg-gray-700 px-3 py-2 mb-3 text-white focus:outline-none focus:border-blue-500" required>
+                <option value="">-- Pilih Penyewa --</option>
+                {tenanList.map((t) => <option key={t.id} value={t.id}>{t.nama_perusahaan || t.nama}</option>)}
+              </select>
+
               <label className="block text-sm font-medium text-gray-300 mb-1">Nama Agen</label>
               <input type="text" value={inputNama} onChange={(e) => setInputNama(e.target.value)} className="w-full border border-gray-600 rounded bg-gray-700 px-3 py-2 mb-3 text-white focus:outline-none focus:border-blue-500" required />
 

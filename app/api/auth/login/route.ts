@@ -164,6 +164,25 @@ export async function POST(request: Request) {
       }, { status: 403 })
     }
 
+    // Staf/agen: ikut status perusahaan penyewanya (saklar NonAktifkan dari Superadmin).
+    if (profil.operator_id) {
+      const { data: induk, error: errorInduk } = await admin
+        .from('profiles')
+        .select('id, nama_perusahaan, aktif')
+        .eq('id', profil.operator_id)
+        .maybeSingle()
+
+      if (errorInduk) {
+        return NextResponse.json({ error: 'Gagal memeriksa perusahaan penyewa: ' + errorInduk.message }, { status: 500 })
+      }
+
+      if (!induk || induk.aktif === false) {
+        return NextResponse.json({
+          error: `Perusahaan ${induk?.nama_perusahaan || 'penyewa'} sedang dinonaktifkan. Hubungi Admin Utama / pemilik platform.`
+        }, { status: 403 })
+      }
+    }
+
     // Catat sesi aktif (best-effort; tidak boleh menggagalkan login).
     await admin.from('profiles').update({ sesi_aktif: true }).eq('id', profil.id)
 

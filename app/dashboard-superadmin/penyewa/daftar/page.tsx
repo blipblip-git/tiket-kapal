@@ -31,6 +31,11 @@ export default function DaftarPenyewaPage() {
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [pesan, setPesan] = useState('')
 
+  // Hapus permanen
+  const [hapusTarget, setHapusTarget] = useState<Penyewa | null>(null)
+  const [hapusKetik, setHapusKetik] = useState('')
+  const [hapusLoading, setHapusLoading] = useState(false)
+
   useEffect(() => {
     async function cekSesi() {
       const { data: { user } } = await supabase.auth.getUser()
@@ -145,6 +150,36 @@ export default function DaftarPenyewaPage() {
     }
   }
 
+  function bukaHapus(p: Penyewa) {
+    setHapusTarget(p)
+    setHapusKetik('')
+  }
+
+  async function handleHapusPermanen(e: React.FormEvent) {
+    e.preventDefault()
+    if (!hapusTarget) return
+
+    setHapusLoading(true)
+    try {
+      const response = await fetch('/api/superadmin/hapus-penyewa', {
+        method: 'POST',
+        headers: await headerSuperadmin(),
+        body: JSON.stringify({ id: hapusTarget.id, konfirmasi: hapusKetik }),
+      })
+      const result = await response.json()
+      if (!response.ok) throw new Error(result.error || 'Gagal menghapus penyewa')
+
+      alert(result.message || 'Penyewa dihapus permanen.')
+      setHapusTarget(null)
+      setHapusKetik('')
+      fetchPenyewa()
+    } catch (err: any) {
+      alert('Gagal menghapus: ' + err.message)
+    } finally {
+      setHapusLoading(false)
+    }
+  }
+
   if (loading) return <p className="p-6 text-center text-gray-400 bg-gray-900 min-h-screen flex items-center justify-center">Memuat data...</p>
 
   return (
@@ -201,9 +236,10 @@ export default function DaftarPenyewaPage() {
                       <td className="px-6 py-4">{new Date(p.created_at).toLocaleDateString('id-ID')}</td>
                       <td className="px-6 py-4 text-center">
                         <button onClick={() => handleBukaEdit(p)} className="text-blue-400 hover:text-blue-300 text-xs font-medium mr-3">Edit</button>
-                        <button onClick={() => handleUbahStatus(p)} className={p.aktif ? 'text-red-400 hover:text-red-300 text-xs font-medium' : 'text-green-400 hover:text-green-300 text-xs font-medium'}>
+                        <button onClick={() => handleUbahStatus(p)} className={p.aktif ? 'text-red-400 hover:text-red-300 text-xs font-medium mr-3' : 'text-green-400 hover:text-green-300 text-xs font-medium mr-3'}>
                           {p.aktif ? 'Nonaktifkan' : 'Aktifkan'}
                         </button>
+                        <button onClick={() => bukaHapus(p)} className="text-red-500 hover:text-red-400 text-xs font-bold">Hapus</button>
                       </td>
                     </tr>
                   ))
@@ -259,6 +295,55 @@ export default function DaftarPenyewaPage() {
               <div className="flex justify-end gap-2 mt-4 pt-2">
                 <button type="button" onClick={() => setIsModalOpen(false)} className="px-4 py-2 rounded text-gray-300 hover:bg-gray-700 text-sm font-medium">Batal</button>
                 <button type="submit" disabled={isSubmitting} className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded font-bold text-sm disabled:opacity-50">{isSubmitting ? 'Menyimpan...' : 'Simpan'}</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {hapusTarget && (
+        <div className="fixed inset-0 bg-black/70 flex items-center justify-center p-4 z-50">
+          <div className="bg-gray-800 rounded-xl shadow-2xl w-full max-w-md border border-red-700 overflow-hidden">
+            <div className="flex justify-between items-center p-4 border-b border-gray-700">
+              <h3 className="font-bold text-lg text-red-400">Hapus Permanen Penyewa</h3>
+              <button onClick={() => setHapusTarget(null)} className="text-gray-400 hover:text-white">&times;</button>
+            </div>
+
+            <form onSubmit={handleHapusPermanen} className="p-4 space-y-4">
+              <p className="text-sm text-gray-300">
+                <span className="font-bold text-white">{hapusTarget.nama_perusahaan || hapusTarget.nama}</span> ({hapusTarget.email})
+              </p>
+
+              <ul className="text-xs text-red-300 bg-red-950/40 border border-red-900 rounded p-3 space-y-1">
+                <li>• Semua kapal, jadwal, kursi, tiket, pembayaran, refund dihapus.</li>
+                <li>• Semua staf &amp; agen penyewa ini dihapus.</li>
+                <li>• Akun Admin Utama penyewa ini dihapus permanen.</li>
+                <li>• Hanya catatan: nama pemilik, nama perusahaan, email, no HP.</li>
+                <li className="font-bold">Tindakan ini TIDAK bisa dibatalkan.</li>
+              </ul>
+
+              <div>
+                <label className="block text-xs font-bold text-gray-400 mb-1">
+                  Ketik <span className="text-white">{hapusTarget.nama_perusahaan || hapusTarget.nama}</span> untuk konfirmasi
+                </label>
+                <input
+                  type="text"
+                  value={hapusKetik}
+                  onChange={(e) => setHapusKetik(e.target.value)}
+                  className="w-full bg-gray-900 border border-gray-600 rounded px-3 py-2 text-white text-sm focus:border-red-500 outline-none"
+                  autoFocus
+                />
+              </div>
+
+              <div className="flex justify-end gap-2">
+                <button type="button" onClick={() => setHapusTarget(null)} className="px-4 py-2 rounded text-gray-300 hover:bg-gray-700 text-sm font-medium">Batal</button>
+                <button
+                  type="submit"
+                  disabled={hapusLoading || hapusKetik.trim().toLowerCase() !== (hapusTarget.nama_perusahaan || hapusTarget.nama).trim().toLowerCase()}
+                  className="bg-red-700 hover:bg-red-600 text-white px-4 py-2 rounded font-bold text-sm disabled:bg-gray-600 disabled:cursor-not-allowed"
+                >
+                  {hapusLoading ? 'Menghapus...' : 'Hapus Permanen'}
+                </button>
               </div>
             </form>
           </div>

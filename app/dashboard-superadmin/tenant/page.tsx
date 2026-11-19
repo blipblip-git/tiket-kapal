@@ -42,6 +42,12 @@ export default function ManajemenTenantPage() {
   const [resetLoading, setResetLoading] = useState<string | null>(null)
   const [passwordBaru, setPasswordBaru] = useState<{ [key: string]: string }>({})
 
+  // Saklar tenant (nonaktifkan/aktifkan) & hapus permanen
+  const [statusLoading, setStatusLoading] = useState<string | null>(null)
+  const [hapusTarget, setHapusTarget] = useState<AdminKapal | null>(null)
+  const [hapusKetik, setHapusKetik] = useState('')
+  const [hapusLoading, setHapusLoading] = useState(false)
+
   useEffect(() => {
     async function init() {
       const p = await getProfile({ utamakanAuth: true })
@@ -189,28 +195,78 @@ export default function ManajemenTenantPage() {
     setResetLoading(null)
   }
 
-  async function handleHapusTenant(target: AdminKapal) {
+  async function headerSuperadmin() {
+    const { data: { session } } = await supabase.auth.getSession()
+    if (!session?.access_token) {
+      throw new Error('Sesi Superadmin tidak ditemukan. Login ulang di /superadmin.')
+    }
+    return {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${session.access_token}`,
+    }
+  }
+
+  // SAKLAR: nonaktifkan / aktifkan penyewa + seluruh stafnya (data tetap utuh).
+  async function handleUbahStatus(target: AdminKapal) {
     const akanAktifkan = !target.aktif
+    const nama = target.nama_perusahaan || target.nama
     const konfirmasi = confirm(akanAktifkan
-      ? `Aktifkan kembali akun "${target.nama_perusahaan || target.nama}" (${target.email})?`
-      : `Nonaktifkan akun Admin Kapal "${target.nama_perusahaan || target.nama}" (${target.email})?\n\nAkun tidak bisa login, TAPI semua data kapal, jadwal, dan laporan tetap tersimpan dan bisa diaktifkan kembali.`)
+      ? `Aktifkan kembali akun "${nama}" (${target.email})?\n\nPenyewa dan seluruh stafnya bisa login lagi.`
+      : `Nonaktifkan akun "${nama}" (${target.email})?\n\nPenyewa dan SEMUA staf/agennya tidak bisa login. Semua data (kapal, jadwal, tiket, laporan) tetap tersimpan dan bisa diaktifkan kembali.`)
 
     if (!konfirmasi) return
 
+    setStatusLoading(target.id)
     setPesan('')
-    // Soft delete: jangan hapus baris profiles supaya data tenant tidak yatim.
-    const { error } = await supabase
-      .from('profiles')
-      .update({ aktif: akanAktifkan, sesi_aktif: false })
-      .eq('id', target.id)
 
-    if (error) {
-      setPesan('Gagal mengubah status akun: ' + error.message)
-    } else {
-      setPesan(akanAktifkan
-        ? `Akun ${target.email} diaktifkan kembali.`
-        : `Akun ${target.email} dinonaktifkan. Data tenant tetap tersimpan.`)
+    try {
+      const response = await fetch('/api/superadmin/status-penyewa', {
+        method: 'POST',
+        headers: await headerSuperadmin(),
+        body: JSON.stringify({ id: target.id, aktif: akanAktifkan }),
+      })
+      const hasil = await response.json()
+      if (!response.ok) throw new Error(hasil.error || 'Gagal mengubah status')
+      setPesan(hasil.message || 'Status penyewa berubah.')
       await fetchTenants()
+    } catch (err: any) {
+      setPesan('Gagal mengubah status: ' + err.message)
+    } finally {
+      setStatusLoading(null)
+    }
+  }
+
+  // HAPUS PERMANEN: semua data + staf + auth user dihapus bersih.
+  function bukaHapus(target: AdminKapal) {
+    setHapusTarget(target)
+    setHapusKetik('')
+    setPesan('')
+  }
+
+  async function handleHapusPermanen(e: React.FormEvent) {
+    e.preventDefault()
+    if (!hapusTarget) return
+
+    setHapusLoading(true)
+    setPesan('')
+
+    try {
+      const response = await fetch('/api/superadmin/hapus-penyewa', {
+        method: 'POST',
+        headers: await headerSuperadmin(),
+        body: JSON.stringify({ id: hapusTarget.id, konfirmasi: hapusKetik }),
+      })
+      const hasil = await response.json()
+      if (!response.ok) throw new Error(hasil.error || 'Gagal menghapus penyewa')
+
+      setPesan(hasil.message || 'Penyewa dihapus permanen.')
+      setHapusTarget(null)
+      setHapusKetik('')
+      await fetchTenants()
+    } catch (err: any) {
+      setPesan('Gagal menghapus: ' + err.message)
+    } finally {
+      setHapusLoading(false)
     }
   }
 
@@ -309,6 +365,54 @@ export default function ManajemenTenantPage() {
           </div>
         )}
 
+        {/* MODAL HAPUS PERMANEN */}
+        {hapusTarget && (
+          <div className="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center p-4 z-50">
+            <div className="bg-gray-800 p-6 rounded-xl shadow-lg border border-red-700 w-full max-w-md">
+              <h2 className="text-lg font-bold mb-1 text-red-400">Hapus Permanen Penyewa</h2>
+              <p className="text-sm text-gray-300 mb-4">
+                <span className="font-bold text-white">{hapusTarget.nama_perusahaan || hapusTarget.nama}</span> ({hapusTarget.email})
+              </p>
+
+              <ul className="text-xs text-red-300 bg-red-950/40 border border-red-900 rounded p-3 mb-4 space-y-1">
+                <li>• Semua kapal, jadwal, kursi, tiket, pembayaran, refund dihapus.</li>
+                <li>• Semua staf &amp; agen penyewa ini dihapus (tidak bisa login lagi).</li>
+                <li>• Akun Admin Utama penyewa ini dihapus permanen.</li>
+                <li>• Hanya catatan: nama pemilik, nama perusahaan, email, no HP.</li>
+                <li className="font-bold">Tindakan ini TIDAK bisa dibatalkan.</li>
+              </ul>
+
+              <form onSubmit={handleHapusPermanen} className="space-y-4">
+                <div>
+                  <label className="block text-sm text-gray-300 mb-1">
+                    Ketik <span className="font-bold text-white">{hapusTarget.nama_perusahaan || hapusTarget.nama}</span> untuk konfirmasi
+                  </label>
+                  <input
+                    type="text"
+                    value={hapusKetik}
+                    onChange={(e) => setHapusKetik(e.target.value)}
+                    className="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2 text-white"
+                    placeholder={hapusTarget.nama_perusahaan || hapusTarget.nama}
+                    autoFocus
+                  />
+                </div>
+                <div className="flex justify-end gap-2">
+                  <button type="button" onClick={() => setHapusTarget(null)} className="px-4 py-2 text-gray-300 hover:bg-gray-700 rounded">
+                    Batal
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={hapusLoading || hapusKetik.trim().toLowerCase() !== (hapusTarget.nama_perusahaan || hapusTarget.nama).trim().toLowerCase()}
+                    className="px-4 py-2 bg-red-700 text-white rounded hover:bg-red-600 font-bold disabled:bg-gray-600 disabled:cursor-not-allowed"
+                  >
+                    {hapusLoading ? 'Menghapus...' : 'Hapus Permanen'}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
+
         <div className="bg-gray-800 rounded-xl shadow-lg border border-gray-700 overflow-hidden">
           <table className="w-full text-sm">
             <thead className="bg-gray-950 text-gray-400">
@@ -361,10 +465,17 @@ export default function ManajemenTenantPage() {
                           </button>
                         )}
                         <button
-                          onClick={() => handleHapusTenant(t)}
-                          className="bg-red-600 text-white px-2 py-1 rounded text-xs hover:bg-red-500 font-bold"
+                          onClick={() => handleUbahStatus(t)}
+                          disabled={statusLoading === t.id}
+                          className={`${t.aktif ? 'bg-amber-600 hover:bg-amber-500' : 'bg-emerald-600 hover:bg-emerald-500'} text-white px-2 py-1 rounded text-xs font-bold disabled:bg-gray-600`}
                         >
-                          🗑️ {t.aktif ? 'Nonaktifkan' : 'Aktifkan'}
+                          {statusLoading === t.id ? '...' : t.aktif ? '⏸ Nonaktifkan' : '▶ Aktifkan'}
+                        </button>
+                        <button
+                          onClick={() => bukaHapus(t)}
+                          className="bg-red-700 text-white px-2 py-1 rounded text-xs hover:bg-red-600 font-bold"
+                        >
+                          🗑 Hapus
                         </button>
                       </div>
                     </td>

@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, Suspense, useRef } from 'react'
+import { useEffect, useState, Suspense } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase, getProfile, getOperatorSession, formatDaftarAbk, type Profile } from '@/lib/supabase'
 
@@ -11,7 +11,6 @@ type Kapal = {
   layout_kursi: string | null
   status: string
   catatan: string | null
-  foto_url: string | null
   nama_kapten: string | null
   nama_abk: string[] | null
 }
@@ -40,11 +39,8 @@ function KapalContent() {
   const [daftarAbk, setDaftarAbk] = useState<string[]>([''])
   const [status, setStatus] = useState('aktif')
   const [catatan, setCatatan] = useState('')
-  const [fotoFile, setFotoFile] = useState<File | null>(null)
-  const [fotoLama, setFotoLama] = useState<string | null>(null)
   const [proses, setProses] = useState(false)
   const [error, setError] = useState('')
-  const fileInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     async function init() {
@@ -87,10 +83,7 @@ function KapalContent() {
     setDaftarAbk([''])
     setStatus('aktif')
     setCatatan('')
-    setFotoFile(null)
-    setFotoLama(null)
     setError('')
-    if (fileInputRef.current) fileInputRef.current.value = ''
   }
 
   const handleEdit = (k: Kapal) => {
@@ -102,10 +95,7 @@ function KapalContent() {
     setDaftarAbk(k.nama_abk && k.nama_abk.length > 0 ? k.nama_abk : [''])
     setStatus(k.status)
     setCatatan(k.catatan || '')
-    setFotoLama(k.foto_url)
-    setFotoFile(null)
     setShowForm(true)
-    if (fileInputRef.current) fileInputRef.current.value = ''
   }
 
   const handleHapus = async (id: string) => {
@@ -132,22 +122,6 @@ function KapalContent() {
     setError('')
 
     try {
-      let fotoUrl = fotoLama
-
-      // Upload foto jika ada file baru
-      if (fotoFile) {
-        const fileExt = fotoFile.name.split('.').pop()
-        const fileName = `${Date.now()}-${Math.random().toString(36).substring(2)}.${fileExt}`
-        const { error: uploadError } = await supabase.storage
-          .from('kapal')
-          .upload(fileName, fotoFile)
-        
-        if (uploadError) throw new Error('Gagal upload foto: ' + uploadError.message)
-
-        const { data: publicUrlData } = supabase.storage.from('kapal').getPublicUrl(fileName)
-        fotoUrl = publicUrlData.publicUrl
-      }
-
       const payload = {
         nama,
         kapasitas: parseInt(kapasitas),
@@ -156,7 +130,6 @@ function KapalContent() {
         nama_abk: daftarAbk.map((n) => n.trim()).filter((n) => n !== ''),
         status,
         catatan: catatan || null,
-        foto_url: fotoUrl,
         operator_id: profile.role === 'superadmin' && !editId ? profile.id : (profile.role === 'admin_utama' ? profile.id : undefined)
       }
 
@@ -295,11 +268,6 @@ function KapalContent() {
                     <option value="aktif">Aktif</option>
                     <option value="nonaktif">Nonaktif</option>
                   </select>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Foto Kapal (Opsional)</label>
-                  <input type="file" accept="image/*" ref={fileInputRef} onChange={e => setFotoFile(e.target.files?.[0] || null)} className="w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100" />
-                  {fotoLama && !fotoFile && <p className="text-xs text-green-600 mt-1">Foto lama terpasang.</p>}
                 </div>
               </div>
               

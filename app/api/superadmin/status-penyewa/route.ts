@@ -74,9 +74,25 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Status gagal diubah (0 baris berubah)' }, { status: 500 })
     }
 
+    // SAKLAR TENANT: seluruh staf/agen di bawah penyewa ikut mengikuti status ini.
+    // Data (kapal, jadwal, pesanan, laporan) TIDAK disentuh sama sekali.
+    const { data: stafBerubah, error: errorStaf } = await admin
+      .from('profiles')
+      .update({ aktif, sesi_aktif: false })
+      .eq('operator_id', id)
+      .select('id')
+
+    if (errorStaf) {
+      console.error('Gagal menyamakan status staf penyewa:', errorStaf.message)
+    }
+
+    const jumlahStaf = (stafBerubah || []).length
+
     return NextResponse.json({
       success: true,
-      message: aktif ? 'Penyewa berhasil diaktifkan kembali.' : 'Akses login penyewa dinonaktifkan.'
+      message: aktif
+        ? `Penyewa dan ${jumlahStaf} stafnya diaktifkan kembali. Silakan login ulang.`
+        : `Penyewa dan ${jumlahStaf} stafnya dinonaktifkan (tidak bisa login). Semua data tetap tersimpan.`
     })
 
   } catch (error: any) {

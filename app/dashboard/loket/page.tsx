@@ -18,7 +18,6 @@ type JadwalTampil = {
   menitTersisa: number
   status: 'open' | 'closed'
   isGenerated?: boolean
-  foto_url?: string | null
 }
 
 type PesananCash = {
@@ -117,7 +116,7 @@ export default function DashboardLoketPage() {
       .eq('aktif', true)
       .eq('rute_asal', lokasiOperator) 
 
-    const { data: kapalData } = await supabase.from('kapal').select('id, nama, kapasitas, foto_url')
+    const { data: kapalData } = await supabase.from('kapal').select('id, nama, kapasitas')
     const kapalMap = new Map(kapalData?.map((k) => [k.id, k]) || [])
 
     const finalList: JadwalTampil[] = []
@@ -166,8 +165,7 @@ export default function DashboardLoketPage() {
             total_kursi: total,
             menitTersisa,
             status,
-            isGenerated: false,
-            foto_url: kapal.foto_url
+            isGenerated: false
           })
         } else {
           finalList.push({
@@ -183,8 +181,7 @@ export default function DashboardLoketPage() {
             total_kursi: kapal.kapasitas,
             menitTersisa,
             status,
-            isGenerated: true,
-            foto_url: kapal.foto_url
+            isGenerated: true
           })
         }
       }
@@ -520,17 +517,8 @@ export default function DashboardLoketPage() {
               {jadwalList.map((j, idx) => (
                 <div key={idx} className={`border rounded p-4 flex justify-between items-center ${j.status === 'closed' ? 'opacity-50 bg-gray-50' : ''}`}>
                   
-                  {/* SISI KIRI: IKON KAPAL & INFO */}
+                  {/* SISI KIRI: INFO JADWAL */}
                   <div className="flex items-center gap-3 md:gap-4 flex-1">
-                    
-                    {/* Emoji / Foto Kapal di Kiri */}
-                    <div className="flex-shrink-0 w-12 h-12 md:w-16 md:h-16 bg-gray-50 rounded border flex items-center justify-center overflow-hidden">
-                      {j.foto_url ? (
-                        <img src={j.foto_url} alt={j.nama_kapal} className="w-full h-full object-cover" />
-                      ) : (
-                        <span className="text-2xl md:text-3xl">🚢</span>
-                      )}
-                    </div>
 
                     <div>
                       <p className="font-bold text-sm md:text-base text-gray-900">{j.jam_berangkat}</p>
