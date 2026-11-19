@@ -41,7 +41,7 @@ function OnlineSuperadminContent() {
       }
       setProfile(p)
 
-      // Ambil Data Kamus Kota (Single Source of Truth)
+      // Ambil Data Master Rute / Daerah (Single Source of Truth)
       const { data: kotaData, error: errKota } = await supabase
         .from('master_kota')
         .select('*')
@@ -185,7 +185,7 @@ function OnlineSuperadminContent() {
               onClick={() => router.push('/superadmin/pusat-kontrol/kota')}
               className="text-xs text-blue-400 hover:text-blue-300 font-medium"
             >
-              Kelola Kamus Kota &rarr;
+              Kelola Master Rute (Daerah) &rarr;
             </button>
           </div>
           <div className="overflow-x-auto">
@@ -200,7 +200,7 @@ function OnlineSuperadminContent() {
                 {kotaList.length === 0 ? (
                   <tr>
                     <td colSpan={2} className="px-6 py-6 text-center text-gray-500 italic">
-                      Belum ada data kota. Silakan isi Kamus Kota dulu.
+                      Belum ada data daerah. Silakan isi Master Rute (Daerah) dulu.
                     </td>
                   </tr>
                 ) : (
