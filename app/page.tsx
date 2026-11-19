@@ -5,15 +5,20 @@ import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 
 // Cadangan kalau tabel master_kota belum bisa dibaca.
-const DAFTAR_KOTA_CADANGAN = [
-  'Tarakan',
-  'Tanjung Selor',
-  'Nunukan',
-  'Malinau',
-  'Bunyu',
-  'KTT',
-  'Tana Kuning',
-  'Sungai Nyamuk'
+type KotaRute = { nama_kota: string; singkatan: string }
+
+const DAFTAR_KOTA_CADANGAN: KotaRute[] = [
+  { nama_kota: 'Berau', singkatan: 'BRU' },
+  { nama_kota: 'Bunyu', singkatan: 'BNY' },
+  { nama_kota: 'Kabupaten Tanah Tidung', singkatan: 'KTT' },
+  { nama_kota: 'Malinau', singkatan: 'MLN' },
+  { nama_kota: 'Nunukan', singkatan: 'NNK' },
+  { nama_kota: 'Sebatik', singkatan: 'SBK' },
+  { nama_kota: 'Sembakung', singkatan: 'SMG' },
+  { nama_kota: 'Sungai Nyamuk', singkatan: 'SNK' },
+  { nama_kota: 'Tanah Kuning', singkatan: 'TKG' },
+  { nama_kota: 'Tanjung Selor', singkatan: 'TJS' },
+  { nama_kota: 'Tarakan', singkatan: 'TRK' }
 ]
 
 function BerandaContent() {
@@ -47,25 +52,37 @@ function BerandaContent() {
     }
   }
 
-  const [daftarKota, setDaftarKota] = useState<string[]>(DAFTAR_KOTA_CADANGAN)
+  const [daftarKota, setDaftarKota] = useState<KotaRute[]>(DAFTAR_KOTA_CADANGAN)
+  const [memuatRute, setMemuatRute] = useState(false)
 
   // Rute online WAJIB sama persis dengan Master Rute (master_kota), karena
   // template jadwal menyimpan rute_asal/tujuan memakai nama_kota.
-  useEffect(() => {
-    async function ambilMasterRute() {
+  const muatRute = async () => {
+    setMemuatRute(true)
+    try {
       const { data } = await supabase
         .from('master_kota')
-        .select('nama_kota')
+        .select('nama_kota, singkatan')
         .order('nama_kota')
 
       if (data && data.length > 0) {
-        const unik = Array.from(
-          new Set(data.map((k: any) => (k.nama_kota || '').trim()).filter(Boolean))
-        )
-        setDaftarKota(unik)
+        const unik = new Map<string, KotaRute>()
+        data.forEach((k: any) => {
+          const nama = (k.nama_kota || '').trim()
+          if (!nama || unik.has(nama)) return
+          unik.set(nama, { nama_kota: nama, singkatan: (k.singkatan || '').trim() })
+        })
+        const hasil = Array.from(unik.values()).sort((a, b) => a.nama_kota.localeCompare(b.nama_kota))
+        if (hasil.length > 0) setDaftarKota(hasil)
       }
+    } finally {
+      setMemuatRute(false)
     }
-    ambilMasterRute()
+  }
+
+  useEffect(() => {
+    muatRute()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   // LOGIKA RESET TANGGAL JAM 16.00 WITA
@@ -119,8 +136,17 @@ function BerandaContent() {
     }
   }
 
+  const labelKota = (nama: string) => {
+    const kota = daftarKota.find(k => k.nama_kota === nama)
+    return kota?.singkatan ? `${kota.nama_kota} / ${kota.singkatan}` : nama
+  }
+
   const filterKota = (search: string) => {
-    return daftarKota.filter(k => k.toLowerCase().includes(search.toLowerCase()))
+    const q = search.trim().toLowerCase()
+    if (!q) return daftarKota
+    return daftarKota.filter(k =>
+      k.nama_kota.toLowerCase().includes(q) || k.singkatan.toLowerCase().includes(q)
+    )
   }
 
   return (
@@ -169,7 +195,22 @@ function BerandaContent() {
       </div>
 
       <div className="bg-white rounded-3xl shadow-lg w-full max-w-[340px] sm:max-w-sm p-5 sm:p-6 relative">
-        <h2 className="text-lg sm:text-xl font-bold text-gray-900 text-center mb-5 sm:mb-6">Cari Jadwal Tiket Speed</h2>
+        <div className="flex items-center gap-2 mb-5 sm:mb-6">
+          <h2 className="text-lg sm:text-xl font-bold text-gray-900 text-center flex-1">Cari Jadwal Tiket Speed</h2>
+          <button
+            type="button"
+            onClick={muatRute}
+            disabled={memuatRute}
+            title="Muat ulang rute dari Master Rute"
+            aria-label="Muat ulang daftar rute"
+            className="flex items-center gap-1 text-xs font-bold text-purple-700 bg-purple-50 border border-purple-200 rounded-full px-2.5 py-1.5 hover:bg-purple-100 disabled:opacity-50"
+          >
+            <svg className={`w-4 h-4 ${memuatRute ? 'animate-spin' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v6h6M20 20v-6h-6M20 8a8 8 0 00-14.9-3M4 16a8 8 0 0014.9 3" />
+            </svg>
+            <span className="hidden sm:inline">Muat Ulang</span>
+          </button>
+        </div>
 
         <form onSubmit={handleCari} className="space-y-3 sm:space-y-4">
           
@@ -180,7 +221,7 @@ function BerandaContent() {
               onClick={() => setShowAsalModal(true)}
               className="w-full text-left border border-gray-300 rounded-lg px-3 sm:px-4 py-2.5 sm:py-3 text-sm sm:text-base text-gray-900 focus:ring-purple-500 focus:border-purple-500 bg-white"
             >
-              {asal || '-- Pilih Kota --'}
+              {asal ? labelKota(asal) : '-- Pilih Kota --'}
             </button>
           </div>
 
@@ -203,7 +244,7 @@ function BerandaContent() {
               onClick={() => setShowTujuanModal(true)}
               className="w-full text-left border border-gray-300 rounded-lg px-3 sm:px-4 py-2.5 sm:py-3 text-sm sm:text-base text-gray-900 focus:ring-purple-500 focus:border-purple-500 bg-white"
             >
-              {tujuan || '-- Pilih Kota --'}
+              {tujuan ? labelKota(tujuan) : '-- Pilih Kota --'}
             </button>
           </div>
 
@@ -251,19 +292,21 @@ function BerandaContent() {
             </div>
             <div className="overflow-y-auto p-2">
               {filterKota(searchAsal).map(kota => {
-                const isSelected = asal === kota;
-                const isDisabled = tujuan === kota; 
+                const isSelected = asal === kota.nama_kota;
+                const isDisabled = tujuan === kota.nama_kota; 
                 
                 return (
                   <button
-                    key={kota}
+                    key={kota.nama_kota}
                     disabled={isDisabled}
-                    onClick={() => handlePilihKota(kota, 'asal')}
+                    onClick={() => handlePilihKota(kota.nama_kota, 'asal')}
                     className={`w-full text-left px-4 py-3 rounded-lg mb-1 flex items-center justify-between transition-all ${
                       isDisabled ? 'opacity-40 cursor-not-allowed bg-gray-50' : 'hover:bg-gray-100'
                     }`}
                   >
-                    <span className="text-sm font-medium text-gray-900">{kota}</span>
+                    <span className="text-sm font-medium text-gray-900">
+                      {kota.nama_kota} <span className="text-gray-500">/ {kota.singkatan}</span>
+                    </span>
                     <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${
                       isSelected 
                         ? 'border-red-500 bg-red-500 animate-heartbeat' 
@@ -275,7 +318,18 @@ function BerandaContent() {
                 )
               })}
             </div>
-            <div className="p-3 border-t bg-gray-50 text-center">
+            <div className="p-3 border-t bg-gray-50 flex items-center justify-center gap-3">
+              <button
+                onClick={muatRute}
+                disabled={memuatRute}
+                className="text-sm text-purple-600 font-bold hover:underline disabled:opacity-50 flex items-center gap-1"
+              >
+                <svg className={`w-4 h-4 ${memuatRute ? 'animate-spin' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v6h6M20 20v-6h-6M20 8a8 8 0 00-14.9-3M4 16a8 8 0 0014.9 3" />
+                </svg>
+                Muat Ulang Rute
+              </button>
+              <span className="text-gray-300">|</span>
               <button onClick={() => setShowAsalModal(false)} className="text-sm text-gray-600 font-medium hover:underline">
                 Batal
               </button>
@@ -299,19 +353,21 @@ function BerandaContent() {
             </div>
             <div className="overflow-y-auto p-2">
               {filterKota(searchTujuan).map(kota => {
-                const isSelected = tujuan === kota;
-                const isDisabled = asal === kota; 
+                const isSelected = tujuan === kota.nama_kota;
+                const isDisabled = asal === kota.nama_kota; 
                 
                 return (
                   <button
-                    key={kota}
+                    key={kota.nama_kota}
                     disabled={isDisabled}
-                    onClick={() => handlePilihKota(kota, 'tujuan')}
+                    onClick={() => handlePilihKota(kota.nama_kota, 'tujuan')}
                     className={`w-full text-left px-4 py-3 rounded-lg mb-1 flex items-center justify-between transition-all ${
                       isDisabled ? 'opacity-40 cursor-not-allowed bg-gray-50' : 'hover:bg-gray-100'
                     }`}
                   >
-                    <span className="text-sm font-medium text-gray-900">{kota}</span>
+                    <span className="text-sm font-medium text-gray-900">
+                      {kota.nama_kota} <span className="text-gray-500">/ {kota.singkatan}</span>
+                    </span>
                     <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${
                       isSelected 
                         ? 'border-red-500 bg-red-500 animate-heartbeat' 
@@ -323,7 +379,18 @@ function BerandaContent() {
                 )
               })}
             </div>
-            <div className="p-3 border-t bg-gray-50 text-center">
+            <div className="p-3 border-t bg-gray-50 flex items-center justify-center gap-3">
+              <button
+                onClick={muatRute}
+                disabled={memuatRute}
+                className="text-sm text-purple-600 font-bold hover:underline disabled:opacity-50 flex items-center gap-1"
+              >
+                <svg className={`w-4 h-4 ${memuatRute ? 'animate-spin' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v6h6M20 20v-6h-6M20 8a8 8 0 00-14.9-3M4 16a8 8 0 0014.9 3" />
+                </svg>
+                Muat Ulang Rute
+              </button>
+              <span className="text-gray-300">|</span>
               <button onClick={() => setShowTujuanModal(false)} className="text-sm text-gray-600 font-medium hover:underline">
                 Batal
               </button>

@@ -26,6 +26,23 @@ function PilihJadwalContent() {
   const [reloadKey, setReloadKey] = useState(0)
   const [jadwalTersedia, setJadwalTersedia] = useState<JadwalItem[]>([])
   const [showEmptyPopup, setShowEmptyPopup] = useState(false)
+  const [singkatanKota, setSingkatanKota] = useState<Record<string, string>>({})
+
+  // Singkatan (TRK, TJS, dst) dari Master Rute, hanya untuk tampilan.
+  useEffect(() => {
+    async function ambilSingkatan() {
+      const { data } = await supabase.from('master_kota').select('nama_kota, singkatan')
+      if (!data) return
+      const map: Record<string, string> = {}
+      data.forEach((k: any) => {
+        if (k.nama_kota) map[k.nama_kota] = (k.singkatan || '').trim()
+      })
+      setSingkatanKota(map)
+    }
+    ambilSingkatan()
+  }, [])
+
+  const labelRute = (nama: string) => (singkatanKota[nama] ? `${nama} / ${singkatanKota[nama]}` : nama)
 
   useEffect(() => {
     async function fetchJadwal() {
@@ -216,7 +233,7 @@ function PilihJadwalContent() {
           <button onClick={() => router.push('/')} className="text-gray-500 hover:text-gray-900 font-bold text-xl">&larr;</button>
           <div className="flex-1 min-w-0">
             <h1 className="text-lg font-bold text-gray-900 leading-tight">Pilih Jadwal</h1>
-            <p className="text-xs text-gray-600">{asal} - {tujuan} | {tanggal}</p>
+            <p className="text-xs text-gray-600">{labelRute(asal)} - {labelRute(tujuan)} | {tanggal}</p>
           </div>
           <button
             onClick={() => setReloadKey((k) => k + 1)}
@@ -270,7 +287,7 @@ function PilihJadwalContent() {
             <div className="text-6xl mb-4">🚢</div>
             <h3 className="text-xl font-bold text-gray-900 mb-2">Jadwal Tidak Ditemukan</h3>
             <p className="text-sm text-gray-600 mb-6">
-              Mohon maaf, untuk rute <b>{asal} - {tujuan}</b> pada tanggal <b>{tanggal}</b> belum ada jadwal kapal yang tersedia.
+              Mohon maaf, untuk rute <b>{labelRute(asal)} - {labelRute(tujuan)}</b> pada tanggal <b>{tanggal}</b> belum ada jadwal kapal yang tersedia.
             </p>
             <div className="flex flex-col gap-2">
               <button onClick={() => router.push('/')} className="w-full bg-blue-600 text-white py-2.5 rounded-lg font-bold hover:bg-blue-700 transition">
