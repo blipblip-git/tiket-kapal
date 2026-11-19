@@ -848,7 +848,8 @@ function LaporanContent() {
                 </tr>
               ))}
               <tr className="font-bold bg-gray-300 text-center text-gray-900">
-                <td className="border border-gray-400 px-2 py-1" colSpan={4}>TOTAL</td>
+                <td className="border border-gray-400 px-2 py-1" colSpan={3}>TOTAL</td>
+                <td className="border border-gray-400 px-2 py-1">{totalDewasa}/{totalBalita}</td>
                 <td className="border border-gray-400 px-2 py-1 text-right">Rp {totalCashHarian.toLocaleString('id-ID')}</td>
                 <td className="border border-gray-400 px-2 py-1 text-right">Rp {totalQrisHarian.toLocaleString('id-ID')}</td>
                 <td className="border border-gray-400 px-2 py-1 text-right">Rp {totalPenjualanHarian.toLocaleString('id-ID')}</td>
