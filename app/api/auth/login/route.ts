@@ -6,6 +6,7 @@
 import { NextResponse } from 'next/server'
 import { buatClientAdmin, pesanServiceKeyKosong } from '@/lib/serverAuth'
 import { hashPasswordServer, kolomPasswordHashBelumAda, verifyPassword } from '@/lib/passwordServer'
+import { buatTokenSesi } from '@/lib/sessionToken'
 import type { SupabaseClient } from '@supabase/supabase-js'
 
 
@@ -185,6 +186,8 @@ export async function POST(request: Request) {
 
     catatanPercobaan.delete(kunci)
 
+    const roleAktif = String(profil.role || '').trim().toLowerCase()
+
     return NextResponse.json({
       success: true,
       profile: {
@@ -197,7 +200,10 @@ export async function POST(request: Request) {
         nomor_hp: profil.nomor_hp,
         operator_id: profil.operator_id || null,
         nama_perusahaan: profil.nama_perusahaan || null
-      }
+      },
+      // Token khusus kolektor untuk memanggil API laporan (read-only, terkunci
+      // ke lokasi + operator akun tersebut). Role lain tidak butuh token ini.
+      api_token: roleAktif === 'kolektor' ? buatTokenSesi(profil.id) : null
     })
   } catch (error: any) {
     console.error('Error login:', error)

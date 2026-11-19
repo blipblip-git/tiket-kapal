@@ -64,6 +64,14 @@ function LaporanContent() {
         if (adminProfile) currentProfile = adminProfile
       }
       if (!currentProfile) { router.push('/login'); return }
+      // Kolektor hanya punya satu laporan: penjualan harian.
+      if (currentProfile.role === 'kolektor') {
+        const mode = new URLSearchParams(window.location.search).get('view')
+        if (mode !== 'penjualan') {
+          router.replace('/laporan?view=penjualan')
+          return
+        }
+      }
       setProfile(currentProfile)
       setLoading(false)
     }
@@ -87,31 +95,60 @@ function LaporanContent() {
       if (!profile || !view || !tanggal) return
       
       const isAdmin = profile.role === 'admin_utama'
+      const isKolektor = profile.role === 'kolektor'
       const lokasiTarget = isAdmin ? (lokasiParam || profile.lokasi) : profile.lokasi
       const operatorId = idOperator(profile)
 
-      let query = supabase
-        .from('pesanan')
-        .select(`
-          id, nama_penumpang, kode_tiket, kanal, status, status_boarding, waktu_boarding, petugas_jual, is_balita,
-          jadwal:jadwal_id (rute_asal, rute_tujuan, harga, tanggal, jam_berangkat, status_jadwal, kapal_id, operator_id),
-          kursi:kursi_id (nomor_kursi)
-        `)
-        .eq('status', 'paid')
-        .eq('jadwal.tanggal', tanggal)
+      let data: any[] | null = null
+      let pembayaranData: any[] | null = null
 
-      if (!isAdmin) {
-        query = query.eq('jadwal.rute_asal', lokasiTarget)
-      } else if (lokasiParam) {
-        query = query.eq('jadwal.rute_asal', lokasiParam)
+      if (isKolektor) {
+        // KOLEKTOR: data diambil lewat API server. Server hanya mengirim penjualan
+        // dari agen/petugas di lokasi kolektor (operator sama), jadi lokasi tidak
+        // bisa diganti lewat URL dari browser.
+        const token = getOperatorSession()?.api_token || ''
+        if (!token) {
+          setError('Sesi kolektor tidak ditemukan. Silakan login ulang.')
+          return
+        }
+
+        const response = await fetch(`/api/kolektor/laporan?tanggal=${encodeURIComponent(tanggal)}`, {
+          headers: { Authorization: `Bearer ${token}` }
+        })
+        const hasil = await response.json()
+
+        if (!response.ok) {
+          setError(hasil?.error || 'Gagal memuat laporan.')
+          return
+        }
+
+        data = hasil?.pesanan || []
+        pembayaranData = hasil?.pembayaran || []
+      } else {
+        let query = supabase
+          .from('pesanan')
+          .select(`
+            id, nama_penumpang, kode_tiket, kanal, status, status_boarding, waktu_boarding, petugas_jual, is_balita,
+            jadwal:jadwal_id (rute_asal, rute_tujuan, harga, tanggal, jam_berangkat, status_jadwal, kapal_id, operator_id),
+            kursi:kursi_id (nomor_kursi)
+          `)
+          .eq('status', 'paid')
+          .eq('jadwal.tanggal', tanggal)
+
+        if (!isAdmin) {
+          query = query.eq('jadwal.rute_asal', lokasiTarget)
+        } else if (lokasiParam) {
+          query = query.eq('jadwal.rute_asal', lokasiParam)
+        }
+
+        if (profile.role === 'agen' || profile.role === 'terminal_keberangkatan') {
+          query = query.ilike('petugas_jual', `%${profile.nomor_hp}%`)
+        }
+
+        const hasil = await query
+        if (hasil.error) { setError('Gagal memuat laporan: ' + hasil.error.message); return }
+        data = hasil.data
       }
-
-      if (profile.role === 'agen' || profile.role === 'terminal_keberangkatan') {
-        query = query.ilike('petugas_jual', `%${profile.nomor_hp}%`)
-      }
-
-      const { data, error } = await query
-      if (error) { setError('Gagal memuat laporan: ' + error.message); return }
 
       if (data) {
         // Ambil data kapal lebih dulu: nama/kapten untuk tampilan + pemilik untuk
@@ -127,6 +164,10 @@ function LaporanContent() {
 
         const filtered = data.filter((item: any) => {
           if (!item.jadwal) return false;
+
+          // Kolektor: server sudah menyaring per lokasi penjual + operator.
+          if (isKolektor) return true;
+
           if (!cocokOperator(item.jadwal, operatorId, petaOperatorKapal)) return false;
 
           if (isAdmin) {
@@ -137,10 +178,13 @@ function LaporanContent() {
         })
 
         const pesananIds = filtered.map((p: any) => p.id)
-        const { data: pembayaranData } = await supabase
-          .from('pembayaran')
-          .select('pesanan_id, metode')
-          .in('pesanan_id', pesananIds)
+        if (!isKolektor && pesananIds.length > 0) {
+          const { data: dataPembayaran } = await supabase
+            .from('pembayaran')
+            .select('pesanan_id, metode')
+            .in('pesanan_id', pesananIds)
+          pembayaranData = dataPembayaran
+        }
 
         const metodeMap = new Map()
         pembayaranData?.forEach((p: any) => metodeMap.set(p.pesanan_id, p.metode))
@@ -405,7 +449,7 @@ function LaporanContent() {
             <h1 className="text-lg md:text-2xl font-bold text-gray-900">Laporan Rekapan</h1>
             <p className="text-xs md:text-sm font-bold text-blue-600 mt-0.5">{tanggalFormatHeader}</p>
           </div>
-          <button onClick={() => router.push('/laporan-penjualan-admin')} className="text-[10px] md:text-sm bg-gray-100 hover:bg-gray-200 text-gray-700 px-3 py-1.5 rounded-md font-medium transition">
+          <button onClick={() => router.push(profile.role === 'kolektor' ? '/dashboard/kolektor' : '/laporan-penjualan-admin')} className="text-[10px] md:text-sm bg-gray-100 hover:bg-gray-200 text-gray-700 px-3 py-1.5 rounded-md font-medium transition">
             &larr; Kembali
           </button>
         </div>

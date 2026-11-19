@@ -41,6 +41,11 @@ export default function PilihModePage() {
       return
     }
 
+    if (sesi.role === 'kolektor') {
+      router.replace('/dashboard/kolektor')
+      return
+    }
+
     // Kalau role tidak dikenali
     setProfile(sesi)
     setLoading(false)

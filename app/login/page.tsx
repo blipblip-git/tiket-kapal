@@ -44,7 +44,8 @@ function LoginContent() {
         id: data.id, nama: data.nama, role: data.role, lokasi: data.lokasi, unit: data.unit,
         email: data.email, nomor_hp: data.nomor_hp,
         operator_id: data.operator_id || null,
-        nama_perusahaan: data.nama_perusahaan || null
+        nama_perusahaan: data.nama_perusahaan || null,
+        api_token: hasil.api_token || null
       }))
 
       setPesan('Login berhasil, mengalihkan...');
@@ -55,6 +56,8 @@ function LoginContent() {
           window.location.href = '/dashboard/keberangkatan';
         } else if (data.role === 'agen') {
           window.location.href = '/dashboard/agen';
+        } else if (data.role === 'kolektor') {
+          window.location.href = '/dashboard/kolektor';
         } else {
           window.location.href = '/pilih-mode';
         }

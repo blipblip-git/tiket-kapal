@@ -27,6 +27,7 @@ export type Profile = {
   nomor_hp?: string
   nama_perusahaan?: string
   sesi_aktif?: string | null
+  api_token?: string | null
 }
 
 // ==================== NAMA PERUSAHAAN UNTUK HEADER DASHBOARD ====================
