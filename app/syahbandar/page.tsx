@@ -85,7 +85,16 @@ function SyahbandarContent() {
         if (r.rute_asal && r.rute_tujuan) kumpulan.push({ rute_asal: r.rute_asal, rute_tujuan: r.rute_tujuan })
       })
 
-      // Cadangan: kalau master_rute kosong, pakai rute yang sudah pernah dipakai di jadwal
+      // Rute dari Manajemen Jadwal (template) — sumber utama untuk penyewa baru,
+      // karena form jadwal tidak lagi mengisi master_rute.
+      let qTemplate = supabase.from('template_jadwal').select('rute_asal, rute_tujuan')
+      if (operatorId) qTemplate = qTemplate.eq('operator_id', operatorId)
+      const { data: dataTemplate } = await qTemplate
+      ;(dataTemplate || []).forEach((t: any) => {
+        if (t.rute_asal && t.rute_tujuan) kumpulan.push({ rute_asal: t.rute_asal, rute_tujuan: t.rute_tujuan })
+      })
+
+      // Cadangan: kalau semua sumber di atas kosong, pakai rute yang sudah pernah dipakai di jadwal
       if (kumpulan.length === 0) {
         let qJadwal = supabase.from('jadwal').select('rute_asal, rute_tujuan').limit(1000)
         if (operatorId) qJadwal = qJadwal.eq('operator_id', operatorId)

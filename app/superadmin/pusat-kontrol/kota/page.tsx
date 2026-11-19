@@ -127,8 +127,8 @@ export default function KamusKotaPage() {
         {/* HEADER */}
         <div className="flex justify-between items-center mb-6">
           <div>
-            <h1 className="text-2xl font-bold text-white">Kamus Kota & Singkatan</h1>
-            <p className="text-sm text-gray-400">Atur nama kota dan singkatannya untuk cetak thermal.</p>
+            <h1 className="text-2xl font-bold text-white">Master Rute (Daerah) &amp; Singkatan</h1>
+            <p className="text-sm text-gray-400">Daftar daerah tujuan kapal untuk SEMUA penyewa. Dipakai di form Manajemen Jadwal dan cetak thermal.</p>
           </div>
           <button onClick={() => router.push('/superadmin/pusat-kontrol')} className="bg-gray-700 text-white px-4 py-2 rounded hover:bg-gray-600 text-sm font-medium">
             &larr; Kembali
@@ -141,7 +141,7 @@ export default function KamusKotaPage() {
             onClick={bukaTambah}
             className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-bold text-sm shadow-lg transition flex items-center gap-2"
           >
-            <span>📍</span> + Tambah Kota
+            <span>📍</span> + Tambah Daerah
           </button>
         </div>
 
@@ -195,7 +195,7 @@ export default function KamusKotaPage() {
         <div className="fixed inset-0 bg-black/70 flex items-center justify-center p-4 z-50">
           <div className="bg-gray-800 rounded-xl shadow-2xl w-full max-w-md border border-gray-700 overflow-hidden">
             <div className="flex justify-between items-center p-4 border-b border-gray-700">
-              <h3 className="font-bold text-lg text-white">{editingId ? 'Edit Kota' : 'Tambah Kota Baru'}</h3>
+              <h3 className="font-bold text-lg text-white">{editingId ? 'Edit Daerah' : 'Tambah Daerah Baru'}</h3>
               <button onClick={() => setIsModalOpen(false)} className="text-gray-400 hover:text-white">&times;</button>
             </div>
             

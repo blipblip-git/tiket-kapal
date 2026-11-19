@@ -68,22 +68,34 @@ function LaporanPenjualanAdminContent() {
         if (r.rute_asal && r.rute_tujuan) kumpulan.push({ rute_asal: r.rute_asal, rute_tujuan: r.rute_tujuan })
       })
 
-      // Cadangan: rute yang sudah pernah dipakai di jadwal milik penyewa ini
+      // Rute dari Manajemen Jadwal (template). Form jadwal sekarang TIDAK lagi
+      // mengisi master_rute, jadi ini sumber utama kartu untuk penyewa baru.
+      let qTemplate = supabase.from('template_jadwal').select('rute_asal, rute_tujuan, kapal_id, operator_id')
+      if (operatorId) qTemplate = qTemplate.eq('operator_id', operatorId)
+      const { data: dataTemplate } = await qTemplate
+      const petaOperatorKapalTemplate = await ambilOperatorKapal(
+        (dataTemplate || []).map((t: any) => t.kapal_id)
+      )
+      ;(dataTemplate || []).forEach((t: any) => {
+        if (!t.rute_asal || !t.rute_tujuan) return
+        if (!cocokOperator(t, operatorId, petaOperatorKapalTemplate)) return
+        kumpulan.push({ rute_asal: t.rute_asal, rute_tujuan: t.rute_tujuan })
+      })
+
+      // Rute yang sudah pernah dipakai di jadwal milik penyewa ini
       // (termasuk jadwal lama yang operator_id-nya NULL).
-      if (kumpulan.length === 0) {
-        const { data: dataJadwal } = await supabase
-          .from('jadwal')
-          .select('rute_asal, rute_tujuan, kapal_id, operator_id')
-          .limit(1000)
-        const petaOperatorKapal = await ambilOperatorKapal(
-          (dataJadwal || []).map((j: any) => j.kapal_id)
-        )
-        ;(dataJadwal || []).forEach((j: any) => {
-          if (!j.rute_asal || !j.rute_tujuan) return
-          if (!cocokOperator(j, operatorId, petaOperatorKapal)) return
-          kumpulan.push({ rute_asal: j.rute_asal, rute_tujuan: j.rute_tujuan })
-        })
-      }
+      const { data: dataJadwal } = await supabase
+        .from('jadwal')
+        .select('rute_asal, rute_tujuan, kapal_id, operator_id')
+        .limit(1000)
+      const petaOperatorKapal = await ambilOperatorKapal(
+        (dataJadwal || []).map((j: any) => j.kapal_id)
+      )
+      ;(dataJadwal || []).forEach((j: any) => {
+        if (!j.rute_asal || !j.rute_tujuan) return
+        if (!cocokOperator(j, operatorId, petaOperatorKapal)) return
+        kumpulan.push({ rute_asal: j.rute_asal, rute_tujuan: j.rute_tujuan })
+      })
 
       const unik = Array.from(new Map(kumpulan.map(r => [`${r.rute_asal}|${r.rute_tujuan}`, r])).values())
       // Urutan mengikuti urutan input penyewa (bukan urutan nama daerah).

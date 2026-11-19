@@ -3,6 +3,7 @@
 import { useEffect, useState, Suspense } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase, getProfile, getOperatorSession, type Profile } from '@/lib/supabase'
+import { idOperator } from '@/lib/tenant'
 
 type TemplateJadwal = {
   id: string
@@ -22,11 +23,12 @@ type Kapal = {
   kapasitas: number
 }
 
-type MasterRute = {
+// Daftar daerah/rute baku dari Superadmin (tabel master_kota).
+// Dipakai SEMUA penyewa — tidak ada daftar daerah per penyewa.
+type Kota = {
   id: string
-  rute_asal: string
-  rute_tujuan: string
-  harga: number
+  nama_kota: string
+  singkatan: string
 }
 
 function TemplateJadwalContent() {
@@ -36,7 +38,7 @@ function TemplateJadwalContent() {
   
   const [templateList, setTemplateList] = useState<TemplateJadwal[]>([])
   const [kapalList, setKapalList] = useState<Kapal[]>([])
-  const [ruteList, setRuteList] = useState<MasterRute[]>([])
+  const [kotaList, setKotaList] = useState<Kota[]>([])
   
   const [showForm, setShowForm] = useState(false)
   const [editId, setEditId] = useState<string | null>(null)
@@ -47,17 +49,11 @@ function TemplateJadwalContent() {
   const [ruteTujuan, setRuteTujuan] = useState('')
   const [jamBerangkat, setJamBerangkat] = useState('')
   const [harga, setHarga] = useState('')
-  const [jumlahKursi, setJumlahKursi] = useState('')
   const [aktif, setAktif] = useState(true)
-  
-  // State untuk Modal Ubah Harga Massal
-  const [showMassalForm, setShowMassalForm] = useState(false)
-  const [massalAsal, setMassalAsal] = useState('')
-  const [massalTujuan, setMassalTujuan] = useState('')
-  const [massalHarga, setMassalHarga] = useState('')
   
   const [proses, setProses] = useState(false)
   const [error, setError] = useState('')
+  const [aksesError, setAksesError] = useState('')
 
   useEffect(() => {
     async function init() {
@@ -68,7 +64,7 @@ function TemplateJadwalContent() {
       }
       if (!p) { router.push('/login'); return }
       if (p.role !== 'admin_utama' && p.role !== 'superadmin') {
-        setError('Anda tidak punya akses')
+        setAksesError('Anda tidak punya akses')
         setLoading(false)
         return
       }
@@ -80,23 +76,25 @@ function TemplateJadwalContent() {
 
   async function fetchData(p: Profile) {
     setLoading(true)
+    const operatorId = idOperator(p)
     
-    // Fetch Kapal
+    // Fetch Kapal — kapasitas kursi HANYA diisi di Manajemen Kapal
     let qKapal = supabase.from('kapal').select('id, nama, kapasitas').order('nama')
-    if (p.role !== 'superadmin') qKapal = qKapal.eq('operator_id', p.id)
+    if (operatorId) qKapal = qKapal.eq('operator_id', operatorId)
     const { data: kData } = await qKapal
     const kList = kData || []
     setKapalList(kList)
 
-    // Fetch Master Rute
-    let qRute = supabase.from('master_rute').select('*').order('rute_asal')
-    if (p.role !== 'superadmin') qRute = qRute.eq('operator_id', p.id)
-    const { data: rData } = await qRute
-    setRuteList(rData || [])
+    // Fetch daftar daerah baku (Superadmin -> Pusat Kontrol -> Master Rute / Kamus Kota)
+    const { data: kotaData } = await supabase
+      .from('master_kota')
+      .select('id, nama_kota, singkatan')
+      .order('nama_kota')
+    setKotaList(kotaData || [])
 
     // Fetch Template Jadwal
     let qTemplate = supabase.from('template_jadwal').select('*').order('jam_berangkat')
-    if (p.role !== 'superadmin') qTemplate = qTemplate.eq('operator_id', p.id)
+    if (operatorId) qTemplate = qTemplate.eq('operator_id', operatorId)
     const { data: tData } = await qTemplate
     
     const tDataWithKapal = (tData || []).map(t => {
@@ -118,7 +116,6 @@ function TemplateJadwalContent() {
     setRuteTujuan('')
     setJamBerangkat('')
     setHarga('')
-    setJumlahKursi('')
     setAktif(true)
     setError('')
   }
@@ -130,7 +127,6 @@ function TemplateJadwalContent() {
     setRuteTujuan(t.rute_tujuan)
     setJamBerangkat(t.jam_berangkat)
     setHarga(t.harga.toString())
-    setJumlahKursi(t.kapasitas?.toString() || '')
     setAktif(t.aktif)
     setShowForm(true)
   }
@@ -145,8 +141,17 @@ function TemplateJadwalContent() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!profile) return
-    if (!kapalId || !ruteAsal || !ruteTujuan || !jamBerangkat) {
-      setError('Semua field bertanda * wajib diisi')
+    if (!kapalId || !ruteAsal || !ruteTujuan || !jamBerangkat || !harga) {
+      setError('Pilih kapal, rute asal, rute tujuan, jam berangkat, dan isi harga')
+      return
+    }
+    if (ruteAsal === ruteTujuan) {
+      setError('Rute asal dan rute tujuan tidak boleh sama')
+      return
+    }
+    const hargaFinal = parseInt(harga)
+    if (!hargaFinal || hargaFinal <= 0) {
+      setError('Harga harus lebih dari 0')
       return
     }
 
@@ -154,23 +159,21 @@ function TemplateJadwalContent() {
     setError('')
 
     try {
-      let finalHarga = parseInt(harga) || 0
-      if (!harga && ruteAsal && ruteTujuan) {
-        const rute = ruteList.find(r => r.rute_asal === ruteAsal && r.rute_tujuan === ruteTujuan)
-        if (rute) finalHarga = rute.harga
+      // Kapasitas kursi tidak diisi di sini — selalu ikut data armada kapal.
+      const kapal = kapalList.find(k => k.id === kapalId)
+      if (!kapal || !kapal.kapasitas) {
+        throw new Error('Kapasitas kapal belum diisi. Lengkapi dulu di Manajemen Kapal.')
       }
-
-      const kapasitasFinal = jumlahKursi ? parseInt(jumlahKursi) : (kapalList.find(k => k.id === kapalId)?.kapasitas || 0)
 
       const payload = {
         kapal_id: kapalId,
         rute_asal: ruteAsal,
         rute_tujuan: ruteTujuan,
         jam_berangkat: jamBerangkat,
-        harga: finalHarga,
+        harga: hargaFinal,
         aktif,
-        kapasitas: kapasitasFinal,
-        operator_id: profile.id
+        kapasitas: kapal.kapasitas,
+        operator_id: idOperator(profile) || profile.id
       }
 
       if (editId) {
@@ -191,56 +194,8 @@ function TemplateJadwalContent() {
     }
   }
 
-  const handleUbahMassal = async (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!profile) return
-    if (!massalAsal || !massalTujuan || !massalHarga) {
-      alert('Lengkapi semua field ubah massal')
-      return
-    }
-
-    if (!confirm(`Yakin ingin mengubah HARGA SEMUA KAPAL di rute ${massalAsal} - ${massalTujuan} menjadi Rp ${parseInt(massalHarga).toLocaleString('id-ID')}?`)) return
-
-    setProses(true)
-    try {
-      const hrg = parseInt(massalHarga)
-      
-      const { error: errUpdate } = await supabase
-        .from('template_jadwal')
-        .update({ harga: hrg })
-        .eq('rute_asal', massalAsal)
-        .eq('rute_tujuan', massalTujuan)
-        .eq('operator_id', profile.id)
-
-      if (errUpdate) throw errUpdate
-
-      await supabase
-        .from('master_rute')
-        .update({ harga: hrg })
-        .eq('rute_asal', massalAsal)
-        .eq('rute_tujuan', massalTujuan)
-        .eq('operator_id', profile.id)
-
-      alert('Harga berhasil diubah massal!')
-      setShowMassalForm(false)
-      setMassalHarga('')
-      fetchData(profile)
-    } catch (err: any) {
-      alert('Gagal ubah massal: ' + err.message)
-    } finally {
-      setProses(false)
-    }
-  }
-
-  const handlePilihRute = (asal: string, tujuan: string) => {
-    setRuteAsal(asal)
-    setRuteTujuan(tujuan)
-    const rute = ruteList.find(r => r.rute_asal === asal && r.rute_tujuan === tujuan)
-    if (rute) setHarga(rute.harga.toString())
-  }
-
   if (loading) return <p className="p-6 text-center text-gray-600 mt-10">Memuat data...</p>
-  if (error && templateList.length === 0) return <p className="p-6 text-center text-red-600 mt-10">{error}</p>
+  if (aksesError) return <p className="p-6 text-center text-red-600 mt-10">{aksesError}</p>
 
   const grouped = templateList.reduce((acc, curr) => {
     const key = `${curr.rute_asal} - ${curr.rute_tujuan}`
@@ -260,12 +215,6 @@ function TemplateJadwalContent() {
           </div>
           <div className="flex gap-2 w-full md:w-auto">
             <button
-              onClick={() => setShowMassalForm(!showMassalForm)}
-              className="flex-1 md:flex-none bg-orange-500 text-white px-4 py-2 rounded-lg font-medium hover:bg-orange-600 transition-colors shadow-sm"
-            >
-              💰 Ubah Harga Massal
-            </button>
-            <button
               onClick={() => { resetForm(); setShowForm(!showForm) }}
               className="flex-1 md:flex-none bg-blue-600 text-white px-4 py-2 rounded-lg font-medium hover:bg-blue-700 transition-colors shadow-sm"
             >
@@ -279,48 +228,6 @@ function TemplateJadwalContent() {
             </button>
           </div>
         </div>
-
-        {showMassalForm && (
-          <div className="bg-orange-50 p-5 rounded-xl shadow-sm border border-orange-200 mb-6">
-            <h2 className="text-lg font-bold text-orange-900 mb-4">Ubah Harga Massal Per Rute</h2>
-            <form onSubmit={handleUbahMassal} className="flex flex-col md:flex-row items-end gap-3">
-              <div className="flex-1 w-full">
-                <label className="block text-sm font-medium text-gray-700 mb-1">Pilih Rute</label>
-                <select 
-                  onChange={e => {
-                    const val = e.target.value
-                    if (val) {
-                      const [asal, tujuan] = val.split('|')
-                      setMassalAsal(asal)
-                      setMassalTujuan(tujuan)
-                    }
-                  }} 
-                  className="w-full border rounded-md px-3 py-2 text-gray-900 focus:ring-orange-500 focus:border-orange-500" 
-                  required
-                >
-                  <option value="">-- Pilih Rute --</option>
-                  {ruteList.map((r, idx) => (
-                    <option key={idx} value={`${r.rute_asal}|${r.rute_tujuan}`}>{r.rute_asal} - {r.rute_tujuan}</option>
-                  ))}
-                </select>
-              </div>
-              <div className="flex-1 w-full">
-                <label className="block text-sm font-medium text-gray-700 mb-1">Harga Baru (Rp)</label>
-                <input 
-                  type="number" 
-                  value={massalHarga} 
-                  onChange={e => setMassalHarga(e.target.value)} 
-                  className="w-full border rounded-md px-3 py-2 text-gray-900 focus:ring-orange-500 focus:border-orange-500" 
-                  placeholder="Contoh: 150000" 
-                  required 
-                />
-              </div>
-              <button type="submit" disabled={proses} className="w-full md:w-auto bg-orange-600 text-white px-6 py-2 rounded-md hover:bg-orange-700 disabled:opacity-50 font-medium">
-                {proses ? 'Menyimpan...' : 'Simpan Massal'}
-              </button>
-            </form>
-          </div>
-        )}
 
         {showForm && (
           <div className="bg-white p-5 rounded-xl shadow-sm border border-gray-200 mb-6">
@@ -338,39 +245,48 @@ function TemplateJadwalContent() {
                   </select>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Pilih Rute (Master)</label>
-                  <select onChange={e => {
-                    const val = e.target.value
-                    if (val) {
-                      const [asal, tujuan] = val.split('|')
-                      handlePilihRute(asal, tujuan)
-                    }
-                  }} className="w-full border rounded-md px-3 py-2 text-gray-900 focus:ring-blue-500 focus:border-blue-500">
-                    <option value="">-- Pilih Rute --</option>
-                    {ruteList.map((r, idx) => (
-                      <option key={idx} value={`${r.rute_asal}|${r.rute_tujuan}`}>{r.rute_asal} - {r.rute_tujuan} (Rp {r.harga.toLocaleString('id-ID')})</option>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Rute Asal *</label>
+                  <select
+                    value={ruteAsal}
+                    onChange={e => setRuteAsal(e.target.value)}
+                    className="w-full border rounded-md px-3 py-2 text-gray-900 focus:ring-blue-500 focus:border-blue-500"
+                    disabled={kotaList.length === 0}
+                    required
+                  >
+                    <option value="">-- Pilih Daerah Asal --</option>
+                    {ruteAsal && !kotaList.some(k => k.nama_kota === ruteAsal) && (
+                      <option value={ruteAsal}>{ruteAsal}</option>
+                    )}
+                    {kotaList.filter(k => k.nama_kota !== ruteTujuan).map(k => (
+                      <option key={k.id} value={k.nama_kota}>{k.nama_kota}</option>
                     ))}
                   </select>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Rute Asal *</label>
-                  <input type="text" value={ruteAsal} onChange={e => setRuteAsal(e.target.value)} className="w-full border rounded-md px-3 py-2 text-gray-900 focus:ring-blue-500 focus:border-blue-500" required />
-                </div>
-                <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Rute Tujuan *</label>
-                  <input type="text" value={ruteTujuan} onChange={e => setRuteTujuan(e.target.value)} className="w-full border rounded-md px-3 py-2 text-gray-900 focus:ring-blue-500 focus:border-blue-500" required />
+                  <select
+                    value={ruteTujuan}
+                    onChange={e => setRuteTujuan(e.target.value)}
+                    className="w-full border rounded-md px-3 py-2 text-gray-900 focus:ring-blue-500 focus:border-blue-500"
+                    disabled={kotaList.length === 0}
+                    required
+                  >
+                    <option value="">-- Pilih Daerah Tujuan --</option>
+                    {ruteTujuan && !kotaList.some(k => k.nama_kota === ruteTujuan) && (
+                      <option value={ruteTujuan}>{ruteTujuan}</option>
+                    )}
+                    {kotaList.filter(k => k.nama_kota !== ruteAsal).map(k => (
+                      <option key={k.id} value={k.nama_kota}>{k.nama_kota}</option>
+                    ))}
+                  </select>
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Jam Berangkat *</label>
                   <input type="time" value={jamBerangkat} onChange={e => setJamBerangkat(e.target.value)} className="w-full border rounded-md px-3 py-2 text-gray-900 focus:ring-blue-500 focus:border-blue-500" required />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Harga (Rp)</label>
-                  <input type="number" value={harga} onChange={e => setHarga(e.target.value)} className="w-full border rounded-md px-3 py-2 text-gray-900 focus:ring-blue-500 focus:border-blue-500" placeholder="Otomatis dari master rute" />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Jumlah Kursi Manual</label>
-                  <input type="number" value={jumlahKursi} onChange={e => setJumlahKursi(e.target.value)} className="w-full border rounded-md px-3 py-2 text-gray-900 focus:ring-blue-500 focus:border-blue-500" placeholder="Kosongkan untuk pakai kapasitas kapal" />
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Harga (Rp) *</label>
+                  <input type="number" min={1} value={harga} onChange={e => setHarga(e.target.value)} className="w-full border rounded-md px-3 py-2 text-gray-900 focus:ring-blue-500 focus:border-blue-500" placeholder="Contoh: 145000" required />
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
@@ -380,6 +296,17 @@ function TemplateJadwalContent() {
                   </select>
                 </div>
               </div>
+
+              <p className="text-xs text-gray-500">
+                Kapasitas kursi otomatis mengikuti isian &quot;Kapasitas Kursi&quot; di Manajemen Kapal.
+                Harga baru hanya berlaku untuk jadwal yang dibuat setelah ini.
+              </p>
+
+              {kotaList.length === 0 && (
+                <p className="text-sm text-orange-800 bg-orange-50 border border-orange-200 rounded-md px-3 py-2">
+                  Daftar daerah belum diisi. Minta Superadmin mengisi di Pusat Kontrol &rarr; Master Rute (Kamus Kota).
+                </p>
+              )}
 
               {error && <p className="text-red-500 text-sm">{error}</p>}
 
@@ -404,7 +331,7 @@ function TemplateJadwalContent() {
             <div key={rute} className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
               <div className="bg-gray-50 px-4 py-3 border-b border-gray-200 flex justify-between items-center">
                 <h3 className="font-bold text-gray-900">Rute: {rute}</h3>
-                <span className="text-xs bg-gray-200 text-gray-700 px-2 py-1 rounded-full font-medium">Harga Default: Rp {list[0]?.harga.toLocaleString('id-ID')}</span>
+                <span className="text-xs bg-gray-200 text-gray-700 px-2 py-1 rounded-full font-medium">{list.length} jadwal</span>
               </div>
               <div className="overflow-x-auto">
                 <table className="w-full text-sm text-left">
@@ -423,7 +350,7 @@ function TemplateJadwalContent() {
                       <tr key={t.id} className="hover:bg-gray-50">
                         <td className="px-4 py-3 font-bold text-gray-900">{t.jam_berangkat.substring(0,5)}</td>
                         <td className="px-4 py-3 text-gray-900">{t.kapal?.nama || '-'}</td>
-                        <td className="px-4 py-3 text-gray-900">{t.kapasitas || t.kapal?.kapasitas || 0} Kursi</td>
+                        <td className="px-4 py-3 text-gray-900">{t.kapal?.kapasitas || t.kapasitas || 0} Kursi</td>
                         <td className="px-4 py-3 text-gray-900">Rp {t.harga.toLocaleString('id-ID')}</td>
                         <td className="px-4 py-3">
                           <span className={`text-[10px] px-2 py-1 rounded-full font-bold ${t.aktif ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>

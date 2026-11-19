@@ -57,8 +57,8 @@ export default function PusatKontrolPage() {
             className="bg-gray-800 border border-gray-700 p-6 rounded-xl hover:bg-gray-750 transition text-left flex flex-col items-start h-40 justify-center shadow-lg group"
           >
             <div className="text-4xl mb-3 group-hover:scale-110 transition">📍</div>
-            <h2 className="text-lg font-bold text-white mb-1">Kamus Kota</h2>
-            <p className="text-xs text-gray-400">Atur nama kota & singkatan (TRK, TJS, dll).</p>
+            <h2 className="text-lg font-bold text-white mb-1">Master Rute (Daerah)</h2>
+            <p className="text-xs text-gray-400">Daftar daerah tujuan untuk semua penyewa + singkatan cetak.</p>
           </button>
 
           {/* 2. ADMIN UTAMA */}
