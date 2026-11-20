@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import { supabase, getProfile, getOperatorSession, type Profile } from '@/lib/supabase'
 import { bulanSekarang } from '@/lib/periode'
 import { idOperator, ambilOperatorKapal, cocokOperator } from '@/lib/tenant'
+import { muatLokasiAgen } from '@/lib/laporanFee'
 
 type RuteKapal = { rute_asal: string; rute_tujuan: string }
 
@@ -22,6 +23,12 @@ const WARNA_RUTE = [
   'bg-orange-50 border-orange-200 text-orange-800 hover:bg-orange-100',
 ]
 
+// Warna khusus kartu Laporan Fee (merah = fee).
+const WARNA_FEE = [
+  'bg-red-50 border-red-200 text-red-800 hover:bg-red-100',
+  'bg-rose-50 border-rose-200 text-rose-800 hover:bg-rose-100'
+]
+
 function LaporanPenjualanAdminContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -31,6 +38,7 @@ function LaporanPenjualanAdminContent() {
   const [error, setError] = useState('')
   const [ruteList, setRuteList] = useState<RuteKapal[]>([])
   const [ruteLoading, setRuteLoading] = useState(true)
+  const [lokasiFee, setLokasiFee] = useState<string[]>([])
 
 
   useEffect(() => {
@@ -100,6 +108,11 @@ function LaporanPenjualanAdminContent() {
       const unik = Array.from(new Map(kumpulan.map(r => [`${r.rute_asal}|${r.rute_tujuan}`, r])).values())
       // Urutan mengikuti urutan input penyewa (bukan urutan nama daerah).
       setRuteList(unik)
+
+      // Daerah untuk Laporan Fee = lokasi agen yang terdaftar di penyewa ini.
+      const daftarLokasiFee = await muatLokasiAgen(profile)
+      setLokasiFee(daftarLokasiFee)
+
       setRuteLoading(false)
     }
     muatRute()
@@ -141,6 +154,16 @@ function LaporanPenjualanAdminContent() {
     })
   }
 
+  // Laporan Fee hanya muncul kalau penyewa sudah punya agen (ada lokasi agen).
+  if (lokasiFee.length > 0) {
+    menuUtama.push({
+      label: 'Laporan Fee',
+      deskripsi: 'Fee per tiket untuk semua agen di setiap daerah (harian & bulanan)',
+      color: 'bg-red-50 border-red-200 text-red-800 hover:bg-red-100',
+      link: '/laporan-penjualan-admin?menu=fee'
+    })
+  }
+
   const subMenu: { [key: string]: { judul: string; deskripsi: string; kartu: Kartu[] } } = {}
 
   kotaList.forEach((kota, idx) => {
@@ -163,6 +186,41 @@ function LaporanPenjualanAdminContent() {
       ]
     }
   })
+
+  // Submenu Laporan Fee: pilih daerah dulu, lalu Harian / Bulanan.
+  if (lokasiFee.length > 0) {
+    subMenu.fee = {
+      judul: 'Laporan Fee',
+      deskripsi: 'Pilih daerah untuk melihat fee agen',
+      kartu: lokasiFee.map((lokasi, idx) => ({
+        label: `Laporan Fee ${lokasi}`,
+        deskripsi: 'Fee harian & bulanan semua agen di daerah ini',
+        color: WARNA_FEE[idx % WARNA_FEE.length],
+        link: `/laporan-penjualan-admin?menu=fee:${encodeURIComponent(lokasi)}`
+      }))
+    }
+
+    lokasiFee.forEach((lokasi) => {
+      subMenu[`fee:${lokasi}`] = {
+        judul: `Laporan Fee ${lokasi}`,
+        deskripsi: 'Semua agen ditampilkan, fee dihitung per tiket dewasa',
+        kartu: [
+          {
+            label: 'Laporan Fee Harian',
+            deskripsi: 'Rekap fee per jam & kapal untuk 1 tanggal',
+            color: WARNA_FEE[0],
+            link: `/laporan-fee-harian?lokasi=${encodeURIComponent(lokasi)}`
+          },
+          {
+            label: 'Laporan Fee Bulanan',
+            deskripsi: 'Rekap fee per tanggal & kapal dalam 1 bulan',
+            color: WARNA_FEE[1],
+            link: `/laporan-fee-bulanan?lokasi=${encodeURIComponent(lokasi)}`
+          }
+        ]
+      }
+    })
+  }
 
   // Kompatibilitas tautan lama (bookmark / tombol Kembali versi sebelumnya).
   const aliasMenuLama: { [slug: string]: string } = {

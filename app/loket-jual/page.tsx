@@ -3,6 +3,7 @@
 import { useEffect, useState, Suspense } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
 import { supabase, catatAudit } from '@/lib/supabase'
+import { snapshotFee } from '@/lib/fee'
 
 type ProfilePetugas = {
   id: string
@@ -295,6 +296,9 @@ function LoketJualContent() {
 
       const identitasPenjual = profile.nomor_hp || profile.email || profile.nama
 
+      // Fee dibekukan saat menjual (fee penjual + fee platform).
+      const feeSnapshot = await snapshotFee(profile)
+
       const pesananData: any[] = []
 
       penumpangList.forEach((p, idx) => {
@@ -318,6 +322,7 @@ function LoketJualContent() {
           petugas_jual: identitasPenjual,
           is_balita: false,
           induk_id: null,
+          ...feeSnapshot,
         })
 
         p.balita.forEach((namaBalita, bIdx) => {

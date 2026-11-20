@@ -4,6 +4,7 @@ import { useEffect, useState, Suspense } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase, getProfile, getOperatorSession, type Profile } from '@/lib/supabase'
 import { fieldPasswordBaru } from '@/lib/password'
+import { feeProfilAda, kodeDaerah } from '@/lib/fee'
 
 type Agen = {
   id: string
@@ -12,6 +13,7 @@ type Agen = {
   nomor_hp: string
   lokasi: string
   aktif: boolean
+  fee?: number | null
   password_hash?: string | null
   password_plain?: string | null
 }
@@ -32,6 +34,8 @@ function AgenTenantContent() {
   const [lokasi, setLokasi] = useState('Tarakan')
   const [password, setPassword] = useState('')
   const [aktif, setAktif] = useState(true)
+  const [fee, setFee] = useState('0')
+  const [adaKolomFee, setAdaKolomFee] = useState(true)
   
   const [proses, setProses] = useState(false)
 
@@ -66,6 +70,7 @@ function AgenTenantContent() {
     } else {
       setAgenList(data || [])
     }
+    setAdaKolomFee(await feeProfilAda())
     setLoading(false)
   }
 
@@ -76,6 +81,7 @@ function AgenTenantContent() {
     setLokasi('Tarakan')
     setPassword('')
     setAktif(true)
+    setFee('0')
     setError('')
   }
 
@@ -86,6 +92,7 @@ function AgenTenantContent() {
     setLokasi(a.lokasi || 'Tarakan')
     setPassword('') // password lama tidak bisa ditampilkan (sudah di-hash)
     setAktif(a.aktif)
+    setFee(String(Number(a.fee || 0)))
     setShowForm(true)
   }
 
@@ -125,6 +132,11 @@ function AgenTenantContent() {
       // berarti password lama TIDAK diubah.
       if (password) {
         Object.assign(payload, await fieldPasswordBaru(password))
+      }
+
+      // Fee per tiket (Rp) — hanya dikirim kalau kolom profiles.fee sudah ada.
+      if (adaKolomFee) {
+        payload.fee = Math.max(0, Math.round(Number(fee) || 0))
       }
 
       if (editId) {
@@ -201,6 +213,24 @@ function AgenTenantContent() {
                   </select>
                 </div>
                 <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Fee per Tiket (Rp)</label>
+                  <input
+                    type="number"
+                    min={0}
+                    step={500}
+                    value={fee}
+                    onChange={e => setFee(e.target.value)}
+                    className="w-full border rounded-md px-3 py-2 text-gray-900 focus:ring-purple-500 focus:border-purple-500"
+                    placeholder="Contoh: 3000"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">Fee agen per tiket dewasa (mengurangi setoran ke pemilik).</p>
+                  {!adaKolomFee && (
+                    <p className="text-xs text-red-600 mt-1">
+                      Kolom <span className="font-mono">profiles.fee</span> belum ada. Jalankan SQL migrasi fee dulu.
+                    </p>
+                  )}
+                </div>
+                <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
                   <select value={aktif ? 'aktif' : 'nonaktif'} onChange={e => setAktif(e.target.value === 'aktif')} className="w-full border rounded-md px-3 py-2 text-gray-900 focus:ring-purple-500 focus:border-purple-500">
                     <option value="aktif">Aktif</option>
@@ -228,7 +258,8 @@ function AgenTenantContent() {
                 <tr>
                   <th className="px-4 py-3">Nama Agen</th>
                   <th className="px-4 py-3">Nomor HP</th>
-                  <th className="px-4 py-3">Lokasi</th>
+                  <th className="px-4 py-3">Lokasi / Kode</th>
+                  <th className="px-4 py-3">Fee/Tiket</th>
                   <th className="px-4 py-3">Status</th>
                   <th className="px-4 py-3 text-right">Aksi</th>
                 </tr>
@@ -239,7 +270,10 @@ function AgenTenantContent() {
                     <td className="px-4 py-3 font-bold text-gray-900">{a.nama}</td>
                     <td className="px-4 py-3 text-gray-900">{a.nomor_hp}</td>
                     {/* PERBAIKAN: Warna teks lokasi digelapin */}
-                    <td className="px-4 py-3 font-medium text-gray-900">{a.lokasi}</td>
+                    <td className="px-4 py-3 font-medium text-gray-900">{a.lokasi} / {kodeDaerah(a.lokasi || '')}</td>
+                    <td className="px-4 py-3 text-gray-900">
+                      {a.fee ? `Rp ${Number(a.fee).toLocaleString('id-ID')}` : '-'}
+                    </td>
                     <td className="px-4 py-3">
                       <span className={`text-[10px] px-2 py-1 rounded-full font-bold ${a.aktif ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
                         {a.aktif ? 'AKTIF' : 'NONAKTIF'}

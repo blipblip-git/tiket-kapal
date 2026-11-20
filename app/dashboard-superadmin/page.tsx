@@ -93,6 +93,16 @@ export default function DashboardSuperadminPage() {
             <p className="text-sm text-gray-400">Atur teks, ikon, dan tampilan halaman pembeli online.</p>
           </button>
 
+          {/* KHUSUS SUPERADMIN: Fee platform dari semua penjualan offline */}
+          <button 
+            onClick={() => router.push('/dashboard-superadmin/penerimaan-fee')}
+            className="bg-red-950 p-8 rounded-xl shadow-lg hover:bg-red-900 transition border border-red-800 text-left flex flex-col items-start h-48 justify-center group md:col-span-2"
+          >
+            <div className="text-5xl mb-4 group-hover:scale-110 transition">💰</div>
+            <h2 className="text-xl font-bold text-white mb-2">Penerimaan Fee</h2>
+            <p className="text-sm text-red-200">Laporan Fee Platform (harian &amp; bulanan) dari semua penjualan offline — khusus Superadmin.</p>
+          </button>
+
         </div>
       </div>
     </div>

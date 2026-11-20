@@ -3,6 +3,7 @@
 import { useEffect, useState, Suspense } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
 import { supabase, getOperatorSession, catatAudit, type Profile } from '@/lib/supabase'
+import { snapshotFee } from '@/lib/fee'
 import KtpScanner from '@/components/KtpScanner'
 
 type ProfileAgen = Profile & {
@@ -283,6 +284,9 @@ function LoketJualAgenContent() {
       const metodePembayaran = metodeBayar === 'cash' ? 'cash_loket' : 'simulasi_online'
       const identitasPenjual = profile.nomor_hp || profile.email
 
+      // Fee dibekukan saat menjual (fee agen per tiket + fee platform).
+      const feeSnapshot = await snapshotFee(profile)
+
       const pesananData: any[] = []
 
       penumpangList.forEach((p, idx) => {
@@ -306,6 +310,7 @@ function LoketJualAgenContent() {
           petugas_jual: identitasPenjual,
           is_balita: false,
           induk_id: null,
+          ...feeSnapshot,
         })
 
         p.balita.forEach((namaBalita, bIdx) => {

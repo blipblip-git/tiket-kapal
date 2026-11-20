@@ -123,6 +123,15 @@ export default function DashboardAgenPage() {
           </button>
 
           <button
+            onClick={() => router.push('/agen/laporan-fee')}
+            className="bg-white p-4 rounded-xl shadow-sm hover:shadow-md transition border border-gray-200 text-left flex items-center gap-4"
+          >
+            <div className="text-3xl bg-red-50 w-14 h-14 flex items-center justify-center rounded-lg">💰</div>
+            <h2 className="text-base font-bold text-gray-900 flex-1">Laporan Fee</h2>
+            <span className="text-gray-400 text-xl font-light">&rsaquo;</span>
+          </button>
+
+          <button
             onClick={() => router.push('/cetak-ulang')}
             className="bg-white p-4 rounded-xl shadow-sm hover:shadow-md transition border border-gray-200 text-left flex items-center gap-4"
           >
