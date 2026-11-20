@@ -4,6 +4,7 @@ import { useEffect, useState, Suspense } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase, getProfile, getOperatorSession, type Profile } from '@/lib/supabase'
 import { idOperator } from '@/lib/tenant'
+import { SEMUA_HARI, LABEL_HARI, labelHari, hariOperasiAktif, type NamaHari } from '@/lib/hari'
 
 type TemplateJadwal = {
   id: string
@@ -14,6 +15,7 @@ type TemplateJadwal = {
   harga: number
   aktif: boolean
   kapasitas: number
+  hari_operasi?: string[] | null
   kapal?: { nama: string, kapasitas: number }
 }
 
@@ -50,6 +52,8 @@ function TemplateJadwalContent() {
   const [jamBerangkat, setJamBerangkat] = useState('')
   const [harga, setHarga] = useState('')
   const [aktif, setAktif] = useState(true)
+  // Hari operasi kapal (default semua hari tercentang)
+  const [hariOperasi, setHariOperasi] = useState<NamaHari[]>([...SEMUA_HARI])
   
   const [proses, setProses] = useState(false)
   const [error, setError] = useState('')
@@ -117,6 +121,7 @@ function TemplateJadwalContent() {
     setJamBerangkat('')
     setHarga('')
     setAktif(true)
+    setHariOperasi([...SEMUA_HARI])
     setError('')
   }
 
@@ -128,7 +133,14 @@ function TemplateJadwalContent() {
     setJamBerangkat(t.jam_berangkat)
     setHarga(t.harga.toString())
     setAktif(t.aktif)
+    setHariOperasi(hariOperasiAktif(t.hari_operasi))
     setShowForm(true)
+  }
+
+  const toggleHari = (h: NamaHari) => {
+    setHariOperasi(prev =>
+      SEMUA_HARI.filter(x => (x === h ? !prev.includes(x) : prev.includes(x)))
+    )
   }
 
   const handleHapus = async (id: string) => {
@@ -154,6 +166,10 @@ function TemplateJadwalContent() {
       setError('Harga harus lebih dari 0')
       return
     }
+    if (hariOperasi.length === 0) {
+      setError('Pilih minimal satu hari operasi kapal')
+      return
+    }
 
     setProses(true)
     setError('')
@@ -172,6 +188,7 @@ function TemplateJadwalContent() {
         jam_berangkat: jamBerangkat,
         harga: hargaFinal,
         aktif,
+        hari_operasi: SEMUA_HARI.filter(h => hariOperasi.includes(h)),
         kapasitas: kapal.kapasitas,
         operator_id: idOperator(profile) || profile.id
       }
@@ -295,6 +312,32 @@ function TemplateJadwalContent() {
                     <option value="nonaktif">Nonaktif</option>
                   </select>
                 </div>
+                <div className="md:col-span-2">
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Hari Operasi *</label>
+                  <div className="flex flex-wrap gap-2">
+                    {SEMUA_HARI.map(h => {
+                      const dipilih = hariOperasi.includes(h)
+                      return (
+                        <button
+                          key={h}
+                          type="button"
+                          onClick={() => toggleHari(h)}
+                          className={`px-3 py-1.5 rounded-full text-sm font-medium border transition-colors ${
+                            dipilih
+                              ? 'bg-blue-600 text-white border-blue-600'
+                              : 'bg-white text-gray-600 border-gray-300 hover:bg-gray-100'
+                          }`}
+                        >
+                          {LABEL_HARI[h]}
+                        </button>
+                      )
+                    })}
+                  </div>
+                  <p className="text-xs text-gray-500 mt-2">
+                    Klik hari untuk mengaktifkan/menonaktifkan. Contoh kapal yang hanya jalan 3x seminggu: pilih <b>Senin</b>, <b>Rabu</b>, <b>Jumat</b>.
+                    Jadwal otomatis hanya dibuat pada hari yang dipilih.
+                  </p>
+                </div>
               </div>
 
               <p className="text-xs text-gray-500">
@@ -341,6 +384,7 @@ function TemplateJadwalContent() {
                       <th className="px-4 py-3">Kapal</th>
                       <th className="px-4 py-3">Kapasitas</th>
                       <th className="px-4 py-3">Harga</th>
+                      <th className="px-4 py-3">Hari</th>
                       <th className="px-4 py-3">Status</th>
                       <th className="px-4 py-3 text-right">Aksi</th>
                     </tr>
@@ -352,6 +396,7 @@ function TemplateJadwalContent() {
                         <td className="px-4 py-3 text-gray-900">{t.kapal?.nama || '-'}</td>
                         <td className="px-4 py-3 text-gray-900">{t.kapal?.kapasitas || t.kapasitas || 0} Kursi</td>
                         <td className="px-4 py-3 text-gray-900">Rp {t.harga.toLocaleString('id-ID')}</td>
+                        <td className="px-4 py-3 text-gray-900 text-xs">{labelHari(t.hari_operasi)}</td>
                         <td className="px-4 py-3">
                           <span className={`text-[10px] px-2 py-1 rounded-full font-bold ${t.aktif ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
                             {t.aktif ? 'AKTIF' : 'NONAKTIF'}

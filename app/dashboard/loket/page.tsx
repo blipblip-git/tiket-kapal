@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase, logoutOperator, catatAudit, getOperatorSession, type Profile } from '@/lib/supabase'
+import { beroperasiPada } from '@/lib/hari'
 
 type JadwalTampil = {
   id: string | null
@@ -130,6 +131,9 @@ export default function DashboardLoketPage() {
       for (const t of templates) {
         const kapal = kapalMap.get(t.kapal_id)
         if (!kapal) continue
+
+        // Kapal yang tidak beroperasi pada hari ini tidak ditampilkan di loket.
+        if (!beroperasiPada(tgl, t.hari_operasi)) continue
 
         const jamStr = String(t.jam_berangkat).slice(0, 5)
         if (!jamStr.includes(':')) continue

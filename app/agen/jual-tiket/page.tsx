@@ -3,6 +3,7 @@
 import { useEffect, useState, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { supabase, getOperatorSession, type Profile } from '@/lib/supabase'
+import { beroperasiPada } from '@/lib/hari'
 
 type JadwalTampil = {
   id: string
@@ -96,10 +97,14 @@ function JualTiketAgenContent() {
       .eq('status', 'aktif')
       .eq('rute_asal', lokasiAgen)
 
-    if (templates && templates.length > 0) {
+    // Hanya template yang beroperasi pada hari dari tanggal yang dipilih.
+    // Contoh: kapal jalan Senin/Rabu/Jumat → Sabtu tidak dibuatkan jadwal.
+    const templatesOperasi = (templates || []).filter((t: any) => beroperasiPada(tgl, t.hari_operasi))
+
+    if (templatesOperasi.length > 0) {
       const newJadwalPayload: any[] = []
       
-      for (const t of templates) {
+      for (const t of templatesOperasi) {
         const existing = jadwalData?.find((j: any) => 
           j.kapal_id === t.kapal_id && 
           j.rute_asal === t.rute_asal && 
@@ -138,7 +143,7 @@ function JualTiketAgenContent() {
               .limit(1)
 
             if (!existingKursi || existingKursi.length === 0) {
-              const t = templates.find((x: any) => 
+              const t = templatesOperasi.find((x: any) => 
                 x.kapal_id === j.kapal_id && 
                 x.rute_asal === j.rute_asal && 
                 x.jam_berangkat === j.jam_berangkat

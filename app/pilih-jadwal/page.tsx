@@ -3,6 +3,15 @@
 import { useEffect, useState, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
+import {
+  beroperasiPada,
+  gabungHariOperasi,
+  labelHari,
+  namaHari,
+  LABEL_HARI,
+  formatTanggalPanjang,
+  tanggalOperasiTerdekatDari
+} from '@/lib/hari'
 
 type JadwalItem = {
   id: string
@@ -26,6 +35,7 @@ function PilihJadwalContent() {
   const [reloadKey, setReloadKey] = useState(0)
   const [jadwalTersedia, setJadwalTersedia] = useState<JadwalItem[]>([])
   const [showEmptyPopup, setShowEmptyPopup] = useState(false)
+  const [infoKosong, setInfoKosong] = useState<{ hariTerpilih: string; hariOperasi: string; tanggalTerdekat: string } | null>(null)
   const [singkatanKota, setSingkatanKota] = useState<Record<string, string>>({})
 
   // Singkatan (TRK, TJS, dst) dari Master Rute, hanya untuk tampilan.
@@ -68,6 +78,11 @@ function PilihJadwalContent() {
 
         const { data: templates } = await queryTemplate
 
+        // Hanya template yang beroperasi pada hari dari tanggal yang dipilih.
+        // Contoh: kapal jalan Senin/Rabu/Jumat → Sabtu tidak dibuatkan jadwal.
+        const templatesOperasi = (templates || []).filter((t: any) => beroperasiPada(tanggal, t.hari_operasi))
+        setInfoKosong(null)
+
         // 2. AMBIL JADWAL YANG UDAH ADA
         let queryJadwal = supabase
           .from('jadwal')
@@ -84,10 +99,10 @@ function PilihJadwalContent() {
         let { data: jadwalData } = await queryJadwal
 
         // 3. AUTO-GENERATE (KALAU ADA TEMPLATE TAPI BELUM ADA JADWAL)
-        if (templates && templates.length > 0) {
+        if (templatesOperasi.length > 0) {
           const newJadwalPayload: any[] = []
           
-          for (const t of templates) {
+          for (const t of templatesOperasi) {
             const existing = jadwalData?.find((j: any) => 
               j.kapal_id === t.kapal_id && 
               j.rute_asal === t.rute_asal && 
@@ -131,7 +146,7 @@ function PilihJadwalContent() {
 
                // Kalau BELUM ADA, baru insert
                if (!existingKursi || existingKursi.length === 0) {
-                 const t = templates.find((x: any) => 
+                 const t = templatesOperasi.find((x: any) => 
                    x.kapal_id === j.kapal_id && 
                    x.rute_asal === asal && 
                    x.jam_berangkat === j.jam_berangkat
@@ -156,6 +171,15 @@ function PilihJadwalContent() {
 
         // 4. CEK KOSONG SETELAH QUERY ULANG
         if (!jadwalData || jadwalData.length === 0) {
+          const semuaTemplate = (templates || []) as any[]
+          if (semuaTemplate.length > 0 && templatesOperasi.length === 0) {
+            const hariDipilih = namaHari(tanggal)
+            setInfoKosong({
+              hariTerpilih: hariDipilih ? LABEL_HARI[hariDipilih] : tanggal,
+              hariOperasi: labelHari(gabungHariOperasi(semuaTemplate.map((t) => t.hari_operasi))),
+              tanggalTerdekat: tanggalOperasiTerdekatDari(tanggal, semuaTemplate.map((t) => t.hari_operasi))
+            })
+          }
           setShowEmptyPopup(true)
           setLoading(false)
           return
@@ -285,14 +309,39 @@ function PilihJadwalContent() {
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-2xl shadow-xl max-w-sm w-full p-6 text-center">
             <div className="text-6xl mb-4">🚢</div>
-            <h3 className="text-xl font-bold text-gray-900 mb-2">Jadwal Tidak Ditemukan</h3>
-            <p className="text-sm text-gray-600 mb-6">
-              Mohon maaf, untuk rute <b>{labelRute(asal)} - {labelRute(tujuan)}</b> pada tanggal <b>{tanggal}</b> belum ada jadwal kapal yang tersedia.
-            </p>
+            <h3 className="text-xl font-bold text-gray-900 mb-2">
+              {infoKosong ? 'Kapal Tidak Beroperasi' : 'Jadwal Tidak Ditemukan'}
+            </h3>
+            {infoKosong ? (
+              <p className="text-sm text-gray-600 mb-6">
+                Mohon maaf, untuk rute <b>{labelRute(asal)} - {labelRute(tujuan)}</b> tidak ada kapal yang beroperasi pada hari <b>{infoKosong.hariTerpilih}</b> ({tanggal}).
+                Kapal hanya berjalan pada <b>{infoKosong.hariOperasi}</b>.
+                {infoKosong.tanggalTerdekat && (
+                  <> Jadwal terdekat: <b>{formatTanggalPanjang(infoKosong.tanggalTerdekat)}</b>.</>
+                )}
+              </p>
+            ) : (
+              <p className="text-sm text-gray-600 mb-6">
+                Mohon maaf, untuk rute <b>{labelRute(asal)} - {labelRute(tujuan)}</b> pada tanggal <b>{tanggal}</b> belum ada jadwal kapal yang tersedia.
+              </p>
+            )}
             <div className="flex flex-col gap-2">
-              <button onClick={() => router.push('/')} className="w-full bg-blue-600 text-white py-2.5 rounded-lg font-bold hover:bg-blue-700 transition">
-                Coba Tanggal Lain
-              </button>
+              {infoKosong?.tanggalTerdekat ? (
+                <button
+                  onClick={() => {
+                    const params = new URLSearchParams({ asal, tujuan, tanggal: infoKosong.tanggalTerdekat })
+                    if (operatorId) params.set('operator', operatorId)
+                    router.push(`/pilih-jadwal?${params.toString()}`)
+                  }}
+                  className="w-full bg-blue-600 text-white py-2.5 rounded-lg font-bold hover:bg-blue-700 transition"
+                >
+                  Lihat Jadwal {formatTanggalPanjang(infoKosong.tanggalTerdekat)}
+                </button>
+              ) : (
+                <button onClick={() => router.push('/')} className="w-full bg-blue-600 text-white py-2.5 rounded-lg font-bold hover:bg-blue-700 transition">
+                  Coba Tanggal Lain
+                </button>
+              )}
               <button onClick={() => setShowEmptyPopup(false)} className="w-full bg-gray-100 text-gray-700 py-2.5 rounded-lg font-bold hover:bg-gray-200 transition">
                 Tutup
               </button>

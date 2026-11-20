@@ -3,6 +3,7 @@
 import { useEffect, useState, Suspense } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase, getProfile, getOperatorSession, type Profile } from '@/lib/supabase'
+import { beroperasiPada } from '@/lib/hari'
 
 type JadwalTampil = {
   id: string
@@ -119,8 +120,11 @@ function CariTiketContent() {
 
       const { data: templates } = await templateQuery
 
-      if (templates && templates.length > 0) {
-        const newJadwalPayload = templates.map((t) => ({
+      // Hanya template yang beroperasi pada hari dari tanggal yang dipilih.
+      const templatesOperasi = (templates || []).filter((t: any) => beroperasiPada(tgl, t.hari_operasi))
+
+      if (templatesOperasi.length > 0) {
+        const newJadwalPayload = templatesOperasi.map((t) => ({
           kapal_id: t.kapal_id,
           rute_asal: t.rute_asal,
           rute_tujuan: t.rute_tujuan,
@@ -140,7 +144,7 @@ function CariTiketContent() {
           
           const kursiPayload: any[] = []
           for (const j of insertedJadwal) {
-            const t = templates.find((x: any) => x.jam_berangkat === j.jam_berangkat)
+            const t = templatesOperasi.find((x: any) => x.jam_berangkat === j.jam_berangkat)
             const kapasitas = t?.kapal?.kapasitas || 0
             if (kapasitas > 0) {
               for (let i = 1; i <= kapasitas; i++) {

@@ -3,6 +3,7 @@
 import { useEffect, useState, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { supabase, getOperatorSession, getProfile, type Profile } from '@/lib/supabase'
+import { beroperasiPada } from '@/lib/hari'
 
 type RincianPenumpang = {
   id: string; nama: string; kursi: string; kanal: string; kode_tiket: string; harga: number; status_boarding: string; waktu_boarding: string | null; nama_kapal: string; nama_kapten: string; rute: string
@@ -51,7 +52,7 @@ function LaporanOperatorContent() {
       
       const operatorId = profile.role !== 'superadmin' ? (profile.operator_id || profile.id) : null
 
-      let queryTemplate = supabase.from('template_jadwal').select('jam_berangkat').eq('rute_asal', profile.lokasi)
+      let queryTemplate = supabase.from('template_jadwal').select('jam_berangkat, hari_operasi').eq('rute_asal', profile.lokasi)
       let queryJadwal = supabase.from('jadwal').select('id, jam_berangkat, kapal_id').eq('tanggal', tanggal).eq('rute_asal', profile.lokasi)
 
       if (operatorId) {
@@ -95,7 +96,11 @@ function LaporanOperatorContent() {
       })
 
       const jamSet = new Set<string>()
-      if (templateData) templateData.forEach((t: any) => jamSet.add(t.jam_berangkat.substring(0, 5)))
+      if (templateData) templateData.forEach((t: any) => {
+        // Template yang tidak beroperasi pada hari itu jangan dibuatkan baris kosong.
+        if (!beroperasiPada(tanggal, t.hari_operasi)) return
+        jamSet.add(t.jam_berangkat.substring(0, 5))
+      })
       
       const groupedByJam: { [key: string]: LaporanPerJam } = {}
       

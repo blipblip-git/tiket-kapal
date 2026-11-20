@@ -3,6 +3,7 @@
 import { useEffect, useState, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { supabase, getProfile, getOperatorSession, formatDaftarAbk, type Profile } from '@/lib/supabase'
+import { beroperasiPada } from '@/lib/hari'
 
 type RincianPenumpang = {
   id: string
@@ -76,7 +77,7 @@ function SyahbandarContent() {
       setLoading(true)
 
       // Query TANPA filter operator_id (Syahbandar ngawas semua kapal di pelabuhan)
-      const { data: templateData } = await supabase.from('template_jadwal').select('jam_berangkat').eq('rute_asal', lokasi)
+      const { data: templateData } = await supabase.from('template_jadwal').select('jam_berangkat, hari_operasi').eq('rute_asal', lokasi)
       const { data: jadwalData } = await supabase.from('jadwal').select('id, jam_berangkat, rute_asal, rute_tujuan, kapal_id').eq('tanggal', tanggal).eq('rute_asal', lokasi)
       
       const kapalIdsFromJadwal = [...new Set(jadwalData?.map((j: any) => j.kapal_id).filter(Boolean) || [])]
@@ -95,7 +96,10 @@ function SyahbandarContent() {
       const filtered = (pesananData || []).filter((item: any) => item.jadwal !== null)
 
       const jamSet = new Set<string>()
-      if (templateData) templateData.forEach((t: any) => jamSet.add(t.jam_berangkat.substring(0, 5)))
+      if (templateData) templateData.forEach((t: any) => {
+        if (!beroperasiPada(tanggal, t.hari_operasi)) return
+        jamSet.add(t.jam_berangkat.substring(0, 5))
+      })
 
       const groupedByJam: { [key: string]: LaporanPerJam } = {}
       jamSet.forEach(jam => {
