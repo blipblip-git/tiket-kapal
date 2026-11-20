@@ -30,6 +30,12 @@ alter table public.pesanan add column if not exists fee_agen bigint default 0;
 alter table public.pesanan add column if not exists fee_platform bigint default 0;
 
 create index if not exists idx_profiles_auth_user on public.profiles(auth_user_id);
+create index if not exists idx_profiles_operator on public.profiles(operator_id);
+create index if not exists idx_kapal_operator on public.kapal(operator_id);
+create index if not exists idx_jadwal_operator on public.jadwal(operator_id);
+create index if not exists idx_pesanan_jadwal on public.pesanan(jadwal_id);
+create index if not exists idx_kursi_jadwal on public.kursi(jadwal_id);
+create index if not exists idx_pesanan_status_waktu on public.pesanan(status, waktu_pesan);
 
 -- ---------------------------------------------------------------------
 -- 2. Helper (SECURITY DEFINER: membaca profiles tanpa kena RLS berulang)
@@ -71,13 +77,18 @@ language sql stable security definer set search_path = public as $$
   )
 $$;
 
--- true kalau pemanggil Superadmin atau kunci server (service_role)
+-- true kalau pemanggil Superadmin atau kunci server (service_role).
+-- Catatan: JANGAN memakai current_user di sini — di dalam fungsi SECURITY
+-- DEFINER current_user berubah menjadi pemilik fungsi, bukan pemanggil.
 create or replace function public.fn_istimewa() returns boolean
 language sql stable security definer set search_path = public as $$
   select
     public.is_superadmin()
     or coalesce(auth.role(), '') = 'service_role'
-    or current_user in ('postgres', 'service_role', 'supabase_admin')
+    or coalesce(current_setting('role', true), '') in ('service_role', 'postgres', 'supabase_admin')
+    or (
+      nullif(current_setting('request.jwt.claims', true), '')::jsonb ->> 'role'
+    ) = 'service_role'
 $$;
 
 create or replace function public.jadwal_izin(jid uuid) returns boolean
