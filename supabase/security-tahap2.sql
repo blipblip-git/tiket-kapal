@@ -163,6 +163,18 @@ grant select on public.pembayaran to anon;
 -- Staf yang sudah login (Supabase Auth) butuh akses baca + tulis; RLS yang membatasi.
 grant select, insert, update, delete on all tables in schema public to authenticated;
 
+-- Server (service role) butuh akses penuh karena semua penulisan publik
+-- sekarang lewat API route. Tanpa ini muncul "permission denied for table"
+-- (42501) di endpoint /api/publik/* dan /api/superadmin/*.
+grant usage on schema public to service_role;
+grant select, insert, update, delete on all tables in schema public to service_role;
+grant usage, select on all sequences in schema public to service_role;
+grant execute on all functions in schema public to service_role;
+alter default privileges in schema public
+  grant select, insert, update, delete on tables to service_role;
+alter default privileges in schema public
+  grant usage, select on sequences to service_role;
+
 -- ---------------------------------------------------------------------
 -- 4. BERSIHKAN POLICY LAMA (yang biasanya `using (true)`)
 -- ---------------------------------------------------------------------
