@@ -148,7 +148,9 @@ export async function muatPenjualFee(opts: {
 
 /** Semua lokasi agen milik penyewa (untuk kartu "Laporan Fee <daerah>"). */
 export async function muatLokasiAgen(profile: Profile): Promise<string[]> {
-  if (profile.role !== 'admin_utama' && profile.role !== 'superadmin') return []
+  // Superadmin memakai "Penerimaan Fee" (lintas penyewa), bukan laporan fee
+  // milik satu penyewa.
+  if (profile.role !== 'admin_utama') return []
   const operatorId = idOperator(profile)
 
   let query = supabase.from('profiles').select('lokasi, role').eq('role', 'agen')
