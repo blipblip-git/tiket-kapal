@@ -21,6 +21,35 @@ const DAFTAR_KOTA_CADANGAN: KotaRute[] = [
   { nama_kota: 'Tarakan', singkatan: 'TRK' }
 ]
 
+// Koordinat pusat kota (perkiraan) untuk deteksi otomatis kolom "Dari".
+// Kota yang tidak ada di sini hanya tidak ikut terdeteksi (tetap bisa dipilih manual).
+const KOORDINAT_KOTA: Record<string, { lat: number; lng: number }> = {
+  'Berau': { lat: 2.1531, lng: 117.4957 },
+  'Bunyu': { lat: 3.5200, lng: 117.8069 },
+  'Kabupaten Tanah Tidung': { lat: 3.5855, lng: 116.9078 },
+  'Malinau': { lat: 3.5892, lng: 116.6222 },
+  'Nunukan': { lat: 4.1404, lng: 117.6511 },
+  'Sebatik': { lat: 4.1333, lng: 117.7667 },
+  'Sembakung': { lat: 3.8569, lng: 117.0318 },
+  'Sungai Nyamuk': { lat: 4.1426, lng: 117.9117 },
+  'Tanah Kuning': { lat: 2.6027, lng: 117.8172 },
+  'Tanjung Selor': { lat: 2.8430, lng: 117.3613 },
+  'Tarakan': { lat: 3.3000, lng: 117.6330 }
+}
+
+// Kalau lokasi pembeli lebih jauh dari radius ini dari semua kota, kolom "Dari" dibiarkan kosong.
+const RADIUS_DETEKSI_KM = 25
+
+function jarakKm(lat1: number, lng1: number, lat2: number, lng2: number) {
+  const R = 6371
+  const dLat = ((lat2 - lat1) * Math.PI) / 180
+  const dLng = ((lng2 - lng1) * Math.PI) / 180
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos((lat1 * Math.PI) / 180) * Math.cos((lat2 * Math.PI) / 180) * Math.sin(dLng / 2) ** 2
+  return 2 * R * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
+}
+
 function BerandaContent() {
   const router = useRouter()
   
@@ -54,6 +83,15 @@ function BerandaContent() {
 
   const [daftarKota, setDaftarKota] = useState<KotaRute[]>(DAFTAR_KOTA_CADANGAN)
   const [memuatRute, setMemuatRute] = useState(false)
+  const [deteksiLokasi, setDeteksiLokasi] = useState('')
+
+  // Dipakai supaya deteksi lokasi tidak menimpa pilihan manual pembeli.
+  const asalRef = useRef('')
+  const sudahDeteksi = useRef(false)
+
+  useEffect(() => {
+    asalRef.current = asal
+  }, [asal])
 
   // Rute online WAJIB sama persis dengan Master Rute (master_kota), karena
   // template jadwal menyimpan rute_asal/tujuan memakai nama_kota.
@@ -85,6 +123,44 @@ function BerandaContent() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
+  // DETEKSI LOKASI OTOMATIS -> isi kolom "Dari" dengan kota terdekat.
+  // Kalau pembeli menolak izin lokasi, kolom tetap "-- Pilih Kota --".
+  useEffect(() => {
+    if (typeof window === 'undefined' || !navigator.geolocation) return
+    if (daftarKota.length === 0) return
+    if (sudahDeteksi.current) return
+
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        if (sudahDeteksi.current) return
+        sudahDeteksi.current = true
+        if (asalRef.current) return
+
+        let kandidat = ''
+        let jarakTerdekat = Number.POSITIVE_INFINITY
+
+        daftarKota.forEach((kota) => {
+          const koord = KOORDINAT_KOTA[kota.nama_kota]
+          if (!koord) return
+          const jarak = jarakKm(pos.coords.latitude, pos.coords.longitude, koord.lat, koord.lng)
+          if (jarak < jarakTerdekat) {
+            jarakTerdekat = jarak
+            kandidat = kota.nama_kota
+          }
+        })
+
+        if (kandidat && jarakTerdekat <= RADIUS_DETEKSI_KM) {
+          setAsal(kandidat)
+          setDeteksiLokasi(kandidat)
+        }
+      },
+      () => {
+        sudahDeteksi.current = true
+      },
+      { enableHighAccuracy: true, timeout: 8000, maximumAge: 10 * 60 * 1000 }
+    )
+  }, [daftarKota])
+
   // LOGIKA RESET TANGGAL JAM 16.00 WITA
   const getTanggalDefault = () => {
     const now = new Date()
@@ -106,6 +182,21 @@ function BerandaContent() {
     const temp = asal
     setAsal(tujuan)
     setTujuan(temp)
+    setDeteksiLokasi('')
+  }
+
+  // TOMBOL REFRESH: bersihkan pilihan kembali ke default + muat ulang master rute.
+  const handleRefresh = () => {
+    setAsal('')
+    setTujuan('')
+    setSearchAsal('')
+    setSearchTujuan('')
+    setShowAsalModal(false)
+    setShowTujuanModal(false)
+    setDeteksiLokasi('')
+    setTanggal(getTanggalDefault())
+    sudahDeteksi.current = true
+    muatRute()
   }
 
   const handleCari = (e: React.FormEvent) => {
@@ -125,6 +216,7 @@ function BerandaContent() {
   const handlePilihKota = (kota: string, tipe: 'asal' | 'tujuan') => {
     if (tipe === 'asal') {
       setAsal(kota)
+      setDeteksiLokasi('')
       setShowAsalModal(false)
       setSearchAsal('')
       if (kota === tujuan) setTujuan('')
@@ -195,20 +287,20 @@ function BerandaContent() {
       </div>
 
       <div className="bg-white rounded-3xl shadow-lg w-full max-w-[340px] sm:max-w-sm p-5 sm:p-6 relative">
-        <div className="flex items-center gap-2 mb-5 sm:mb-6">
-          <h2 className="text-lg sm:text-xl font-bold text-gray-900 text-center flex-1">Cari Jadwal Tiket Speed</h2>
+        <div className="relative flex items-center justify-center mb-5 sm:mb-6 min-h-[34px]">
+          <h2 className="text-lg sm:text-xl font-bold text-gray-900 text-center">Cari Tiket Speed</h2>
           <button
             type="button"
-            onClick={muatRute}
+            onClick={handleRefresh}
             disabled={memuatRute}
-            title="Muat ulang rute dari Master Rute"
-            aria-label="Muat ulang daftar rute"
-            className="flex items-center gap-1 text-xs font-bold text-purple-700 bg-purple-50 border border-purple-200 rounded-full px-2.5 py-1.5 hover:bg-purple-100 disabled:opacity-50"
+            title="Bersihkan pilihan & muat ulang rute"
+            aria-label="Bersihkan pilihan dan muat ulang rute"
+            className="absolute right-0 top-1/2 -translate-y-1/2 flex items-center gap-1 text-xs font-bold text-purple-700 bg-purple-50 border border-purple-200 rounded-full px-2 sm:px-2.5 py-1.5 hover:bg-purple-100 disabled:opacity-50"
           >
             <svg className={`w-4 h-4 ${memuatRute ? 'animate-spin' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v6h6M20 20v-6h-6M20 8a8 8 0 00-14.9-3M4 16a8 8 0 0014.9 3" />
             </svg>
-            <span className="hidden sm:inline">Muat Ulang</span>
+            <span className="hidden sm:inline">Refresh</span>
           </button>
         </div>
 
@@ -223,9 +315,15 @@ function BerandaContent() {
             >
               {asal ? labelKota(asal) : '-- Pilih Kota --'}
             </button>
+            {deteksiLokasi && (
+              <p className="mt-1 text-[10px] font-medium text-green-700 flex items-center gap-1">
+                <span>📍</span>
+                <span>Terdeteksi otomatis dari lokasi Anda (bisa diubah)</span>
+              </p>
+            )}
           </div>
 
-          <div className="flex justify-center -my-2 relative z-10">
+          <div className="flex justify-center -my-2 sm:-my-2.5 relative z-10">
             <button 
               type="button" 
               onClick={handleTukar}
@@ -260,13 +358,13 @@ function BerandaContent() {
 
           <button
             type="submit"
-            className="w-full bg-purple-600 text-white py-2.5 sm:py-3 rounded-lg font-bold text-sm sm:text-base hover:bg-purple-700 shadow-md transition-colors mt-2"
+            className="w-full bg-purple-600 text-white py-2.5 sm:py-3 rounded-lg font-bold text-sm sm:text-base hover:bg-purple-700 shadow-md transition-colors"
           >
             Cari Jadwal
           </button>
         </form>
 
-        <div className="mt-5 sm:mt-6 pt-4 border-t border-gray-100 text-center">
+        <div className="mt-4 sm:mt-5 pt-4 border-t border-gray-100 text-center">
           <p className="text-[11px] sm:text-xs text-gray-500 mb-2">Lupa atau belum cetak e-tiket?</p>
           <button
             onClick={() => router.push('/cek-tiket')}

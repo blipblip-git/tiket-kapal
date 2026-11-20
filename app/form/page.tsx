@@ -26,6 +26,25 @@ const maskNik = (nik: string) => {
   return nik.slice(0, 4) + '********' + nik.slice(12);
 }
 
+function LayarMemuat({ teks }: { teks: string }) {
+  return (
+    <div className="min-h-[100dvh] bg-gray-50 flex flex-col items-center justify-center">
+      <style dangerouslySetInnerHTML={{__html: `
+        @keyframes spin {
+          0% { transform: rotate(0deg); }
+          100% { transform: rotate(360deg); }
+        }
+        .animate-spin-custom { animation: spin 1s linear infinite; }
+      `}} />
+      <div className="relative w-24 h-24 flex items-center justify-center mb-4">
+        <div className="absolute w-24 h-24 rounded-full border-4 border-transparent border-t-red-500 border-r-yellow-400 border-b-green-500 border-l-blue-500 animate-spin-custom"></div>
+        <div className="text-xs font-bold text-gray-500">Memuat...</div>
+      </div>
+      <p className="text-gray-700 font-medium text-sm">{teks}</p>
+    </div>
+  )
+}
+
 function FormContent() {
   const searchParams = useSearchParams()
   const router = useRouter()
@@ -222,7 +241,7 @@ function FormContent() {
     }
   }
 
-  if (loading) return <div className="min-h-screen flex items-center justify-center text-gray-900">Memuat data...</div>
+  if (loading) return <LayarMemuat teks="Menyiapkan form penumpang..." />
 
   if (error) {
     return (
@@ -376,7 +395,7 @@ function FormContent() {
 
 export default function FormPage() {
   return (
-    <Suspense fallback={<div className="min-h-screen flex items-center justify-center text-gray-900">Memuat form...</div>}>
+    <Suspense fallback={<LayarMemuat teks="Menyiapkan form penumpang..." />}>
       <FormContent />
     </Suspense>
   )

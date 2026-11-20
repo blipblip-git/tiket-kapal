@@ -43,6 +43,25 @@ type TiketLengkap = {
   nama_balita: string[]
 }
 
+function LayarMemuat({ teks }: { teks: string }) {
+  return (
+    <div className="min-h-[100dvh] bg-gray-50 flex flex-col items-center justify-center">
+      <style dangerouslySetInnerHTML={{__html: `
+        @keyframes spin {
+          0% { transform: rotate(0deg); }
+          100% { transform: rotate(360deg); }
+        }
+        .animate-spin-custom { animation: spin 1s linear infinite; }
+      `}} />
+      <div className="relative w-24 h-24 flex items-center justify-center mb-4">
+        <div className="absolute w-24 h-24 rounded-full border-4 border-transparent border-t-red-500 border-r-yellow-400 border-b-green-500 border-l-blue-500 animate-spin-custom"></div>
+        <div className="text-xs font-bold text-gray-500">Memuat...</div>
+      </div>
+      <p className="text-gray-700 font-medium text-sm">{teks}</p>
+    </div>
+  )
+}
+
 function EtiketSuperadminContent() {
   const searchParams = useSearchParams()
   const router = useRouter()
@@ -437,7 +456,7 @@ function EtiketSuperadminContent() {
     router.replace('/superadmin/pusat-kontrol')
   }
 
-  if (loading) return <p className="p-6 text-center text-gray-900 mt-10">Memuat e-tiket...</p>
+  if (loading) return <LayarMemuat teks="Menyiapkan e-tiket..." />
   if (error) return <p className="p-6 text-center text-red-600 mt-10">Error: {error}</p>
   if (tiketList.length === 0 || !detail) return <p className="p-6 text-center text-gray-900 mt-10">Data tidak lengkap</p>
 
@@ -659,7 +678,7 @@ function EtiketSuperadminContent() {
 
 export default function EtiketSuperadminPage() {
   return (
-    <Suspense fallback={<p className="p-6 text-center text-gray-900 mt-10">Memuat...</p>}>
+    <Suspense fallback={<LayarMemuat teks="Menyiapkan e-tiket..." />}>
       <EtiketSuperadminContent />
     </Suspense>
   )
