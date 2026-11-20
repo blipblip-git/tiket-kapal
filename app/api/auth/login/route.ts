@@ -5,6 +5,7 @@
 
 import { NextResponse } from 'next/server'
 import { buatClientAdmin, pesanServiceKeyKosong } from '@/lib/serverAuth'
+import { pastikanSesiStaf } from '@/lib/akunAuth'
 import { hashPasswordServer, kolomPasswordHashBelumAda, verifyPassword } from '@/lib/passwordServer'
 import { buatTokenSesi } from '@/lib/sessionToken'
 import { ROLE_KOLEKTOR, adalahKolektor } from '@/lib/kolektor'
@@ -206,6 +207,37 @@ export async function POST(request: Request) {
 
     catatanPercobaan.delete(kunci)
 
+    // Sesi Supabase Auth: dipakai database (RLS) untuk mengenali staf ini.
+    // Tanpa sesi ini, staf tetap bisa login aplikasi tetapi tidak bisa menulis
+    // data setelah SQL pengamanan tahap 2 dijalankan.
+    let sesiAuth: { access_token: string; refresh_token: string } | null = null
+    let peringatanSesi: string | null = null
+    try {
+      const { data: dataAuth, error: errorAuth } = await admin
+        .from('profiles')
+        .select('auth_user_id')
+        .eq('id', profil.id)
+        .maybeSingle()
+
+      if (errorAuth && !/auth_user_id/i.test(errorAuth.message || '')) {
+        peringatanSesi = 'Gagal membaca penghubung akun: ' + errorAuth.message
+      } else {
+        const hasilSesi = await pastikanSesiStaf(
+          admin,
+          { id: profil.id, auth_user_id: (dataAuth as any)?.auth_user_id || null },
+          password
+        )
+        sesiAuth = hasilSesi.session
+        if (!sesiAuth) {
+          peringatanSesi = hasilSesi.error || 'Sesi pengaman tidak tersedia.'
+          console.error('Sesi Auth staf gagal dibuat:', peringatanSesi)
+        }
+      }
+    } catch (err: any) {
+      peringatanSesi = err?.message || 'Sesi pengaman tidak tersedia.'
+      console.error('Sesi Auth staf error:', peringatanSesi)
+    }
+
     // Kolektor bisa tersimpan sebagai role 'kolektor' atau — kalau database lama
     // menolak role baru — sebagai 'petugas_loket' + unit "Kolektor".
     // Keduanya dikirim ke browser sebagai role 'kolektor'.
@@ -227,7 +259,11 @@ export async function POST(request: Request) {
       },
       // Token khusus kolektor untuk memanggil API laporan (read-only, terkunci
       // ke lokasi + operator akun tersebut). Role lain tidak butuh token ini.
-      api_token: kolektor ? buatTokenSesi(profil.id) : null
+      api_token: kolektor ? buatTokenSesi(profil.id) : null,
+      // Sesi Supabase Auth (access + refresh token) dipasang di browser oleh
+      // halaman /login supaya database mengenali staf ini (RLS per penyewa).
+      session: sesiAuth,
+      peringatan: peringatanSesi
     })
   } catch (error: any) {
     console.error('Error login:', error)

@@ -166,73 +166,30 @@ function FormContent() {
     setError('')
 
     try {
-      const grupTransaksiId = crypto.randomUUID()
-      const waktuSekarang = new Date().toISOString()
-      const waktuExpired = new Date(Date.now() + 10 * 60 * 1000).toISOString()
+      const payload = {
+        jadwal_id: jadwalId,
+        kursi_ids: kursiList.map((k) => k.id),
+        nomor_hp: noHp,
+        penumpang: penumpangList.map((p) => ({
+          nama: p.nama,
+          nik: p.nik,
+          balita: p.balita
+        }))
+      }
 
-      const pesananPayload: any[] = []
-
-      penumpangList.forEach((p, idx) => {
-        const kursiId = kursiList[idx]?.id
-        if (!kursiId) throw new Error(`Kursi untuk penumpang #${idx + 1} tidak ditemukan.`)
-
-        // DEWASA (ID dibuat di awal supaya balita bisa menempel ke induknya)
-        const indukId = crypto.randomUUID()
-
-        pesananPayload.push({
-          id: indukId,
-          jadwal_id: jadwalId,
-          kursi_id: kursiId,
-          nama_penumpang: toTitleCase(p.nama),
-          nik: maskNik(p.nik),
-          nomor_hp: noHp,
-          kanal: 'online',
-          status: 'pending',
-          kode_tiket: 'TKT-' + Math.random().toString(36).substring(2, 8).toUpperCase(),
-          grup_transaksi_id: grupTransaksiId,
-          waktu_pesan: waktuSekarang,
-          waktu_expired: waktuExpired,
-          is_balita: false,
-          induk_id: null,
-        })
-
-        // BALITA (boleh lebih dari satu, semuanya nempel ke kursi ini)
-        p.balita.forEach((namaBalita, bIdx) => {
-          const namaRapiBalita = toTitleCase(namaBalita.trim())
-          if (!namaRapiBalita) return
-
-          pesananPayload.push({
-            id: crypto.randomUUID(),
-            jadwal_id: jadwalId,
-            kursi_id: null,
-            nama_penumpang: namaRapiBalita,
-            nik: null, // <-- PAKAI NULL, BUKAN '-'
-            nomor_hp: noHp,
-            kanal: 'online',
-            status: 'pending',
-            kode_tiket: 'BALITA-' + Math.random().toString(36).substring(2, 8).toUpperCase() + '-B' + bIdx,
-            grup_transaksi_id: grupTransaksiId,
-            waktu_pesan: waktuSekarang,
-            waktu_expired: waktuExpired,
-            is_balita: true,
-            induk_id: indukId,
-          })
-        })
+      // Pesanan dibuat oleh SERVER. Browser tidak lagi punya izin menulis ke
+      // tabel pesanan, jadi harga/kanal/kode tiket tidak bisa dipalsukan.
+      const response = await fetch('/api/publik/pesan', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
       })
 
-      const { data: insertedPesanan, error: errPesanan } = await supabase
-        .from('pesanan')
-        .insert(pesananPayload)
-        .select()
+      const hasil = await response.json()
+      if (!response.ok) throw new Error(hasil.error || 'Gagal memproses pesanan.')
+      if (!hasil.ids || hasil.ids.length === 0) throw new Error('Gagal insert pesanan (data kosong)')
 
-      if (errPesanan) throw errPesanan
-
-      if (insertedPesanan && insertedPesanan.length > 0) {
-        const idList = insertedPesanan.map(p => p.id).join(',')
-        router.push(`/pembayaran?pesanan=${idList}`)
-      } else {
-        throw new Error('Gagal insert pesanan (data kosong)')
-      }
+      router.push(`/pembayaran?pesanan=${hasil.ids.join(',')}`)
 
     } catch (err: any) {
       console.error('Error saat insert:', err)

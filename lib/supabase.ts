@@ -28,6 +28,7 @@ export type Profile = {
   nama_perusahaan?: string
   sesi_aktif?: string | null
   api_token?: string | null
+  auth_user_id?: string | null
 }
 
 // ==================== NAMA PERUSAHAAN UNTUK HEADER DASHBOARD ====================
@@ -102,14 +103,25 @@ export async function getProfile(opsi?: { utamakanAuth?: boolean }): Promise<Pro
     .eq('id', user.id)
     .single()
 
-  if (error || !data) return null
+  // Akun staf memakai Supabase Auth terpisah (profiles.auth_user_id), bukan id profil.
+  let profil = !error && data ? (data as Profile) : null
+  if (!profil) {
+    const { data: viaAuth } = await supabase
+      .from('profiles')
+      .select('*')
+      .eq('auth_user_id', user.id)
+      .maybeSingle()
+    profil = (viaAuth as Profile | null) || null
+  }
 
-  if (data.aktif === false) {
+  if (!profil) return null
+
+  if (profil.aktif === false) {
     await supabase.auth.signOut()
     return null
   }
 
-  return data as Profile
+  return profil
 }
 
 // ==================== GET OPERATOR SESSION (KHUSUS OPERATOR) ====================

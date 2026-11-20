@@ -98,74 +98,23 @@ function PilihJadwalContent() {
 
         let { data: jadwalData } = await queryJadwal
 
-        // 3. AUTO-GENERATE (KALAU ADA TEMPLATE TAPI BELUM ADA JADWAL)
+        // 3. AUTO-GENERATE JADWAL (diproses SERVER — browser tidak punya hak tulis)
         if (templatesOperasi.length > 0) {
-          const newJadwalPayload: any[] = []
-          
-          for (const t of templatesOperasi) {
-            const existing = jadwalData?.find((j: any) => 
-              j.kapal_id === t.kapal_id && 
-              j.rute_asal === t.rute_asal && 
-              j.jam_berangkat === t.jam_berangkat
-            );
-            
-            if (!existing) {
-              newJadwalPayload.push({
-                kapal_id: t.kapal_id,
-                rute_asal: t.rute_asal,
-                rute_tujuan: t.rute_tujuan,
-                tanggal: tanggal,
-                jam_berangkat: t.jam_berangkat,
-                harga: t.harga || 150000,
-                status: 'aktif',
-                status_jadwal: 'open',
-                operator_id: operatorId || t.operator_id || null,
-              });
-            }
-          }
-
-          if (newJadwalPayload.length > 0) {
-            await supabase
-              .from('jadwal')
-              .insert(newJadwalPayload)
-
-            // 3b. WAJIB QUERY ULANG SETELAH INSERT
+          try {
+            await fetch('/api/publik/siapkan-jadwal', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                tanggal,
+                rute_asal: asal,
+                rute_tujuan: tujuan,
+                operator_id: operatorId || null
+              })
+            })
             const { data: refreshedJadwal } = await queryJadwal
             jadwalData = refreshedJadwal
-
-            // === BIKIN KURSI (HANYA KALAU BELUM ADA) ===
-            const kursiPayload: any[] = []
-            
-            for (const j of (jadwalData || [])) {
-               // CEK DULU: Apakah kursi untuk jadwal ini udah ada?
-               const { data: existingKursi } = await supabase
-                 .from('kursi')
-                 .select('id')
-                 .eq('jadwal_id', j.id)
-                 .limit(1)
-
-               // Kalau BELUM ADA, baru insert
-               if (!existingKursi || existingKursi.length === 0) {
-                 const t = templatesOperasi.find((x: any) => 
-                   x.kapal_id === j.kapal_id && 
-                   x.rute_asal === asal && 
-                   x.jam_berangkat === j.jam_berangkat
-                 )
-                 const kapasitas = t?.kapal?.kapasitas || 0
-                 if (kapasitas > 0) {
-                   for (let i = 1; i <= kapasitas; i++) {
-                     kursiPayload.push({
-                       jadwal_id: j.id,
-                       nomor_kursi: i.toString(),
-                       status: 'kosong'
-                     })
-                   }
-                 }
-               }
-            }
-            if (kursiPayload.length > 0) {
-              await supabase.from('kursi').insert(kursiPayload)
-            }
+          } catch (err) {
+            console.error('Gagal menyiapkan jadwal:', err)
           }
         }
 

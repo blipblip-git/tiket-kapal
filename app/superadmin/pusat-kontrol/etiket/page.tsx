@@ -185,7 +185,14 @@ function EtiketSuperadminContent() {
         }
       }
 
-      const { data: allProfiles } = await supabase.from('profiles').select('email, nomor_hp, nama, lokasi, role')
+      // Profil penjual hanya dibutuhkan untuk tiket OFFLINE. Tiket online
+      // (pembeli umum) tidak boleh memicu pembacaan seluruh profil.
+      const butuhProfilPenjual = barisTiket.some((x) => x.kanal !== 'online' && !!x.petugas_jual)
+      let allProfiles: any[] | null = null
+      if (butuhProfilPenjual) {
+        const { data } = await supabase.from('profiles').select('email, nomor_hp, nama, lokasi, role')
+        allProfiles = data
+      }
       const { data: allKota } = await supabase.from('master_kota').select('nama_kota, singkatan')
       
       const kotaMap = new Map()

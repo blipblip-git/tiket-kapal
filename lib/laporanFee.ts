@@ -7,7 +7,7 @@
 import { supabase, type Profile } from './supabase'
 import { ambilOperatorKapal, pemilikJadwal, idOperator } from './tenant'
 import {
-  KANAL_OFFLINE,
+  KANAL_FEE_PLATFORM,
   ambilFeePlatform,
   feePesananAda,
   feeProfil,
@@ -389,7 +389,7 @@ export async function muatLaporanFeePlatform(opts: {
     .filter(Boolean)
     .join(', ')
 
-  let query = supabase.from('pesanan').select(kolom).eq('status', 'paid').in('kanal', [...KANAL_OFFLINE])
+  let query = supabase.from('pesanan').select(kolom).eq('status', 'paid').in('kanal', [...KANAL_FEE_PLATFORM])
 
   if (mode === 'harian') {
     query = query.eq('jadwal.tanggal', tanggal || '')
@@ -502,7 +502,7 @@ export async function muatRincianPlatform(opts: {
     .from('pesanan')
     .select(kolom)
     .eq('status', 'paid')
-    .in('kanal', [...KANAL_OFFLINE])
+    .in('kanal', [...KANAL_FEE_PLATFORM])
     .eq('jadwal.tanggal', tanggal)
 
   if (error) return { baris: [], error: 'Gagal memuat rincian: ' + error.message }

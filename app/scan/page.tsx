@@ -163,12 +163,21 @@ function ScanContent() {
     try {
       const { data: p, error: errP } = await supabase
         .from('pesanan')
-        .select('id, nama_penumpang, nik, kode_tiket, status_boarding, jadwal_id, kursi_id, is_balita, induk_id')
+        .select('id, nama_penumpang, nik, kode_tiket, status, status_boarding, jadwal_id, kursi_id, is_balita, induk_id')
         .eq('kode_tiket', kodeTiket)
         .maybeSingle()
 
       if (errP || !p) {
         setHasil({ status: 'tidak_valid', pesan: 'Tiket tidak ditemukan di sistem' })
+        return
+      }
+
+      // TIKET WAJIB LUNAS. Tanpa cek ini, tiket pending/batal bisa dipakai naik kapal.
+      if (p.status !== 'paid') {
+        setHasil({
+          status: 'tidak_valid',
+          pesan: `Tiket BELUM LUNAS (status: ${p.status || 'pending'}). Arahkan pembeli menyelesaikan pembayaran dulu.`
+        })
         return
       }
 

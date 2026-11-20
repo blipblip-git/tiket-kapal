@@ -112,12 +112,19 @@ function PembayaranContent() {
   async function handleBatal() {
     if (pesananList.length === 0) return
     const ids = pesananList.map(p => p.id)
-    const kursiIds = pesananList.map(p => p.kursi_id).filter(Boolean) as string[]
 
-    await supabase.from('pesanan').delete().in('id', ids)
-    
-    if (kursiIds.length > 0) {
-      await supabase.from('kursi').update({ status: 'kosong', waktu_hold: null }).in('id', kursiIds)
+    try {
+      const res = await fetch('/api/publik/batal', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids })
+      })
+      const hasil = await res.json()
+      if (!res.ok) throw new Error(hasil.error || 'Gagal membatalkan pesanan.')
+      setPesananList([])
+    } catch (err: any) {
+      setError(err.message || 'Gagal membatalkan pesanan.')
+      return
     }
 
     const sesi = getOperatorSession()
@@ -133,53 +140,19 @@ function PembayaranContent() {
     setSedangBayar(true)
     setError('')
 
-    const waktuBayar = new Date().toISOString()
     const ids = pesananList.map((p) => p.id)
 
     try {
-      // 1. Update status pesanan jadi PAID
-      const { error: errP } = await supabase
-        .from('pesanan')
-        .update({
-          status: 'paid',
-          waktu_bayar: waktuBayar,
-          kanal: 'online',
-        })
-        .in('id', ids)
+      // Pembayaran diproses SERVER (mode simulasi). Browser tidak lagi punya
+      // izin mengubah status pesanan/kursi, jadi tidak bisa memalsukan lunas.
+      const response = await fetch('/api/publik/bayar', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids })
+      })
 
-      if (errP) throw new Error('Gagal update pesanan: ' + errP.message)
-
-      // 2. Update status kursi jadi TERISI (Filter Unique + anti error)
-      // Ambil kursi_id yang unik aja (buang null dan duplikat)
-      const kursiIdsRaw = pesananList
-        .filter(p => !p.is_balita && p.kursi_id && p.kursi_id !== 'null')
-        .map((p) => p.kursi_id)
-      
-      const kursiIds = [...new Set(kursiIdsRaw)] as string[]
-
-      if (kursiIds.length > 0) {
-        const { error: errK } = await supabase
-          .from('kursi')
-          .update({ status: 'terisi', waktu_hold: null })
-          .in('id', kursiIds)
-
-        if (errK) throw new Error('Gagal update kursi: ' + errK.message)
-      }
-
-      // 3. Insert ke tabel pembayaran
-      const pesananDewasa = pesananList.filter(p => !p.is_balita)
-      const pembayaranData = pesananDewasa.map((p) => ({
-        pesanan_id: p.id,
-        metode: 'simulasi_online',
-        jumlah: detail.harga,
-        status: 'sukses',
-        waktu_bayar: waktuBayar,
-      }))
-      
-      if (pembayaranData.length > 0) {
-        const { error: errPay } = await supabase.from('pembayaran').insert(pembayaranData)
-        if (errPay) throw new Error('Gagal simpan pembayaran: ' + errPay.message)
-      }
+      const hasil = await response.json()
+      if (!response.ok) throw new Error(hasil.error || 'Gagal memproses pembayaran.')
 
       // 4. Redirect ke E-Tiket
       router.replace(`/etiket?pesanan=${ids.join(',')}`)

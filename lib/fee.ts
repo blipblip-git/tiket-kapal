@@ -15,6 +15,11 @@ import { supabase } from './supabase'
 
 export const KANAL_OFFLINE = ['agen', 'loket', 'mobile', 'keberangkatan', 'petugas'] as const
 
+// Fee PLATFORM berlaku untuk SEMUA penjualan — termasuk tiket yang terjual
+// lewat kanal 'online'. Kalau online dikecualikan, penjualan online tidak
+// menghasilkan fee platform sama sekali (celah).
+export const KANAL_FEE_PLATFORM = [...KANAL_OFFLINE, 'online'] as const
+
 // ==================== PROBE KOLOM (aman sebelum migrasi) ====================
 let cekKolomProfil: boolean | null = null
 let cekKolomPesanan: boolean | null = null

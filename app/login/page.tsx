@@ -3,6 +3,7 @@
 import { useState, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { adalahKolektor } from '@/lib/kolektor'
+import { supabase } from '@/lib/supabase'
 
 function LoginContent() {
   const router = useRouter()
@@ -40,6 +41,19 @@ function LoginContent() {
       }
 
       const data = hasil.profile
+
+      // Sesi Supabase Auth dipasang di browser. Inilah "KTP digital" staf untuk
+      // database: setiap tulis/baca akan dikenali sebagai akun ini (RLS).
+      if (hasil.session?.access_token && hasil.session?.refresh_token) {
+        try {
+          await supabase.auth.setSession({
+            access_token: hasil.session.access_token,
+            refresh_token: hasil.session.refresh_token
+          })
+        } catch (err) {
+          console.error('Gagal memasang sesi pengaman:', err)
+        }
+      }
 
       localStorage.setItem('petugas_session', JSON.stringify({
         id: data.id, nama: data.nama, role: data.role, lokasi: data.lokasi, unit: data.unit,

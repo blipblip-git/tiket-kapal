@@ -34,22 +34,29 @@ Pastikan Environment Variables Vercel berisi:
 - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
 - `SUPABASE_SERVICE_ROLE_KEY` (rahasia, hanya server)
 
-## Belum selesai (tahap 2 — risiko tersisa)
+## Tahap 2 (SUDAH DITERAPKAN di kode) — jalankan `supabase/security-tahap2.sql`
 
-Selama aplikasi masih memakai anon key dari browser untuk baca/tulis langsung:
+Setelah SQL itu dijalankan:
 
-- RLS masih **nonaktif**; anon key bisa membaca/menghapus data tabel operasional
-  (`pesanan`, `kursi`, `pembayaran`, `refund`, `audit_log`, `profiles`).
-- Sesi petugas/agen masih di `localStorage` dan belum diverifikasi server di setiap request,
-  jadi role bisa dipalsukan di UI (API superadmin sudah aman karena dicek ulang di server).
-- `/superadmin/daftar` masih terbuka untuk pendaftaran publik — sebaiknya dinonaktifkan
-  atau diberi kode undangan server-side.
-- `/daftar-admin` & `/registrasi-admin` masih pendaftaran mandiri tenant.
+- Anon key **tidak bisa menulis apa pun** (insert/update/delete dicabut). Pendaftaran
+  tiket online, pembayaran, batal, dan pembuatan jadwal otomatis diproses API server.
+- Staf (agen/petugas/admin) memakai **sesi Supabase Auth** yang dibuat saat login;
+  RLS mengunci tulis ke penyewanya sendiri (`operator_id` / `jadwal_izin`).
+- Fee platform hanya bisa diubah Superadmin; snapshot fee dipaksa trigger server;
+  pesanan lunas tidak bisa dihapus; boarding ditolak kalau tiket belum `paid`.
+- Pendaftaran mandiri (`/daftar-admin`, `/registrasi-admin`, `/superadmin/daftar`)
+  ditutup — akun hanya dibuat pemilik platform.
+- Baca publik `pesanan` dibatasi: hanya tiket lunas + pesanan 15 menit terakhir.
 
-Langkah tahap 2:
+**Setelah deploy + SQL:** semua staf harus **login ulang** sekali supaya sesi
+Supabase Auth terpasang (tanpa itu mereka bisa masuk tapi tulis data ditolak).
 
-1. Pindahkan seluruh baca/tulis data ke API route (service role) **atau** login semua petugas
-   dengan Supabase Auth.
-2. Ganti semua `select('*')` pada `profiles` menjadi kolom eksplisit.
-3. Aktifkan RLS + `REVOKE` hak anon, dengan policy per `operator_id` / `auth.uid()`.
-4. Uji alur: jual tiket online, scan etiket, manifest syahbandar, laporan tenant, superadmin.
+Sisa risiko (perlu tahap 3):
+
+1. Pembayaran online masih **simulasi** (belum payment gateway), jadi status `paid`
+   bisa dibuat siapa pun yang menekan "Saya Sudah Bayar".
+2. Tiket masih bisa dipakai ulang kalau staff sengaja membuat pesanan `paid` tanpa uang
+   (internal tenant) — perlu rekonsiliasi kas / gateway.
+3. Halaman publik masih membaca sebagian data operasional (nama penumpang) lewat
+   anon `select` yang dibatasi baris; idealnya semua baca publik lewat API.
+
