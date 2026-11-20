@@ -305,44 +305,59 @@ function BerandaContent() {
         </div>
 
         <form onSubmit={handleCari} className="space-y-3 sm:space-y-4">
-          
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Dari</label>
+
+          {/* Blok "Dari" + "Ke" dibungkus satu wrapper: tombol tukar dipasang absolute
+              supaya tidak menambah tinggi baris (jarak antar baris jadi seragam) dan
+              lingkarannya pas di tengah antara kotak Dari dan kotak Ke. */}
+          <div className="relative">
+            <div className="space-y-3 sm:space-y-4">
+
+              <div>
+                <div className="flex items-center justify-between gap-2 mb-1">
+                  <label className="block text-sm font-medium text-gray-700">Dari</label>
+                  {deteksiLokasi && (
+                    <span
+                      title="Terdeteksi otomatis dari lokasi Anda (bisa diubah)"
+                      className="text-[10px] font-medium text-green-700 flex items-center gap-1"
+                    >
+                      <span>📍</span>
+                      <span>Terdeteksi otomatis</span>
+                    </span>
+                  )}
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowAsalModal(true)}
+                  className="w-full text-left border border-gray-300 rounded-lg px-3 sm:px-4 py-2.5 sm:py-3 text-sm sm:text-base text-gray-900 focus:ring-purple-500 focus:border-purple-500 bg-white"
+                >
+                  {asal ? labelKota(asal) : '-- Pilih Kota --'}
+                </button>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Ke</label>
+                <button
+                  type="button"
+                  onClick={() => setShowTujuanModal(true)}
+                  className="w-full text-left border border-gray-300 rounded-lg px-3 sm:px-4 py-2.5 sm:py-3 text-sm sm:text-base text-gray-900 focus:ring-purple-500 focus:border-purple-500 bg-white"
+                >
+                  {tujuan ? labelKota(tujuan) : '-- Pilih Kota --'}
+                </button>
+              </div>
+
+            </div>
+
+            {/* top = 50% + 12px (setengah tinggi label "Ke": 20px + mb-1 4px) */}
             <button
               type="button"
-              onClick={() => setShowAsalModal(true)}
-              className="w-full text-left border border-gray-300 rounded-lg px-3 sm:px-4 py-2.5 sm:py-3 text-sm sm:text-base text-gray-900 focus:ring-purple-500 focus:border-purple-500 bg-white"
-            >
-              {asal ? labelKota(asal) : '-- Pilih Kota --'}
-            </button>
-            {deteksiLokasi && (
-              <p className="mt-1 text-[10px] font-medium text-green-700 flex items-center gap-1">
-                <span>📍</span>
-                <span>Terdeteksi otomatis dari lokasi Anda (bisa diubah)</span>
-              </p>
-            )}
-          </div>
-
-          <div className="flex justify-center -my-2 sm:-my-2.5 relative z-10">
-            <button 
-              type="button" 
               onClick={handleTukar}
-              className="bg-white border border-gray-200 p-2 rounded-full shadow-md text-gray-600 hover:text-purple-600 transition-colors"
+              title="Tukar kota asal & tujuan"
+              aria-label="Tukar kota asal dan tujuan"
+              className="absolute left-1/2 top-[calc(50%+12px)] -translate-x-1/2 -translate-y-1/2 z-10 flex items-center justify-center w-8 h-8 sm:w-9 sm:h-9 bg-white border border-gray-200 rounded-full shadow-md text-gray-600 hover:text-purple-600 transition-colors"
             >
-              <svg className="w-4 h-4 sm:w-5 sm:h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4" />
               </svg>
-            </button>
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Ke</label>
-            <button
-              type="button"
-              onClick={() => setShowTujuanModal(true)}
-              className="w-full text-left border border-gray-300 rounded-lg px-3 sm:px-4 py-2.5 sm:py-3 text-sm sm:text-base text-gray-900 focus:ring-purple-500 focus:border-purple-500 bg-white"
-            >
-              {tujuan ? labelKota(tujuan) : '-- Pilih Kota --'}
             </button>
           </div>
 
