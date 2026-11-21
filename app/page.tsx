@@ -17,6 +17,7 @@ const DAFTAR_KOTA_CADANGAN: KotaRute[] = [
   { nama_kota: 'Sembakung', singkatan: 'SMG' },
   { nama_kota: 'Sungai Nyamuk', singkatan: 'SNK' },
   { nama_kota: 'Tanah Kuning', singkatan: 'TKG' },
+  { nama_kota: 'Tanjung Batu', singkatan: 'TJB' },
   { nama_kota: 'Tanjung Selor', singkatan: 'TJS' },
   { nama_kota: 'Tarakan', singkatan: 'TRK' }
 ]
@@ -33,6 +34,7 @@ const KOORDINAT_KOTA: Record<string, { lat: number; lng: number }> = {
   'Sembakung': { lat: 3.8569, lng: 117.0318 },
   'Sungai Nyamuk': { lat: 4.1426, lng: 117.9117 },
   'Tanah Kuning': { lat: 2.6027, lng: 117.8172 },
+  'Tanjung Batu': { lat: 2.2762, lng: 118.0876 },
   'Tanjung Selor': { lat: 2.8430, lng: 117.3613 },
   'Tarakan': { lat: 3.3000, lng: 117.6330 }
 }

@@ -55,7 +55,8 @@ export async function tabelPlatformAda(): Promise<boolean> {
 // (Tarakan -> TRK, KTT -> KTT).
 const KODE_LOKASI_KHUSUS: { [lokasi: string]: string } = {
   tarakan: 'TRK',
-  'tanjung selor': 'TJS'
+  'tanjung selor': 'TJS',
+  'tanjung batu': 'TJB'
 }
 
 export function kodeDaerah(lokasi: string): string {
