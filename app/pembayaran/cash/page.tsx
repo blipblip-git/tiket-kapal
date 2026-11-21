@@ -3,6 +3,7 @@
 import { useEffect, useState, Suspense } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
 import { supabase, getOperatorSession } from '@/lib/supabase'
+import { ambilPesananPublik } from '@/lib/publikPesanan'
 
 type PesananItem = {
   id: string
@@ -39,10 +40,7 @@ function CashContent() {
         return
       }
 
-      const { data: p, error: errP } = await supabase
-        .from('pesanan')
-        .select('id, nama_penumpang, kode_tiket, jadwal_id')
-        .in('id', pesananIds)
+      const { data: p, error: errP } = await ambilPesananPublik(pesananIds)
 
       if (errP || !p || p.length === 0) {
         setError('Pesanan tidak ditemukan')
@@ -50,8 +48,9 @@ function CashContent() {
         return
       }
 
+      const daftar = p as unknown as PesananItem[]
       const sorted = pesananIds
-        .map((id) => p.find((x) => x.id === id))
+        .map((id) => daftar.find((x) => x.id === id))
         .filter((x): x is PesananItem => !!x)
 
       setPesananList(sorted)

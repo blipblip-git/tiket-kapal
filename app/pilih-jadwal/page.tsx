@@ -3,6 +3,7 @@
 import { useEffect, useState, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
+import { fetchPublik } from '@/lib/publikFetch'
 import {
   beroperasiPada,
   gabungHariOperasi,
@@ -101,9 +102,8 @@ function PilihJadwalContent() {
         // 3. AUTO-GENERATE JADWAL (diproses SERVER — browser tidak punya hak tulis)
         if (templatesOperasi.length > 0) {
           try {
-            await fetch('/api/publik/siapkan-jadwal', {
+            await fetchPublik('/api/publik/siapkan-jadwal', {
               method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
                 tanggal,
                 rute_asal: asal,

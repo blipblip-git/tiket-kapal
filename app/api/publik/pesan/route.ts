@@ -6,6 +6,7 @@
 import { NextResponse } from 'next/server'
 import { buatClientAdmin, pesanServiceKeyKosong } from '@/lib/serverAuth'
 import { catatPermintaan, kenaBatas, kunciIp } from '@/lib/rateLimit'
+import { asalDiizinkan } from '@/lib/publikGuard'
 
 const BATAS = 20
 const JENDELA = 10 * 60 * 1000
@@ -36,6 +37,9 @@ const kodeAcak = (awalan: string) => {
 }
 
 export async function POST(request: Request) {
+  const tolakAsal = asalDiizinkan(request)
+  if (tolakAsal) return tolakAsal
+
   const admin = buatClientAdmin()
   if (!admin) return pesanServiceKeyKosong()
 

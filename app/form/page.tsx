@@ -3,6 +3,7 @@
 import { useEffect, useState, Suspense } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
+import { fetchPublik } from '@/lib/publikFetch'
 
 type Kursi = {
   id: string
@@ -179,9 +180,8 @@ function FormContent() {
 
       // Pesanan dibuat oleh SERVER. Browser tidak lagi punya izin menulis ke
       // tabel pesanan, jadi harga/kanal/kode tiket tidak bisa dipalsukan.
-      const response = await fetch('/api/publik/pesan', {
+      const response = await fetchPublik('/api/publik/pesan', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
       })
 

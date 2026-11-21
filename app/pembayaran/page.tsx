@@ -3,6 +3,8 @@
 import { useEffect, useState, Suspense } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
 import { supabase, getOperatorSession } from '@/lib/supabase'
+import { fetchPublik } from '@/lib/publikFetch'
+import { ambilPesananPublik } from '@/lib/publikPesanan'
 
 type PesananItem = {
   id: string
@@ -64,12 +66,9 @@ function PembayaranContent() {
       }
 
       try {
-        const { data: p, error: errP } = await supabase
-          .from('pesanan')
-          .select('id, nama_penumpang, kode_tiket, status, jadwal_id, kursi_id, is_balita')
-          .in('id', pesananIds)
+        const { data: p, error: errP } = await ambilPesananPublik(pesananIds)
 
-        if (errP) throw errP
+        if (errP) throw new Error(errP)
         if (!p || p.length === 0) {
           setError('Data pesanan tidak ditemukan di database.')
           setLoading(false)
@@ -114,9 +113,8 @@ function PembayaranContent() {
     const ids = pesananList.map(p => p.id)
 
     try {
-      const res = await fetch('/api/publik/batal', {
+      const res = await fetchPublik('/api/publik/batal', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ ids })
       })
       const hasil = await res.json()
@@ -145,9 +143,8 @@ function PembayaranContent() {
     try {
       // Pembayaran diproses SERVER (mode simulasi). Browser tidak lagi punya
       // izin mengubah status pesanan/kursi, jadi tidak bisa memalsukan lunas.
-      const response = await fetch('/api/publik/bayar', {
+      const response = await fetchPublik('/api/publik/bayar', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ ids })
       })
 

@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useRef, Suspense } from 'react'
-import { supabase } from '@/lib/supabase'
+import { cariTiketPublik } from '@/lib/publikPesanan'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 
@@ -57,18 +57,10 @@ function CekTiketContent() {
     setHasil([])
     setSudahCari(true)
 
-    const { data, error: err } = await supabase
-      .from('pesanan')
-      .select(`
-        id, nama_penumpang, kode_tiket, status, waktu_pesan, grup_transaksi_id, jadwal_id,
-        jadwal:jadwal_id (rute_asal, rute_tujuan, tanggal, jam_berangkat)
-      `)
-      .eq('nomor_hp', noHp)
-      .in('status', ['pending', 'paid'])
-      .order('waktu_pesan', { ascending: false })
+    const { data, error: err } = await cariTiketPublik(noHp)
 
     if (err) {
-      setError('Gagal mencari tiket: ' + err.message)
+      setError('Gagal mencari tiket: ' + err)
     } else if (data) {
       const sekarang = new Date().getTime()
       const validTiket = data.filter(t => {
