@@ -46,17 +46,32 @@ Setelah SQL itu dijalankan:
   pesanan lunas tidak bisa dihapus; boarding ditolak kalau tiket belum `paid`.
 - Pendaftaran mandiri (`/daftar-admin`, `/registrasi-admin`, `/superadmin/daftar`)
   ditutup — akun hanya dibuat pemilik platform.
-- Baca publik `pesanan` dibatasi: hanya tiket lunas + pesanan 15 menit terakhir.
 
 **Setelah deploy + SQL:** semua staf harus **login ulang** sekali supaya sesi
 Supabase Auth terpasang (tanpa itu mereka bisa masuk tapi tulis data ditolak).
 
-Sisa risiko (perlu tahap 3):
+## Tahap 3 (SUDAH DITERAPKAN di kode) — jalankan `supabase/security-tahap3-publik.sql`
+
+Setelah SQL itu dijalankan:
+
+- Anon **tidak bisa lagi** `select` tabel `pesanan`/`pembayaran` sama sekali
+  (dulu `status='paid'` membuat semua tiket lunas semua tenant bisa diunduh).
+- `/pembayaran`, `/pembayaran/cash`, `/cek-tiket` memakai RPC terbatas:
+  `publik_pesanan_ids(uuid[])` (hanya ID yang diketahui, lunas atau < 15 menit)
+  dan `publik_tiket_hp(text)` (hanya tiket milik nomor HP yang dimasukkan,
+  tanpa NIK/HP di hasil).
+- `/api/publik/*` wajib header `x-lintasair-channel: web` + Origin/Referer domain
+  resmi (opsional tambah domain lain lewat env `PUBLIK_ALLOWED_ORIGINS`, dipisah koma)
+  dan dibatasi rate limit per IP. Ini **bukan** API key — memang dipakai browser pembeli.
+- API integrasi tenant `/api/integrasi/*` (key per tenant, tabel `api_klien`) —
+  lihat `docs/API-INTEGRASI.md`.
+
+Sisa risiko (tahap 4, perlu keputusan bisnis):
 
 1. Pembayaran online masih **simulasi** (belum payment gateway), jadi status `paid`
    bisa dibuat siapa pun yang menekan "Saya Sudah Bayar".
 2. Tiket masih bisa dipakai ulang kalau staff sengaja membuat pesanan `paid` tanpa uang
    (internal tenant) — perlu rekonsiliasi kas / gateway.
-3. Halaman publik masih membaca sebagian data operasional (nama penumpang) lewat
-   anon `select` yang dibatasi baris; idealnya semua baca publik lewat API.
+3. Guard `/api/publik/*` berbasis Origin + header — bisa ditembus klien yang sengaja
+   memalsukan header (curl). Mitigasi: rate limit per IP + harga selalu dari server.
 
