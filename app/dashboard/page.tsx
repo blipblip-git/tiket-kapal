@@ -36,6 +36,7 @@ export default function DashboardAdminPage() {
     menu_pengaturan: 'Pengaturan Sistem',
     menu_laporan: 'Laporan Penjualan',
     menu_audit: 'Audit Log',
+    menu_backup: 'Backup Data (Excel)',
   })
 
   useEffect(() => {
@@ -227,6 +228,10 @@ export default function DashboardAdminPage() {
 
             <button onClick={() => router.push('/audit')} className="flex items-center justify-center h-16 md:h-24 p-2 border border-yellow-200 bg-yellow-50 rounded-lg hover:bg-yellow-100 text-center transition shadow-sm">
               <p className="font-bold text-xs md:text-sm text-yellow-800">{teks.menu_audit}</p>
+            </button>
+
+            <button onClick={() => router.push('/backup-data')} className="flex items-center justify-center h-16 md:h-24 p-2 border border-emerald-200 bg-emerald-50 rounded-lg hover:bg-emerald-100 text-center transition shadow-sm">
+              <p className="font-bold text-xs md:text-sm text-emerald-800">{teks.menu_backup || 'Backup Data (Excel)'}</p>
             </button>
 
           </div>
