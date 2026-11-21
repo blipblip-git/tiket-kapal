@@ -110,7 +110,7 @@ export default function DashboardSuperadminPage() {
           >
             <div className="text-5xl mb-4 group-hover:scale-110 transition">💾</div>
             <h2 className="text-xl font-bold text-white mb-2">Backup Data (Excel)</h2>
-            <p className="text-sm text-emerald-200">Unduh data tenant (atau semua tenant sekaligus) dalam satu file Excel — khusus Superadmin.</p>
+            <p className="text-sm text-emerald-200">Unduh data platform (daftar tenant, master kota/rute, total fee) dalam satu file Excel — tanpa data penjualan tenant.</p>
           </button>
 
         </div>

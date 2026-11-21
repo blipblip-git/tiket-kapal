@@ -11,6 +11,7 @@ import {
   catatAudit,
   type Profile
 } from '@/lib/supabase'
+import { ambilFeePlatform, feePesananAda } from '@/lib/fee'
 
 // Supabase membatasi maksimal 1000 baris per permintaan → wajib ambil bertahap.
 const UKURAN_HALAMAN = 1000
@@ -31,6 +32,15 @@ const DAFTAR_LEMBAR = [
   { nama: 'Master Rute', isi: 'Rute & harga default' }
 ]
 
+// Mode Superadmin: yang dibackup HANYA data milik platform, bukan data operasional tenant.
+const DAFTAR_LEMBAR_PLATFORM = [
+  { nama: 'Data Tenant', isi: 'Daftar akun Admin Utama (tanpa password)' },
+  { nama: 'Master Kota', isi: 'Kamus kota untuk rute asal/tujuan' },
+  { nama: 'Master Rute', isi: 'Rute & harga default seluruh penyewa' },
+  { nama: 'Fee Platform', isi: 'Total fee platform per bulan per tenant (tanpa data penumpang)' },
+  { nama: 'Pengaturan Platform', isi: 'Nilai fee platform yang berlaku sekarang' }
+]
+
 function potong<T>(daftar: T[], ukuran: number): T[][] {
   const hasil: T[][] = []
   for (let i = 0; i < daftar.length; i += ukuran) hasil.push(daftar.slice(i, i + ukuran))
@@ -41,7 +51,7 @@ function potong<T>(daftar: T[], ukuran: number): T[][] {
 async function ambilSemua(buatQuery: () => any): Promise<any[]> {
   const semua: any[] = []
   for (let mulai = 0; ; mulai += UKURAN_HALAMAN) {
-    const { data, error } = await buatQuery().range(mulai, mulai + UKURAN_HALAMAN - 1)
+    const { data, error } = await buatQuery().order('id').range(mulai, mulai + UKURAN_HALAMAN - 1)
     if (error) throw new Error(error.message)
     if (!data || data.length === 0) break
     semua.push(...data)
@@ -284,7 +294,11 @@ function buatBarisExcel(data: DataTenant, namaPerusahaan: string, kolomPerusahaa
 }
 
 /** Susun + unduh workbook dari daftar sheet. */
-function unduhExcel(namaFile: string, info: Record<string, unknown>[], baris: BarisExcel) {
+function unduhExcel(
+  namaFile: string,
+  info: Record<string, unknown>[],
+  baris: Record<string, Record<string, unknown>[]>
+) {
   const workbook = XLSX.utils.book_new()
   XLSX.utils.book_append_sheet(workbook, buatLembar(info), 'Info Backup')
   Object.entries(baris).forEach(([nama, isi]) => {
@@ -297,12 +311,118 @@ function namaAman(teks: string): string {
   return (teks || 'Penyewa').replace(/[^A-Za-z0-9]+/g, '-').replace(/^-+|-+$/g, '')
 }
 
+/**
+ * ===== MODE SUPERADMIN =====
+ * Hanya mengambil data milik PLATFORM:
+ * daftar tenant (akun), master kota, master rute, dan total fee platform.
+ * Data penjualan/penumpang/kapal tenant TIDAK diambil sama sekali, supaya
+ * masalah di sisi platform tidak menyentuh operasional tenant.
+ */
+async function ambilDataPlatform(lapor?: (pesan: string) => void) {
+  lapor?.('Mengambil daftar tenant...')
+  const tenant = await ambilSemua(() =>
+    supabase
+      .from('profiles')
+      .select('id, nama, nama_perusahaan, email, nomor_hp, aktif, operator_id, created_at')
+      .eq('role', 'admin_utama')
+      .order('nama')
+  )
+
+  const namaTenant = new Map<string, string>()
+  tenant.forEach((t: any) => {
+    namaTenant.set(t.operator_id || t.id, t.nama_perusahaan || t.nama || 'Penyewa')
+  })
+
+  lapor?.('Mengambil Master Kota & Master Rute...')
+  const masterKota = await ambilSemua(() =>
+    supabase.from('master_kota').select('nama_kota, singkatan').order('nama_kota')
+  )
+  const masterRute = await ambilSemua(() =>
+    supabase.from('master_rute').select('rute_asal, rute_tujuan, harga, operator_id').order('created_at')
+  )
+
+  lapor?.('Menghitung total fee platform...')
+  const feeBerlaku = await ambilFeePlatform()
+  const pakaiSnapshot = await feePesananAda()
+  const kolom = [
+    'id',
+    pakaiSnapshot ? 'fee_platform' : '',
+    'jadwal:jadwal_id (tanggal, operator_id, kapal_id, kapal:kapal_id(nama, operator_id))'
+  ]
+    .filter(Boolean)
+    .join(', ')
+
+  // Hanya status pembayaran + fee yang dibaca; nama/NIK/HP penumpang tidak.
+  const pesanan = await ambilSemua(() =>
+    supabase.from('pesanan').select(kolom).eq('status', 'paid')
+  )
+
+  const peta = new Map<string, { bulan: string; nama: string; tiket: number; fee: number }>()
+  pesanan.forEach((p: any) => {
+    const j = p.jadwal
+    if (!j || !j.tanggal) return
+    const pemilik = j.operator_id || j.kapal?.operator_id || ''
+    const nama = namaTenant.get(pemilik) || 'Tanpa penyewa'
+    const bulan = String(j.tanggal).slice(0, 7)
+    const kunci = `${bulan}|${nama}`
+    if (!peta.has(kunci)) peta.set(kunci, { bulan, nama, tiket: 0, fee: 0 })
+    const baris = peta.get(kunci)!
+    const snapshot = Number(p.fee_platform || 0)
+    baris.tiket += 1
+    baris.fee += snapshot > 0 ? snapshot : feeBerlaku
+  })
+
+  const feeBulanan = [...peta.values()].sort(
+    (a, b) => a.bulan.localeCompare(b.bulan) || a.nama.localeCompare(b.nama)
+  )
+
+  return { tenant, namaTenant, masterKota, masterRute, feeBulanan, feeBerlaku }
+}
+
+type DataPlatform = Awaited<ReturnType<typeof ambilDataPlatform>>
+
+function buatBarisPlatform(data: DataPlatform): Record<string, Record<string, unknown>[]> {
+  return {
+    'Data Tenant': data.tenant.map((t: any) => ({
+      'Nama Perusahaan': t.nama_perusahaan || t.nama || '',
+      'Nama Admin': t.nama || '',
+      Email: t.email || '',
+      'No HP': t.nomor_hp || '',
+      'Status Aktif': t.aktif === false ? 'Nonaktif' : 'Aktif',
+      'ID Operator': t.operator_id || t.id,
+      Dibuat: t.created_at || ''
+    })),
+    'Master Kota': data.masterKota.map((k: any) => ({
+      'Nama Kota': k.nama_kota || '',
+      Singkatan: k.singkatan || ''
+    })),
+    'Master Rute': data.masterRute.map((r: any) => ({
+      'Rute Asal': r.rute_asal || '',
+      'Rute Tujuan': r.rute_tujuan || '',
+      Harga: r.harga || 0,
+      Milik: r.operator_id ? data.namaTenant.get(r.operator_id) || 'Tenant' : 'Global'
+    })),
+    'Fee Platform': data.feeBulanan.map((f) => ({
+      Bulan: f.bulan,
+      Perusahaan: f.nama,
+      'Jumlah Tiket': f.tiket,
+      'Total Fee Platform': f.fee
+    })),
+    'Pengaturan Platform': [
+      { Keterangan: 'Fee Platform per Tiket', Nilai: data.feeBerlaku },
+      {
+        Keterangan: 'Dasar Perhitungan',
+        Nilai: 'Semua tiket berstatus paid (offline & online). Nilai snapshot per tiket dipakai bila ada; kalau kosong memakai fee yang berlaku sekarang.'
+      }
+    ]
+  }
+}
+
+
 export default function BackupDataPage() {
   const router = useRouter()
   const [profile, setProfile] = useState<Profile | null>(null)
   const [namaPerusahaan, setNamaPerusahaan] = useState('')
-  const [daftarTenant, setDaftarTenant] = useState<Tenant[]>([])
-  const [pilihTenant, setPilihTenant] = useState('')
   const [memuat, setMemuat] = useState(true)
   const [proses, setProses] = useState(false)
   const [langkah, setLangkah] = useState('')
@@ -327,21 +447,8 @@ export default function BackupDataPage() {
       setProfile(profil)
 
       if (profil.role === 'superadmin') {
-        // Superadmin: daftar tenant = semua akun Admin Utama yang terdaftar.
-        const { data, error } = await supabase
-          .from('profiles')
-          .select('id, nama, nama_perusahaan, operator_id')
-          .eq('role', 'admin_utama')
-          .order('nama')
-        if (error) throw new Error(error.message)
-
-        const tenants: Tenant[] = (data || []).map((t: any) => ({
-          operatorId: t.operator_id || t.id,
-          nama: t.nama_perusahaan || t.nama || 'Penyewa'
-        }))
-        setDaftarTenant(tenants)
-        if (tenants.length === 1) setPilihTenant(tenants[0].operatorId)
-        setNamaPerusahaan('Superadmin')
+        // Superadmin hanya membackup data platform (bukan data tenant).
+        setNamaPerusahaan('Superadmin (Platform)')
       } else if (profil.role === 'admin_utama') {
         setNamaPerusahaan(await ambilNamaPerusahaan(profil))
       } else {
@@ -355,26 +462,62 @@ export default function BackupDataPage() {
   }
 
   function pilihTarget(): Tenant | null {
-    if (!profile) return null
-    if (superadmin) return daftarTenant.find((t) => t.operatorId === pilihTenant) || null
+    if (!profile || superadmin) return null
     return { operatorId: operatorSendiri, nama: namaPerusahaan || profile.nama }
   }
 
   async function backupSatu() {
     const target = pilihTarget()
-    if (!target) {
-      setGalat('Pilih tenant yang mau dibackup dulu.')
-      return
-    }
+    if (!target) return
     await jalankan([target])
   }
 
-  async function backupSemuaTenant() {
-    if (daftarTenant.length === 0) {
-      setGalat('Belum ada tenant terdaftar.')
-      return
+  async function backupPlatform() {
+    if (!profile) return
+    setProses(true)
+    setGalat('')
+    setPesan('')
+
+    try {
+      const tanggal = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Makassar' })
+      const data = await ambilDataPlatform(setLangkah)
+      const baris = buatBarisPlatform(data)
+
+      const totalTiket = data.feeBulanan.reduce((s, f) => s + f.tiket, 0)
+      const totalFee = data.feeBulanan.reduce((s, f) => s + f.fee, 0)
+      const info: Record<string, unknown>[] = [
+        { Keterangan: 'Cakupan Backup', Nilai: 'PLATFORM (Superadmin)' },
+        { Keterangan: 'Dibuat', Nilai: `${new Date().toLocaleString('id-ID', { timeZone: 'Asia/Makassar' })} WITA` },
+        { Keterangan: 'Dibuat Oleh', Nilai: `${profile.nama || '-'} (${profile.role})` },
+        { Keterangan: 'Jumlah Tenant', Nilai: data.tenant.length },
+        { Keterangan: 'Jumlah Tiket (ringkasan fee)', Nilai: totalTiket },
+        { Keterangan: 'Total Fee Platform', Nilai: totalFee },
+        {
+          Keterangan: 'Catatan',
+          Nilai: 'TIDAK memuat data penjualan/penumpang/kapal tenant. Fee hanya berupa jumlah tiket & total nilai per bulan.'
+        }
+      ]
+
+      setLangkah('Menyusun file Excel...')
+      const namaFile = `Backup-Platform-${tanggal}.xlsx`
+      unduhExcel(namaFile, info, baris)
+
+      await catatAudit(profile, 'backup_data', {
+        file: namaFile,
+        cakupan: 'platform',
+        jumlah_tenant: data.tenant.length,
+        jumlah_master_kota: data.masterKota.length,
+        jumlah_master_rute: data.masterRute.length,
+        total_fee_platform: totalFee
+      })
+
+      setPesan(`Berhasil! File ${namaFile} sudah diunduh (cek folder Download).`)
+    } catch (err: any) {
+      setGalat('Gagal membuat backup platform: ' + (err?.message || 'kesalahan tidak diketahui'))
+    } finally {
+      setProses(false)
+      setLangkah('')
     }
-    await jalankan(daftarTenant)
   }
 
   async function jalankan(daftar: Tenant[]) {
@@ -384,75 +527,38 @@ export default function BackupDataPage() {
     setPesan('')
 
     try {
-      const gabung = daftar.length > 1
+      const tenant = daftar[0]
       const tanggal = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Makassar' })
-      const isiInfo: Record<string, unknown>[] = []
-      const kumpulan: BarisExcel = {
-        Kapal: [],
-        'Template Jadwal': [],
-        Jadwal: [],
-        Penjualan: [],
-        Pembayaran: [],
-        'Petugas & Agen': [],
-        'Master Rute': []
-      }
+      const data = await ambilDataTenant(tenant.operatorId, setLangkah)
+      const baris = buatBarisExcel(data, tenant.nama, false)
 
-      for (let i = 0; i < daftar.length; i++) {
-        const tenant = daftar[i]
-        const awalan = gabung ? `(${i + 1}/${daftar.length}) ${tenant.nama} — ` : ''
-        const data = await ambilDataTenant(tenant.operatorId, (p) => setLangkah(awalan + p))
-        const baris = buatBarisExcel(data, tenant.nama, gabung)
-
-        if (gabung) {
-          ;(Object.keys(kumpulan) as (keyof BarisExcel)[]).forEach((k) => {
-            kumpulan[k].push(...baris[k])
-          })
-        } else {
-          Object.assign(kumpulan, baris)
-        }
-
-        isiInfo.push({
-          Perusahaan: tenant.nama,
-          'ID Operator': tenant.operatorId,
-          'Jumlah Kapal': data.kapal.length,
-          'Jumlah Template Jadwal': data.template.length,
-          'Jumlah Jadwal': data.jadwal.length,
-          'Jumlah Penjualan': data.pesanan.length,
-          'Jumlah Pembayaran': data.pembayaran.length,
-          'Jumlah Petugas/Agen': data.staf.length,
-          'Jumlah Master Rute': data.masterRute.length
-        })
-      }
-
-      const ringkas = gabung ? `SEMUA TENANT (${daftar.length} perusahaan)` : daftar[0].nama
-      const infoAwal: Record<string, unknown>[] = [
-        { Keterangan: 'Cakupan Backup', Nilai: ringkas },
+      const info: Record<string, unknown>[] = [
+        { Keterangan: 'Cakupan Backup', Nilai: tenant.nama },
+        { Keterangan: 'ID Operator', Nilai: tenant.operatorId },
         { Keterangan: 'Dibuat', Nilai: `${new Date().toLocaleString('id-ID', { timeZone: 'Asia/Makassar' })} WITA` },
         { Keterangan: 'Dibuat Oleh', Nilai: `${profile.nama || '-'} (${profile.role})` },
-        {
-          Keterangan: 'Catatan',
-          Nilai: gabung
-            ? 'Backup SEMUA tenant dalam satu file. Tiap baris punya kolom Perusahaan. Password staf tidak diekspor.'
-            : 'Seluruh data perusahaan ini. Password staf tidak diekspor.'
-        }
+        { Keterangan: 'Jumlah Kapal', Nilai: data.kapal.length },
+        { Keterangan: 'Jumlah Template Jadwal', Nilai: data.template.length },
+        { Keterangan: 'Jumlah Jadwal', Nilai: data.jadwal.length },
+        { Keterangan: 'Jumlah Penjualan', Nilai: data.pesanan.length },
+        { Keterangan: 'Jumlah Pembayaran', Nilai: data.pembayaran.length },
+        { Keterangan: 'Jumlah Petugas/Agen', Nilai: data.staf.length },
+        { Keterangan: 'Jumlah Master Rute', Nilai: data.masterRute.length },
+        { Keterangan: 'Catatan', Nilai: 'Seluruh data perusahaan ini. Password staf tidak diekspor.' }
       ]
 
       setLangkah('Menyusun file Excel...')
-      const namaFile = gabung
-        ? `Backup-SEMUA-TENANT-${tanggal}.xlsx`
-        : `Backup-${namaAman(daftar[0].nama)}-${tanggal}.xlsx`
-      unduhExcel(namaFile, [...infoAwal, { Keterangan: '', Nilai: '' }, ...isiInfo], kumpulan)
+      const namaFile = `Backup-${namaAman(tenant.nama)}-${tanggal}.xlsx`
+      unduhExcel(namaFile, info, baris)
 
-      const jumlah = (kunci: keyof BarisExcel) => kumpulan[kunci].length
       await catatAudit(profile, 'backup_data', {
         file: namaFile,
-        tenant: ringkas,
-        jumlah_tenant: daftar.length,
-        kapal: jumlah('Kapal'),
-        jadwal: jumlah('Jadwal'),
-        penjualan: jumlah('Penjualan'),
-        pembayaran: jumlah('Pembayaran'),
-        master_rute: jumlah('Master Rute')
+        tenant: tenant.nama,
+        kapal: data.kapal.length,
+        jadwal: data.jadwal.length,
+        penjualan: data.pesanan.length,
+        pembayaran: data.pembayaran.length,
+        master_rute: data.masterRute.length
       })
 
       setPesan(`Berhasil! File ${namaFile} sudah diunduh (cek folder Download).`)
@@ -492,7 +598,7 @@ export default function BackupDataPage() {
           <div className="min-w-0">
             <h1 className="text-lg md:text-2xl font-bold text-gray-900">Backup Data (Excel)</h1>
             <p className="text-xs md:text-sm text-gray-600">
-              {superadmin ? 'Superadmin — bisa backup per tenant atau semua tenant' : namaPerusahaan || profile.nama}
+              {superadmin ? 'Superadmin — backup data platform (bukan data tenant)' : namaPerusahaan || profile.nama}
             </p>
           </div>
           <button
@@ -505,48 +611,35 @@ export default function BackupDataPage() {
 
         <div className="bg-white rounded-xl shadow-md p-4 md:p-6 border border-gray-200 space-y-4">
           <p className="text-sm md:text-base text-gray-800">
-            Sekali klik, semua data {superadmin ? 'tenant yang dipilih' : 'perusahaan Anda'} diunduh jadi
-            <strong> satu file Excel (.xlsx)</strong> berisi {DAFTAR_LEMBAR.length} sheet.
+            {superadmin ? (
+              <>
+                Sekali klik, data <strong>milik platform</strong> diunduh jadi satu file Excel (.xlsx) berisi{' '}
+                {DAFTAR_LEMBAR_PLATFORM.length} sheet. Data penjualan, penumpang, kapal, dan jadwal tenant
+                <strong> tidak ikut</strong> — operasional tenant tetap aman.
+              </>
+            ) : (
+              <>
+                Sekali klik, semua data perusahaan Anda diunduh jadi
+                <strong> satu file Excel (.xlsx)</strong> berisi {DAFTAR_LEMBAR.length} sheet.
+              </>
+            )}
           </p>
 
           {superadmin ? (
             <div className="space-y-3">
-              <div className="space-y-1">
-                <label className="text-xs md:text-sm font-medium text-gray-700">Pilih tenant (perusahaan)</label>
-                <select
-                  value={pilihTenant}
-                  onChange={(e) => setPilihTenant(e.target.value)}
-                  disabled={proses}
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm md:text-base bg-white"
-                >
-                  <option value="">— Pilih tenant —</option>
-                  {daftarTenant.map((t) => (
-                    <option key={t.operatorId} value={t.operatorId}>{t.nama}</option>
-                  ))}
-                </select>
-              </div>
-
               <button
-                onClick={backupSatu}
-                disabled={proses || !pilihTenant}
-                className="w-full bg-green-600 text-white font-bold py-3 rounded-lg hover:bg-green-700 disabled:bg-gray-400 text-sm md:text-base"
+                onClick={backupPlatform}
+                disabled={proses}
+                className="w-full bg-emerald-700 text-white font-bold py-3 rounded-lg hover:bg-emerald-800 disabled:bg-gray-400 text-sm md:text-base"
               >
-                {proses ? 'Sedang Membuat Backup...' : 'Unduh Backup Tenant Terpilih'}
+                {proses ? 'Sedang Membuat Backup...' : 'Unduh Backup Platform (Excel)'}
               </button>
-
-              <div className="border-t border-gray-200 pt-3 space-y-2">
-                <button
-                  onClick={backupSemuaTenant}
-                  disabled={proses || daftarTenant.length === 0}
-                  className="w-full bg-emerald-700 text-white font-bold py-3 rounded-lg hover:bg-emerald-800 disabled:bg-gray-400 text-sm md:text-base"
-                >
-                  {proses ? 'Sedang Membuat Backup...' : `Unduh Backup SEMUA Tenant (${daftarTenant.length}) — 1 File`}
-                </button>
-                <p className="text-[11px] md:text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded p-2">
-                  {daftarTenant.length === 0
-                    ? 'Belum ada tenant (Admin Utama) yang terdaftar.'
-                    : 'Semua tenant digabung dalam 1 file, tiap baris diberi kolom Perusahaan. Kalau datanya sudah sangat banyak, proses ini bisa lama — lebih nyaman di PC.'}
-                </p>
+              <div className="text-[11px] md:text-xs text-emerald-900 bg-emerald-50 border border-emerald-200 rounded p-2 space-y-1">
+                <p className="font-bold">Isi backup platform:</p>
+                <p>• Daftar tenant (nama perusahaan, admin, kontak, status) tanpa password</p>
+                <p>• Master Kota &amp; Master Rute (rute/harga default)</p>
+                <p>• Total fee platform per bulan per tenant (angka saja, tanpa data penumpang)</p>
+                <p>• Nilai fee platform yang berlaku sekarang</p>
               </div>
             </div>
           ) : (
@@ -566,7 +659,7 @@ export default function BackupDataPage() {
           <div className="border-t border-gray-200 pt-3">
             <p className="text-xs md:text-sm font-bold text-gray-900 mb-2">Isi file Excel:</p>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-              {DAFTAR_LEMBAR.map((l) => (
+              {(superadmin ? DAFTAR_LEMBAR_PLATFORM : DAFTAR_LEMBAR).map((l) => (
                 <div key={l.nama} className="bg-gray-50 border border-gray-200 rounded-lg p-2">
                   <p className="text-xs md:text-sm font-bold text-gray-900">{l.nama}</p>
                   <p className="text-[11px] md:text-xs text-gray-600">{l.isi}</p>
@@ -576,8 +669,17 @@ export default function BackupDataPage() {
           </div>
 
           <p className="text-[11px] md:text-xs text-gray-500">
-            Catatan: password petugas/agen tidak pernah ikut diekspor. Setiap backup tercatat di Audit Log.
-            Simpan file di tempat aman (HP/PC) karena file ini berisi data penumpang.
+            {superadmin ? (
+              <>
+                Catatan: backup platform TIDAK memuat data penjualan/penumpang/kapal tenant — hanya data
+                milik platform. Setiap backup tercatat di Audit Log.
+              </>
+            ) : (
+              <>
+                Catatan: password petugas/agen tidak pernah ikut diekspor. Setiap backup tercatat di Audit Log.
+                Simpan file di tempat aman (HP/PC) karena file ini berisi data penumpang.
+              </>
+            )}
           </p>
         </div>
       </div>
