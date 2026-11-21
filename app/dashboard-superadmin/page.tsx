@@ -103,6 +103,16 @@ export default function DashboardSuperadminPage() {
             <p className="text-sm text-red-200">Laporan Fee Platform (harian &amp; bulanan) dari semua penjualan offline — khusus Superadmin.</p>
           </button>
 
+          {/* KHUSUS SUPERADMIN: Backup data semua tenant (1 file Excel) */}
+          <button
+            onClick={() => router.push('/backup-data')}
+            className="bg-emerald-950 p-8 rounded-xl shadow-lg hover:bg-emerald-900 transition border border-emerald-800 text-left flex flex-col items-start h-48 justify-center group md:col-span-2"
+          >
+            <div className="text-5xl mb-4 group-hover:scale-110 transition">💾</div>
+            <h2 className="text-xl font-bold text-white mb-2">Backup Data (Excel)</h2>
+            <p className="text-sm text-emerald-200">Unduh data tenant (atau semua tenant sekaligus) dalam satu file Excel — khusus Superadmin.</p>
+          </button>
+
         </div>
       </div>
     </div>
