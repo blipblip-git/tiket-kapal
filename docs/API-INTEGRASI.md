@@ -18,14 +18,31 @@ x-api-key: la_live_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 ## Membuat / mencabut kunci (Superadmin, SQL Editor Supabase)
 
 ```sql
--- 1. Cari operator_id tenant (admin_utama = pemilik akun tenant)
+-- 1. Lihat daftar tenant (operator_id = id admin_utama kalau kolomnya kosong)
 select id, nama, nama_perusahaan, role, coalesce(operator_id, id) as operator_id
 from public.profiles
 where role = 'admin_utama'
 order by nama;
+```
 
--- 2. Buat kunci. Kunci asli HANYA muncul sekali — simpan baik-baik.
-select public.fn_buat_api_key('<operator_id tenant>', 'Website PT ABC') as api_key;
+Kalau hasilnya kosong berarti **belum ada tenant** — buat dulu di `/superadmin`
+(Tambah Penyewa), baru lanjut ke langkah 2.
+
+```sql
+-- 2a. Bikin kunci pakai nama tenant (tanpa perlu copy uuid).
+--     Ganti 'PT ABC' dengan nama tenant / nama perusahaan / email-nya.
+select public.fn_buat_api_key(
+  (select coalesce(operator_id, id) from public.profiles
+   where role = 'admin_utama'
+     and (nama ilike '%PT ABC%' or coalesce(nama_perusahaan,'') ilike '%PT ABC%'
+          or coalesce(email,'') ilike '%PT ABC%')
+   order by nama limit 1),
+  'Website PT ABC'
+) as api_key;
+
+-- 2b. Atau kalau sudah punya uuid-nya, tempel langsung (harus uuid asli,
+--     bukan teks "<operator_id tenant>" — kalau tidak: ERROR 22P02 invalid uuid)
+-- select public.fn_buat_api_key('11111111-2222-3333-4444-555555555555', 'Website PT ABC') as api_key;
 
 -- 3. Daftar kunci (tanpa kunci asli)
 select * from public.fn_daftar_api_key();
@@ -33,6 +50,10 @@ select * from public.fn_daftar_api_key();
 -- 4. Cabut kunci
 select public.fn_cabut_api_key('<id dari daftar>');
 ```
+
+Kunci asli **hanya muncul sekali** di hasil langkah 2 — simpan langsung ke server tenant.
+Kalau nama tenant tidak ketemu, fungsi berhenti dengan `operator_id wajib diisi.`
+(artinya subquery menghasilkan NULL: cek nama tenant di langkah 1).
 
 ## GET /api/integrasi/jadwal
 
