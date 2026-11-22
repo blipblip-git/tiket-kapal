@@ -41,8 +41,10 @@ export async function GET(request: Request) {
 
   const daftar = (kursi || [])
     .map((k: any) => {
+      // Di mode segmen, kursi_pakai adalah sumber kebenaran (sudah di-backfill dari
+      // tiket lama), jadi status 'terisi' legacy tidak boleh ikut mengunci kursi.
       const terisi = segmen.aktif
-        ? segmen.nomor.has(String(k.nomor_kursi)) || k.status === 'terisi'
+        ? segmen.nomor.has(String(k.nomor_kursi))
         : Boolean(k.status && k.status !== 'kosong')
       return { ...k, status: terisi ? 'terisi' : 'kosong' }
     })

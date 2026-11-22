@@ -7,7 +7,7 @@ import { NextResponse } from 'next/server'
 import { buatClientAdmin, pesanServiceKeyKosong } from '@/lib/serverAuth'
 import { catatPermintaan, kenaBatas, kunciIp } from '@/lib/rateLimit'
 import { asalDiizinkan } from '@/lib/publikGuard'
-import { kunciKursi, lepasKunciKursi, lepasKunciKedaluwarsa } from '@/lib/segmen'
+import { kunciKursi, lepasKunciKursi, lepasKunciKedaluwarsa, nomorKursiTerpakai } from '@/lib/segmen'
 
 const BATAS = 20
 const JENDELA = 10 * 60 * 1000
@@ -123,9 +123,22 @@ export async function POST(request: Request) {
     if (errKursi) throw new Error('Gagal memeriksa kursi: ' + errKursi.message)
     if (!kursiData || kursiData.length !== kursiIds.length) throw new Error('Sebagian kursi tidak ditemukan.')
 
+    // Ketersediaan dicek PER POTONGAN JALAN. Kalau tabel kursi_pakai aktif,
+    // kursi yang dipakai penumpang rute lain pada keberangkatan yang sama tetap
+    // boleh dijual asal intervalnya tidak beririsan. Constraint DB jadi penjaga akhir.
+    const segmen = await nomorKursiTerpakai(admin, {
+      kapal_id: String((jadwal as any).kapal_id || ''),
+      tanggal: String((jadwal as any).tanggal || ''),
+      jam_berangkat: String((jadwal as any).jam_berangkat || ''),
+      rute_asal: String((jadwal as any).rute_asal || ''),
+      rute_tujuan: String((jadwal as any).rute_tujuan || ''),
+    })
+
     for (const k of kursiData as any[]) {
       if (k.jadwal_id !== jadwalId) throw new Error('Kursi bukan milik jadwal ini.')
-      if (k.status && k.status !== 'kosong') throw new Error('Kursi sudah terisi, silakan pilih kursi lain.')
+      const nomor = String(k.nomor_kursi ?? '')
+      const terpakai = segmen.aktif ? segmen.nomor.has(nomor) : Boolean(k.status && k.status !== 'kosong')
+      if (terpakai) throw new Error('Kursi sudah terisi, silakan pilih kursi lain.')
     }
 
     // Nomor kursi (1..N) untuk penguncian per potongan jalan.

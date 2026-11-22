@@ -17,7 +17,7 @@
 
 import { NextResponse } from 'next/server'
 import { wajibApiKey, catatIntegrasi, jadwalMilikTenant } from '@/lib/integrasiAuth'
-import { kunciKursi, lepasKunciKursi, lepasKunciKedaluwarsa } from '@/lib/segmen'
+import { kunciKursi, lepasKunciKursi, lepasKunciKedaluwarsa, nomorKursiTerpakai } from '@/lib/segmen'
 
 const MAKS_PENUMPANG = 8
 
@@ -116,11 +116,23 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Sebagian kursi tidak ditemukan.' }, { status: 400 })
     }
 
+    // Ketersediaan dicek PER POTONGAN JALAN (transit): kursi yang dipakai rute
+    // lain pada keberangkatan sama boleh dijual kalau intervalnya tidak beririsan.
+    const segmen = await nomorKursiTerpakai(admin, {
+      kapal_id: String(jadwal.kapal_id || ''),
+      tanggal: String(jadwal.tanggal || ''),
+      jam_berangkat: String(jadwal.jam_berangkat || ''),
+      rute_asal: String(jadwal.rute_asal || ''),
+      rute_tujuan: String(jadwal.rute_tujuan || '')
+    })
+
     for (const k of kursiData as any[]) {
       if (k.jadwal_id !== jadwalId) {
         return NextResponse.json({ error: 'Kursi bukan milik jadwal ini.' }, { status: 400 })
       }
-      if (k.status && k.status !== 'kosong') {
+      const nomor = String(k.nomor_kursi ?? '')
+      const terpakai = segmen.aktif ? segmen.nomor.has(nomor) : Boolean(k.status && k.status !== 'kosong')
+      if (terpakai) {
         return NextResponse.json({ error: 'Ada kursi yang sudah terisi. Muat ulang daftar kursi.' }, { status: 409 })
       }
     }

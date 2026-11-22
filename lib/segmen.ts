@@ -40,6 +40,7 @@ export type PemakaianKursi = {
   nomor_kursi: string
   segmen_dari: number
   segmen_sampai: number
+  pesanan_id?: string | null
 }
 
 /** Kunci satu keberangkatan fisik: `kapal|tanggal|jam`. */
@@ -251,7 +252,7 @@ export async function ambilPemakaianKursi(
 
   const { data, error } = await sb
     .from('kursi_pakai')
-    .select('keberangkatan_key, nomor_kursi, segmen_dari, segmen_sampai')
+    .select('keberangkatan_key, nomor_kursi, segmen_dari, segmen_sampai, pesanan_id')
     .in('keberangkatan_key', unik)
     .eq('status', 'aktif')
 
@@ -318,11 +319,31 @@ export async function kunciKursi(
   const urutan = await ambilUrutanTitik(sb, jadwal)
   const { dari, sampai } = intervalSegmen(jadwal, urutan)
 
+  // Idempoten: kalau pesanan ini sudah punya kunci (mis. retry / konfirmasi bayar
+  // ulang), kunci lama dibuang dulu supaya tidak bentrok dengan dirinya sendiri.
+  const idPesanan = Array.from(new Set(daftar.map((d) => d.pesanan_id).filter(Boolean)))
+  const sudahAda = new Set<string>()
+  if (idPesanan.length > 0) {
+    const { data: lama } = await sb
+      .from('kursi_pakai')
+      .select('pesanan_id')
+      .in('pesanan_id', idPesanan)
+    for (const r of lama || []) sudahAda.add(String((r as any).pesanan_id))
+    if (sudahAda.size > 0) {
+      const { error: errHapus } = await sb.from('kursi_pakai').delete().in('pesanan_id', [...sudahAda])
+      if (errHapus && !galatTabelHilang(errHapus)) {
+        console.warn('kunciKursi: gagal buang kunci lama:', errHapus.message)
+      }
+    }
+  }
+
   // Pra-cek: beri pesan yang jelas dulu sebelum menabrak constraint.
   const { aktif, data } = await ambilPemakaianKursi(sb, [key])
   if (aktif) {
     const terpakai = new Set<string>()
     for (const p of data) {
+      // Abaikan kunci milik pesanan yang sama (sudah dibuang di atas / sedang diproses).
+      if (sudahAda.has(String((p as any).pesanan_id || ''))) continue
       if (intervalBentrok(Number(p.segmen_dari), Number(p.segmen_sampai), dari, sampai)) {
         terpakai.add(String(p.nomor_kursi))
       }
@@ -379,15 +400,18 @@ export async function lepasKunciKursi(
 }
 
 /**
- * Lepas kunci kursi dari pesanan online yang sudah lewat masa bayar (15 menit).
- * Dipanggil dari route server (service role) sebelum membuat pesanan baru,
- * supaya kursi yang ditinggal pembeli otomatis bisa dijual lagi tanpa cron.
+ * Lepas kunci kursi dari pesanan ONLINE yang sudah lewat masa bayar (15 menit).
+ * Dipanggil dari route server (service role) sebelum membuat pesanan baru, supaya
+ * kursi yang ditinggal pembeli otomatis bisa dijual lagi tanpa cron.
+ * Hanya kanal 'online' (punya batas 15 menit); pesanan loket/agen dibayar di
+ * kasir sehingga kuncinya TIDAK boleh dilepas otomatis.
  */
 export async function lepasKunciKedaluwarsa(sb: SupabaseClient, batas = 300): Promise<number> {
   const { data, error } = await sb
     .from('pesanan')
     .select('id')
     .eq('status', 'pending')
+    .eq('kanal', 'online')
     .lt('waktu_expired', new Date().toISOString())
     .limit(batas)
 
@@ -400,4 +424,3 @@ export async function lepasKunciKedaluwarsa(sb: SupabaseClient, batas = 300): Pr
   }
   return ids.length
 }
-
