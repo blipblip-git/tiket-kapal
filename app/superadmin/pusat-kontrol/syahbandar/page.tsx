@@ -4,6 +4,7 @@ import { useEffect, useState, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { supabase, getProfile, getOperatorSession, formatDaftarAbk, type Profile } from '@/lib/supabase'
 import { beroperasiPada } from '@/lib/hari'
+import { useLokasiOperasional, pilihanLokasi } from '@/lib/lokasi'
 
 type RincianPenumpang = {
   id: string
@@ -35,6 +36,9 @@ function SyahbandarContent() {
   
   const [isSuperadmin, setIsSuperadmin] = useState(false)
   const [lokasi, setLokasi] = useState('Tarakan')
+
+  // Pelabuhan / lokasi asal diambil dari Master Rute (master_kota + master_rute).
+  const { lokasiList } = useLokasiOperasional()
 
   const [tanggal, setTanggal] = useState(() => {
     const today = new Date()
@@ -242,14 +246,9 @@ function SyahbandarContent() {
                   <div>
                     <label className="block text-xs font-bold text-gray-700 mb-1">Pelabuhan</label>
                     <select value={lokasi} onChange={(e) => setLokasi(e.target.value)} className="w-full border rounded-md px-3 py-2 text-sm text-gray-900 shadow-sm focus:ring-blue-500 focus:border-blue-500">
-                      <option value="Tarakan">Tarakan</option>
-                      <option value="Tanjung Selor">Tanjung Selor</option>
-                      <option value="Nunukan">Nunukan</option>
-                      <option value="Malinau">Malinau</option>
-                      <option value="P. Bunyu">P. Bunyu</option>
-                      <option value="KTT">KTT</option>
-                      <option value="T. Kuning">T. Kuning</option>
-                      <option value="S. Nyamuk">S. Nyamuk</option>
+                      {pilihanLokasi(lokasiList, lokasi).map((lok) => (
+                        <option key={lok} value={lok}>{lok}</option>
+                      ))}
                     </select>
                   </div>
                   <div>

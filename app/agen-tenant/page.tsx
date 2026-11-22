@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { supabase, getProfile, getOperatorSession, type Profile } from '@/lib/supabase'
 import { fieldPasswordBaru } from '@/lib/password'
 import { feeProfilAda, kodeDaerah } from '@/lib/fee'
+import { useLokasiOperasional, pilihanLokasi } from '@/lib/lokasi'
 
 type Agen = {
   id: string
@@ -38,6 +39,18 @@ function AgenTenantContent() {
   const [adaKolomFee, setAdaKolomFee] = useState(true)
   
   const [proses, setProses] = useState(false)
+
+  // Pilihan "Lokasi Operasional" WAJIB dari Master Rute (master_kota + master_rute),
+  // bukan daftar tetap Tarakan/Tanjung Selor.
+  const { lokasiList } = useLokasiOperasional()
+
+  // Kalau Master Rute belum memuat Tarakan (atau daftar baru selesai dimuat),
+  // pakai lokasi pertama dari Master Rute untuk form baru.
+  useEffect(() => {
+    if (editId) return
+    if (lokasiList.length === 0) return
+    if (!lokasiList.includes(lokasi)) setLokasi(lokasiList[0])
+  }, [lokasiList, lokasi, editId])
 
   useEffect(() => {
     async function init() {
@@ -208,8 +221,9 @@ function AgenTenantContent() {
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Lokasi Operasional</label>
                   <select value={lokasi} onChange={e => setLokasi(e.target.value)} className="w-full border rounded-md px-3 py-2 text-gray-900 focus:ring-purple-500 focus:border-purple-500">
-                    <option value="Tarakan">Tarakan</option>
-                    <option value="Tanjung Selor">Tanjung Selor</option>
+                    {pilihanLokasi(lokasiList, lokasi).map(l => (
+                      <option key={l} value={l}>{l}</option>
+                    ))}
                   </select>
                 </div>
                 <div>

@@ -4,10 +4,11 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase, getProfile, getOperatorSession, type Profile } from '@/lib/supabase'
 import { fieldPasswordBaru } from '@/lib/password'
+import { useLokasiOperasional, pilihanLokasi } from '@/lib/lokasi'
 
 type RoleType = 'terminal_keberangkatan'
 
-const DAFTAR_LOKASI = ['Tarakan', 'Tanjung Selor', 'Malinau', 'Nunukan', 'KTT', 'Bunyu']
+// Pilihan "Lokasi Tugas" diambil dari Master Rute lewat lib/lokasi.ts (bukan daftar tetap).
 
 export default function AdminPetugasPage() {
   const router = useRouter()
@@ -35,6 +36,15 @@ export default function AdminPetugasPage() {
   const [editLokasi, setEditLokasi] = useState('Tarakan')
   const [editUnit, setEditUnit] = useState('')
   const [editLoading, setEditLoading] = useState(false)
+
+  // Lokasi dari Master Rute (master_kota + master_rute).
+  const { lokasiList } = useLokasiOperasional()
+
+  // Form tambah: pakai lokasi pertama Master Rute kalau default tidak ada di sana.
+  useEffect(() => {
+    if (lokasiList.length === 0) return
+    if (!lokasiList.includes(inputLokasi)) setInputLokasi(lokasiList[0])
+  }, [lokasiList, inputLokasi])
 
   useEffect(() => {
     async function init() {
@@ -217,9 +227,14 @@ export default function AdminPetugasPage() {
 
   if (loading) return <p className="p-6 text-center text-gray-500">Memuat data operator…</p>
 
-  const petugasPerLokasi = DAFTAR_LOKASI.map((lok) => ({
+  const petugasPerLokasi = Array.from(
+    new Set([
+      ...lokasiList,
+      ...petugas.map((p) => String((p as any).lokasi || 'Tarakan').trim()).filter(Boolean),
+    ])
+  ).map((lok) => ({
     lokasi: lok,
-    data: petugas.filter((p) => ((p as any).lokasi || 'Tarakan') === lok),
+    data: petugas.filter((p) => String((p as any).lokasi || 'Tarakan').trim() === lok),
   })).filter((grup) => grup.data.length > 0)
 
   return (
@@ -291,7 +306,7 @@ export default function AdminPetugasPage() {
                           </td>
                           <td className="px-4 py-2 text-center">
                             <select value={editLokasi} onChange={(e) => setEditLokasi(e.target.value)} className="border rounded px-2 py-1 text-gray-900 w-full">
-                              {DAFTAR_LOKASI.map((lok) => <option key={lok} value={lok}>{lok}</option>)}
+                              {pilihanLokasi(lokasiList, editLokasi).map((lok) => <option key={lok} value={lok}>{lok}</option>)}
                             </select>
                           </td>
                           <td className="px-4 py-2 text-center space-x-1 whitespace-nowrap">
@@ -362,7 +377,7 @@ export default function AdminPetugasPage() {
 
               <label className="block text-sm font-medium text-gray-700 mb-1">Lokasi Tugas</label>
               <select value={inputLokasi} onChange={(e) => setInputLokasi(e.target.value)} className="w-full border rounded px-3 py-2 mb-3 text-gray-900" required>
-                {DAFTAR_LOKASI.map((lok) => <option key={lok} value={lok}>{lok}</option>)}
+                {pilihanLokasi(lokasiList, inputLokasi).map((lok) => <option key={lok} value={lok}>{lok}</option>)}
               </select>
 
               <label className="block text-sm font-medium text-gray-700 mb-1">Password</label>

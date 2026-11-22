@@ -4,7 +4,8 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase, getProfile, getOperatorSession, type Profile } from '@/lib/supabase'
 import { fieldPasswordBaru } from '@/lib/password'
-import { DAFTAR_LOKASI, UNIT_KOLEKTOR, adalahKolektor } from '@/lib/kolektor'
+import { UNIT_KOLEKTOR, adalahKolektor } from '@/lib/kolektor'
+import { useLokasiOperasional, pilihanLokasi } from '@/lib/lokasi'
 
 // Kolektor = akun penagih uang cash dari agen & petugas DI LOKASI YANG SAMA.
 // Akun ini hanya bisa membuka Laporan Penjualan Harian (read-only) dan cetak.
@@ -32,6 +33,15 @@ export default function AdminPetugasKolektorPage() {
   const [editPass, setEditPass] = useState('')
   const [editLokasi, setEditLokasi] = useState('Tarakan')
   const [editLoading, setEditLoading] = useState(false)
+
+  // Lokasi dari Master Rute (master_kota + master_rute).
+  const { lokasiList } = useLokasiOperasional()
+
+  // Form tambah: pakai lokasi pertama Master Rute kalau default tidak ada di sana.
+  useEffect(() => {
+    if (lokasiList.length === 0) return
+    if (!lokasiList.includes(inputLokasi)) setInputLokasi(lokasiList[0])
+  }, [lokasiList, inputLokasi])
 
   useEffect(() => {
     async function init() {
@@ -216,9 +226,14 @@ export default function AdminPetugasKolektorPage() {
 
   if (loading) return <p className="p-6 text-center text-gray-500">Memuat data kolektor…</p>
 
-  const perLokasi = DAFTAR_LOKASI.map((lok) => ({
+  const perLokasi = Array.from(
+    new Set([
+      ...lokasiList,
+      ...kolektor.map((p) => String((p as any).lokasi || 'Tarakan').trim()).filter(Boolean),
+    ])
+  ).map((lok) => ({
     lokasi: lok,
-    data: kolektor.filter((p) => ((p as any).lokasi || 'Tarakan') === lok),
+    data: kolektor.filter((p) => String((p as any).lokasi || 'Tarakan').trim() === lok),
   })).filter((grup) => grup.data.length > 0)
 
   return (
@@ -281,7 +296,7 @@ export default function AdminPetugasKolektorPage() {
                           <td className="px-4 py-2"><input type="text" value={editNama} onChange={(e) => setEditNama(e.target.value)} className="border rounded px-2 py-1 w-full text-gray-900" /></td>
                           <td className="px-4 py-2">
                             <select value={editLokasi} onChange={(e) => setEditLokasi(e.target.value)} className="border rounded px-2 py-1 text-gray-900 w-full">
-                              {DAFTAR_LOKASI.map((lok) => <option key={lok} value={lok}>{lok}</option>)}
+                              {pilihanLokasi(lokasiList, editLokasi).map((lok) => <option key={lok} value={lok}>{lok}</option>)}
                             </select>
                           </td>
                           <td className="px-4 py-2 space-y-1">
@@ -355,7 +370,7 @@ export default function AdminPetugasKolektorPage() {
 
               <label className="block text-sm font-medium text-gray-700 mb-1">Lokasi Tugas</label>
               <select value={inputLokasi} onChange={(e) => setInputLokasi(e.target.value)} className="w-full border rounded px-3 py-2 mb-3 text-gray-900" required>
-                {DAFTAR_LOKASI.map((lok) => <option key={lok} value={lok}>{lok}</option>)}
+                {pilihanLokasi(lokasiList, inputLokasi).map((lok) => <option key={lok} value={lok}>{lok}</option>)}
               </select>
 
               <label className="block text-sm font-medium text-gray-700 mb-1">Password</label>

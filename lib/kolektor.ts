@@ -10,7 +10,8 @@
 export const ROLE_KOLEKTOR = 'kolektor'
 export const UNIT_KOLEKTOR = 'Kolektor'
 
-export const DAFTAR_LOKASI = ['Tarakan', 'Tanjung Selor', 'Malinau', 'Nunukan', 'KTT', 'Bunyu']
+// Daftar lokasi TIDAK lagi di-hardcode di sini.
+// Pilihan lokasi petugas/agen diambil dari Master Rute lewat lib/lokasi.ts.
 
 type PenandaKolektor = { role?: string | null; unit?: string | null } | null | undefined
 

@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase, type Profile } from '@/lib/supabase'
 import { fieldPasswordBaru } from '@/lib/password'
+import { useLokasiOperasional, pilihanLokasi } from '@/lib/lokasi'
 
 type Agen = {
   id: string
@@ -23,7 +24,7 @@ type Tenan = {
   nama_perusahaan: string | null
 }
 
-const DAFTAR_LOKASI = ['Tarakan', 'Tanjung Selor', 'Malinau', 'Nunukan', 'KTT', 'Bunyu']
+// Pilihan "Lokasi Tugas" diambil dari Master Rute lewat lib/lokasi.ts (bukan daftar tetap).
 
 export default function ManajemenAgenPage() {
   const router = useRouter()
@@ -46,6 +47,16 @@ export default function ManajemenAgenPage() {
   const [inputLokasi, setInputLokasi] = useState('Tarakan')
   const [inputTenant, setInputTenant] = useState('')
   const [modalLoading, setModalLoading] = useState(false)
+
+  // Lokasi dari Master Rute (master_kota + master_rute).
+  const { lokasiList } = useLokasiOperasional()
+
+  // Form baru: kalau lokasi awal tidak ada di Master Rute, pakai yang pertama.
+  useEffect(() => {
+    if (modalEdit) return
+    if (lokasiList.length === 0) return
+    if (!lokasiList.includes(inputLokasi)) setInputLokasi(lokasiList[0])
+  }, [lokasiList, inputLokasi, modalEdit])
 
   useEffect(() => {
     async function init() {
@@ -354,7 +365,7 @@ export default function ManajemenAgenPage() {
 
               <label className="block text-sm font-medium text-gray-300 mb-1">Lokasi Tugas</label>
               <select value={inputLokasi} onChange={(e) => setInputLokasi(e.target.value)} className="w-full border border-gray-600 rounded bg-gray-700 px-3 py-2 mb-3 text-white focus:outline-none focus:border-blue-500" required>
-                {DAFTAR_LOKASI.map((lok) => <option key={lok} value={lok}>{lok}</option>)}
+                {pilihanLokasi(lokasiList, inputLokasi).map((lok) => <option key={lok} value={lok}>{lok}</option>)}
               </select>
 
               <label className="block text-sm font-medium text-gray-300 mb-1">Password</label>
@@ -391,7 +402,7 @@ export default function ManajemenAgenPage() {
 
               <label className="block text-sm font-medium text-gray-300 mb-1">Lokasi Tugas</label>
               <select value={inputLokasi} onChange={(e) => setInputLokasi(e.target.value)} className="w-full border border-gray-600 rounded bg-gray-700 px-3 py-2 mb-3 text-white focus:outline-none focus:border-blue-500" required>
-                {DAFTAR_LOKASI.map((lok) => <option key={lok} value={lok}>{lok}</option>)}
+                {pilihanLokasi(lokasiList, inputLokasi).map((lok) => <option key={lok} value={lok}>{lok}</option>)}
               </select>
 
               <label className="block text-sm font-medium text-gray-300 mb-1">Password</label>
