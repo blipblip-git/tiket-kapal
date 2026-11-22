@@ -15,7 +15,8 @@ type Props = {
 }
 
 const DAFTAR_JAM = Array.from({ length: 24 }, (_, i) => String(i).padStart(2, '0'))
-const DAFTAR_MENIT = Array.from({ length: 60 }, (_, i) => String(i).padStart(2, '0'))
+// Menit per 5 supaya daftar tidak panjang. Menit lain (data lama) tetap ditambahkan otomatis.
+const MENIT_UMUM = Array.from({ length: 12 }, (_, i) => String(i * 5).padStart(2, '0'))
 
 export default function Jam24({ value, onChange, required, disabled, ariaLabel }: Props) {
   // Terima "07:00", "07:00:00", atau "07.00" dari database/data lama.
@@ -23,6 +24,9 @@ export default function Jam24({ value, onChange, required, disabled, ariaLabel }
   const cocok = /^([01]\d|2[0-3]):([0-5]\d)$/.exec(bersih)
   const jam = cocok ? cocok[1] : ''
   const menit = cocok ? cocok[2] : '00'
+
+  const daftarMenit =
+    menit && !MENIT_UMUM.includes(menit) ? [...MENIT_UMUM, menit].sort() : MENIT_UMUM
 
   const ubahJam = (j: string) => onChange(j ? `${j}:${menit}` : '')
   const ubahMenit = (m: string) => onChange(jam ? `${jam}:${m}` : '')
@@ -57,7 +61,7 @@ export default function Jam24({ value, onChange, required, disabled, ariaLabel }
         aria-label={ariaLabel ? `${ariaLabel} (menit)` : 'Menit'}
         className={`${kelasSelect} disabled:bg-gray-100 disabled:text-gray-400`}
       >
-        {DAFTAR_MENIT.map((m) => (
+        {daftarMenit.map((m) => (
           <option key={m} value={m}>
             {m}
           </option>
