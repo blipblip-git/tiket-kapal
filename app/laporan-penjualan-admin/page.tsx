@@ -70,7 +70,9 @@ function LaporanPenjualanAdminContent() {
       const kumpulan: RuteKapal[] = []
 
       let qRute = supabase.from('master_rute').select('rute_asal, rute_tujuan, operator_id').order('created_at', { ascending: true })
-      if (operatorId) qRute = qRute.eq('operator_id', operatorId)
+      // Baris Master Rute ber-operator_id NULL = rute umum (dibuat superadmin),
+      // jadi ikut dibaca semua penyewa. Rute penyewa lain tetap tersaring.
+      if (operatorId) qRute = qRute.or(`operator_id.eq.${operatorId},operator_id.is.null`)
       const { data: dataRute } = await qRute
       ;(dataRute || []).forEach((r: any) => {
         if (r.rute_asal && r.rute_tujuan) kumpulan.push({ rute_asal: r.rute_asal, rute_tujuan: r.rute_tujuan })
@@ -79,7 +81,9 @@ function LaporanPenjualanAdminContent() {
       // Rute dari Manajemen Jadwal (template). Form jadwal sekarang TIDAK lagi
       // mengisi master_rute, jadi ini sumber utama kartu untuk penyewa baru.
       let qTemplate = supabase.from('template_jadwal').select('rute_asal, rute_tujuan, kapal_id, operator_id')
-      if (operatorId) qTemplate = qTemplate.eq('operator_id', operatorId)
+      // Sertakan template lama yang operator_id-nya NULL; pemiliknya ditentukan
+      // lewat kapal oleh cocokOperator() di bawah.
+      if (operatorId) qTemplate = qTemplate.or(`operator_id.eq.${operatorId},operator_id.is.null`)
       const { data: dataTemplate } = await qTemplate
       const petaOperatorKapalTemplate = await ambilOperatorKapal(
         (dataTemplate || []).map((t: any) => t.kapal_id)
@@ -124,9 +128,26 @@ function LaporanPenjualanAdminContent() {
 
   const bulanAktif = bulanSekarang()
 
-  // Semua kartu dibentuk dari data milik penyewa sendiri (Master Rute, atau
-  // jadwal kapalnya sebagai cadangan). Penyewa baru / belum input = tanpa kartu.
-  const kotaList = Array.from(new Set(ruteList.map(r => r.rute_asal)))
+  // Semua kartu dibentuk dari data milik penyewa sendiri (Master Rute, template
+  // Manajemen Jadwal, atau jadwal kapalnya). Penyewa baru / belum input = tanpa kartu.
+  //
+  // Daerah keberangkatan (asal) dipakai untuk Laporan Gabungan.
+  const kotaAsal = Array.from(
+    new Set(ruteList.map(r => (r.rute_asal || '').trim()).filter(Boolean))
+  )
+
+  // Daerah untuk kartu "Laporan <daerah>" = SEMUA ujung rute yang terdaftar,
+  // asal DAN tujuan. Jadi rute Tarakan → Nunukan langsung memunculkan
+  // "Laporan Tarakan" + "Laporan Nunukan" sejak diinput di Manajemen Jadwal,
+  // walau arah balik belum dibuat dan belum ada penjualan sama sekali.
+  const kotaList = Array.from(
+    new Set(
+      ruteList
+        .flatMap(r => [r.rute_asal, r.rute_tujuan])
+        .map(s => (s || '').trim())
+        .filter(Boolean)
+    )
+  )
   const warnaKota = (idx: number) => WARNA_RUTE[idx % WARNA_RUTE.length]
 
   const menuUtama: Kartu[] = kotaList.map((kota, idx) => ({
@@ -136,10 +157,10 @@ function LaporanPenjualanAdminContent() {
     link: `/laporan-penjualan-admin?menu=kota:${encodeURIComponent(kota)}`
   }))
 
-  if (kotaList.length >= 2) {
+  if (kotaAsal.length >= 2) {
     menuUtama.push({
       label: 'Laporan Gabungan',
-      deskripsi: `Perbandingan pendapatan ${kotaList.join(' & ')}`,
+      deskripsi: `Perbandingan pendapatan ${kotaAsal.join(' & ')}`,
       color: 'bg-purple-50 border-purple-200 text-purple-800 hover:bg-purple-100',
       link: '/laporan-penjualan-admin?menu=gabungan'
     })
@@ -232,10 +253,10 @@ function LaporanPenjualanAdminContent() {
     if (menuKota) subMenu[slug] = menuKota
   })
 
-  if (kotaList.length >= 2) {
+  if (kotaAsal.length >= 2) {
     subMenu.gabungan = {
       judul: 'Laporan Gabungan',
-      deskripsi: `${kotaList.join(' & ')} (daerah lain muncul otomatis)`,
+      deskripsi: `${kotaAsal.join(' & ')} (daerah lain muncul otomatis)`,
       kartu: [
         {
           label: 'Laporan Gabungan Harian',
@@ -286,8 +307,9 @@ function LaporanPenjualanAdminContent() {
         {menuTampil.length === 0 ? (
           <div className="bg-white border border-gray-200 rounded-xl p-8 text-center">
             <p className="text-sm text-gray-600">
-              Belum ada data rute untuk akun ini. Kartu laporan akan muncul otomatis setelah
-              pemilik kapal menambahkan rute dan jadwal kapal.
+              Belum ada rute terdaftar untuk akun ini. Kartu laporan daerah muncul otomatis
+              setelah rute diinput di Manajemen Jadwal atau Master Rute, walau belum ada
+              penjualan.
             </p>
           </div>
         ) : (
