@@ -3,6 +3,7 @@
 import { useEffect, useState, Suspense } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase, getProfile, getOperatorSession, formatDaftarAbk, type Profile } from '@/lib/supabase'
+import { bersihkanJadwalTurunan } from '@/lib/bersihJadwal'
 
 type Kapal = {
   id: string
@@ -99,14 +100,35 @@ function KapalContent() {
   }
 
   const handleHapus = async (id: string) => {
-    if (!confirm('Yakin mau hapus kapal ini? Data jadwal yang terhubung mungkin akan error.')) return
+    const kapal = kapalList.find((k) => k.id === id)
+    if (
+      !confirm(
+        `Hapus kapal "${kapal?.nama || ''}"?\n\nSemua template jadwalnya ikut dihapus dan jadwal tanggal mendatang yang belum ada penjualan ikut dibersihkan (yang sudah ada penjualan hanya dinonaktifkan).`
+      )
+    )
+      return
     setLoading(true)
+
+    // Template jadwal milik kapal ini pasti sudah tidak berlaku.
+    await supabase.from('template_jadwal').delete().eq('kapal_id', id)
+
+    // Bersihkan jadwal yang sudah tergenerate, kalau tidak kapal ini masih muncul
+    // di pencarian tiket online walau sudah "dihapus".
+    const hasil = await bersihkanJadwalTurunan(supabase, { kapal_id: id })
+
     const { error } = await supabase.from('kapal').delete().eq('id', id)
     if (error) {
-      alert('Gagal hapus: ' + error.message)
-      setLoading(false)
-      return
+      // Biasanya karena jadwal lama (sudah ada penjualan) masih mereferensikan kapal.
+      // Jangan hapus riwayat tiket: nonaktifkan kapal + jadwalnya saja.
+      await supabase.from('kapal').update({ status: 'nonaktif' }).eq('id', id)
+      alert(
+        `Kapal ini sudah punya riwayat penjualan, jadi tidak bisa dihapus permanen (Supabase: ${error.message}).\n\n` +
+          `Kapal & ${hasil.dinonaktifkan} jadwalnya sudah DINONAKTIFKAN — tidak akan muncul lagi di pencarian tiket online.`
+      )
+    } else if (hasil.dinonaktifkan > 0) {
+      alert(`Kapal dihapus. ${hasil.dihapus} jadwal mendatang dihapus, ${hasil.dinonaktifkan} jadwal berisi penjualan dinonaktifkan.`)
     }
+
     if (profile) fetchData(profile)
   }
 

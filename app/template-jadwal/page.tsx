@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { supabase, getProfile, getOperatorSession, type Profile } from '@/lib/supabase'
 import { idOperator } from '@/lib/tenant'
 import { SEMUA_HARI, LABEL_HARI, labelHari, hariOperasiAktif, type NamaHari } from '@/lib/hari'
+import { bersihkanJadwalTurunan, setStatusJadwalTurunan } from '@/lib/bersihJadwal'
 
 type TemplateJadwal = {
   id: string
@@ -144,9 +145,25 @@ function TemplateJadwalContent() {
   }
 
   const handleHapus = async (id: string) => {
-    if (!confirm('Hapus jadwal ini?')) return
+    const t = templateList.find((x) => x.id === id)
+    if (!confirm('Hapus jadwal ini? Jadwal tanggal mendatang yang belum ada penjualan ikut dihapus, yang sudah ada penjualan dinonaktifkan.')) return
     setLoading(true)
     await supabase.from('template_jadwal').delete().eq('id', id)
+
+    // WAJIB: jadwal yang sudah tergenerate ikut dibersihkan, kalau tidak rute ini
+    // masih muncul di pencarian tiket online walau template-nya sudah dihapus.
+    if (t) {
+      const hasil = await bersihkanJadwalTurunan(supabase, {
+        kapal_id: t.kapal_id,
+        rute_asal: t.rute_asal,
+        rute_tujuan: t.rute_tujuan,
+        jam_berangkat: t.jam_berangkat,
+      })
+      if (hasil.dinonaktifkan > 0) {
+        alert(`Rute dihapus. ${hasil.dihapus} jadwal mendatang dihapus, ${hasil.dinonaktifkan} jadwal yang sudah ada penjualan dinonaktifkan (tidak muncul di pencarian).`)
+      }
+    }
+
     if (profile) fetchData(profile)
   }
 
@@ -202,6 +219,16 @@ function TemplateJadwalContent() {
         // ikutkan ke jadwal mendatang yang belum punya penjualan sama sekali.
         if (!lama || Number(lama.harga) !== hargaFinal) {
           await sinkronHargaJadwalMendatang(kapalId, ruteAsal, ruteTujuan, jamBerangkat, hargaFinal)
+        }
+
+        // Rute dimatikan/dihidupkan → jadwal mendatang yang belum ada penjualan ikut,
+        // supaya rute nonaktif tidak tetap muncul di pencarian tiket online.
+        if (lama && Boolean(lama.aktif) !== Boolean(aktif)) {
+          await setStatusJadwalTurunan(
+            supabase,
+            { kapal_id: kapalId, rute_asal: ruteAsal, rute_tujuan: ruteTujuan, jam_berangkat: jamBerangkat },
+            aktif
+          )
         }
       } else {
         const { error: errIns } = await supabase.from('template_jadwal').insert(payload)

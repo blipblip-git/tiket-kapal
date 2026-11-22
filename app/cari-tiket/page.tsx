@@ -186,7 +186,7 @@ function CariTiketContent() {
       }
     }
 
-    const { data: kapalData } = await supabase.from('kapal').select('id, nama, kapasitas')
+    const { data: kapalData } = await supabase.from('kapal').select('id, nama, kapasitas, status')
     const kapalMap = new Map(kapalData?.map((k) => [k.id, k]) || [])
 
     const finalList: JadwalTampil[] = []
@@ -207,6 +207,9 @@ function CariTiketContent() {
       for (const j of jadwalData) {
         const kapal = kapalMap.get(j.kapal_id)
         if (!kapal) continue
+        // Kapal yang sudah dinonaktifkan/dihapus tidak boleh muncul di pencarian,
+        // walaupun masih ada baris jadwal lama yang tertinggal.
+        if (String((kapal as any).status || 'aktif') === 'nonaktif') continue
 
         const infoSegmen = {
           kapal_id: j.kapal_id,
