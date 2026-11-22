@@ -3,6 +3,7 @@
 import { useEffect, useState, Suspense } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
 import { supabase, getOperatorSession, catatAudit, type Profile } from '@/lib/supabase'
+import { kunciKursi, lepasKunciKursi, nomorKursiTerpakai } from '@/lib/segmen'
 import { snapshotFee } from '@/lib/fee'
 import KtpScanner from '@/components/KtpScanner'
 
@@ -134,11 +135,31 @@ function LoketJualAgenContent() {
         return
       }
 
-      const sortedKursi = (kursiData || []).sort((a, b) => {
-        const numA = parseInt(a.nomor_kursi, 10)
-        const numB = parseInt(b.nomor_kursi, 10)
-        return numA - numB
+      // Status kursi per POTONGAN JALAN (segmen). Tabel kursi_pakai belum ada
+      // → tetap pakai status lama (mode legacy).
+      let terpakai: Set<string> | null = null
+      const hasilSegmen = await nomorKursiTerpakai(supabase, {
+        kapal_id: j.kapal_id,
+        tanggal: j.tanggal,
+        jam_berangkat: j.jam_berangkat,
+        rute_asal: j.rute_asal,
+        rute_tujuan: j.rute_tujuan,
       })
+      if (hasilSegmen.aktif) terpakai = hasilSegmen.nomor
+
+      const sortedKursi = (kursiData || [])
+        .map((k: any) => {
+          if (terpakai) {
+            const dipakai = terpakai.has(String(k.nomor_kursi)) || k.status === 'terisi'
+            return { ...k, status: dipakai ? 'terisi' : 'kosong' }
+          }
+          return k
+        })
+        .sort((a: any, b: any) => {
+          const numA = parseInt(a.nomor_kursi, 10)
+          const numB = parseInt(b.nomor_kursi, 10)
+          return numA - numB
+        })
 
       setKursiList(sortedKursi)
       setLoading(false)
@@ -288,10 +309,13 @@ function LoketJualAgenContent() {
       const feeSnapshot = await snapshotFee(profile)
 
       const pesananData: any[] = []
+      const kunciList: { nomor_kursi: string; pesanan_id: string }[] = []
 
       penumpangList.forEach((p, idx) => {
         const indukId = generateUuid()
         const namaRapi = toTitleCase(p.nama);
+        const nomorKursi = kursiList.find((k) => k.id === kursiDipilih[idx])?.nomor_kursi
+        if (nomorKursi) kunciList.push({ nomor_kursi: String(nomorKursi), pesanan_id: indukId })
 
         pesananData.push({
           id: indukId,
@@ -338,12 +362,35 @@ function LoketJualAgenContent() {
         })
       })
 
+      // Kunci kursi per potongan jalan dulu (jaminan DB).
+      const kunci = await kunciKursi(supabase, {
+        jadwal: {
+          kapal_id: jadwal.kapal_id,
+          tanggal: jadwal.tanggal,
+          jam_berangkat: jadwal.jam_berangkat,
+          rute_asal: jadwal.rute_asal,
+          rute_tujuan: jadwal.rute_tujuan,
+        },
+        kanal: 'agen',
+        daftar: kunciList,
+        toleranIzin: true,
+      })
+
+      if (!kunci.ok) {
+        setError(kunci.pesan)
+        setLoadingSubmit(false)
+        setShowCashModal(false)
+        setShowQrisModal(false)
+        return
+      }
+
       const { data: inserted, error: errInsert } = await supabase
         .from('pesanan')
         .insert(pesananData)
         .select()
 
       if (errInsert || !inserted) {
+        await lepasKunciKursi(supabase, kunciList.map((k) => k.pesanan_id))
         throw new Error('Gagal simpan pesanan: ' + (errInsert?.message || 'unknown'))
       }
 

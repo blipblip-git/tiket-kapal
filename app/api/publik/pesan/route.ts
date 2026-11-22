@@ -7,6 +7,7 @@ import { NextResponse } from 'next/server'
 import { buatClientAdmin, pesanServiceKeyKosong } from '@/lib/serverAuth'
 import { catatPermintaan, kenaBatas, kunciIp } from '@/lib/rateLimit'
 import { asalDiizinkan } from '@/lib/publikGuard'
+import { kunciKursi, lepasKunciKursi, lepasKunciKedaluwarsa } from '@/lib/segmen'
 
 const BATAS = 20
 const JENDELA = 10 * 60 * 1000
@@ -101,7 +102,7 @@ export async function POST(request: Request) {
   try {
     const { data: jadwal, error: errJadwal } = await admin
       .from('jadwal')
-      .select('id, harga, tanggal, status, status_jadwal')
+      .select('id, harga, tanggal, status, status_jadwal, kapal_id, jam_berangkat, rute_asal, rute_tujuan')
       .eq('id', jadwalId)
       .maybeSingle()
 
@@ -116,7 +117,7 @@ export async function POST(request: Request) {
 
     const { data: kursiData, error: errKursi } = await admin
       .from('kursi')
-      .select('id, jadwal_id, status')
+      .select('id, jadwal_id, status, nomor_kursi')
       .in('id', kursiIds)
 
     if (errKursi) throw new Error('Gagal memeriksa kursi: ' + errKursi.message)
@@ -126,6 +127,10 @@ export async function POST(request: Request) {
       if (k.jadwal_id !== jadwalId) throw new Error('Kursi bukan milik jadwal ini.')
       if (k.status && k.status !== 'kosong') throw new Error('Kursi sudah terisi, silakan pilih kursi lain.')
     }
+
+    // Nomor kursi (1..N) untuk penguncian per potongan jalan.
+    const nomorKursiDari = new Map<string, string>()
+    for (const k of kursiData as any[]) nomorKursiDari.set(String(k.id), String(k.nomor_kursi ?? ''))
 
     // Fee platform diambil dari server (kalau tabel/kolom belum ada -> 0).
     let feePlatform = 0
@@ -144,6 +149,7 @@ export async function POST(request: Request) {
     const sekarang = new Date()
     const waktuExpired = new Date(sekarang.getTime() + 15 * 60 * 1000).toISOString()
     const rows: any[] = []
+    const daftarKunci: { nomor_kursi: string; pesanan_id: string }[] = []
 
     dataPenumpang.forEach((p, idx) => {
       const kursiId = kursiIds[idx]
@@ -167,6 +173,11 @@ export async function POST(request: Request) {
         ...(adaKolomFee ? { fee_agen: 0, fee_platform: feePlatform } : {})
       })
 
+      daftarKunci.push({
+        nomor_kursi: nomorKursiDari.get(String(kursiId)) || '',
+        pesanan_id: indukId,
+      })
+
       p.balita.forEach((namaBalita, bIdx) => {
         rows.push({
           id: crypto.randomUUID(),
@@ -188,8 +199,30 @@ export async function POST(request: Request) {
       })
     })
 
+    // Kunci kursi per potongan jalan SEBELUM pesanan disimpan.
+    // Online: kursi langsung terkunci walau belum dibayar (expired → dilepas otomatis).
+    await lepasKunciKedaluwarsa(admin)
+    const hasilKunci = await kunciKursi(admin, {
+      jadwal: {
+        kapal_id: String((jadwal as any).kapal_id || ''),
+        tanggal: String((jadwal as any).tanggal || ''),
+        jam_berangkat: String((jadwal as any).jam_berangkat || ''),
+        rute_asal: String((jadwal as any).rute_asal || ''),
+        rute_tujuan: String((jadwal as any).rute_tujuan || ''),
+      },
+      kanal: 'online',
+      daftar: daftarKunci,
+    })
+
+    if (!hasilKunci.ok) {
+      return NextResponse.json({ error: hasilKunci.pesan }, { status: 409 })
+    }
+
     const { data: inserted, error: errInsert } = await admin.from('pesanan').insert(rows).select('id')
-    if (errInsert) throw new Error('Gagal menyimpan pesanan: ' + errInsert.message)
+    if (errInsert) {
+      await lepasKunciKursi(admin, daftarKunci.map((d) => d.pesanan_id))
+      throw new Error('Gagal menyimpan pesanan: ' + errInsert.message)
+    }
 
     catatPermintaan(kunci, JENDELA)
 

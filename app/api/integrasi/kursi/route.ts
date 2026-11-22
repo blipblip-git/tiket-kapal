@@ -3,6 +3,7 @@
 
 import { NextResponse } from 'next/server'
 import { wajibApiKey, catatIntegrasi, jadwalMilikTenant } from '@/lib/integrasiAuth'
+import { nomorKursiTerpakai } from '@/lib/segmen'
 
 export async function GET(request: Request) {
   const auth = await wajibApiKey(request, 'integrasi-kursi')
@@ -28,7 +29,24 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: 'Gagal membaca kursi: ' + errKursi.message }, { status: 500 })
   }
 
-  const daftar = (kursi || []).sort((a: any, b: any) => Number(a.nomor_kursi) - Number(b.nomor_kursi))
+  // Status per potongan jalan: kursi yang dipakai penumpang rute lain pada
+  // keberangkatan yang sama tidak ikut terkunci kalau intervalnya tidak beririsan.
+  const segmen = await nomorKursiTerpakai(admin, {
+    kapal_id: String(jadwal.kapal_id || ''),
+    tanggal: String(jadwal.tanggal || ''),
+    jam_berangkat: String(jadwal.jam_berangkat || ''),
+    rute_asal: String(jadwal.rute_asal || ''),
+    rute_tujuan: String(jadwal.rute_tujuan || '')
+  })
+
+  const daftar = (kursi || [])
+    .map((k: any) => {
+      const terisi = segmen.aktif
+        ? segmen.nomor.has(String(k.nomor_kursi)) || k.status === 'terisi'
+        : Boolean(k.status && k.status !== 'kosong')
+      return { ...k, status: terisi ? 'terisi' : 'kosong' }
+    })
+    .sort((a: any, b: any) => Number(a.nomor_kursi) - Number(b.nomor_kursi))
 
   catatIntegrasi('integrasi-kursi', klien)
 
@@ -38,8 +56,8 @@ export async function GET(request: Request) {
     kursi: daftar.map((k: any) => ({
       id: k.id,
       nomor_kursi: k.nomor_kursi,
-      status: k.status || 'kosong',
-      tersedia: !k.status || k.status === 'kosong'
+      status: k.status,
+      tersedia: k.status === 'kosong'
     }))
   })
 }

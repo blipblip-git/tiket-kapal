@@ -17,6 +17,7 @@
 
 import { NextResponse } from 'next/server'
 import { wajibApiKey, catatIntegrasi, jadwalMilikTenant } from '@/lib/integrasiAuth'
+import { kunciKursi, lepasKunciKursi, lepasKunciKedaluwarsa } from '@/lib/segmen'
 
 const MAKS_PENUMPANG = 8
 
@@ -107,7 +108,7 @@ export async function POST(request: Request) {
 
     const { data: kursiData, error: errKursi } = await admin
       .from('kursi')
-      .select('id, jadwal_id, status')
+      .select('id, jadwal_id, status, nomor_kursi')
       .in('id', kursiIds)
 
     if (errKursi) throw new Error('Gagal memeriksa kursi: ' + errKursi.message)
@@ -128,6 +129,10 @@ export async function POST(request: Request) {
     const sekarang = new Date()
     const waktuExpired = new Date(sekarang.getTime() + 15 * 60 * 1000).toISOString()
     const grupId = crypto.randomUUID()
+    // Nomor kursi untuk penguncian per potongan jalan.
+    const nomorKursiDari = new Map<string, string>()
+    for (const k of kursiData as any[]) nomorKursiDari.set(String(k.id), String(k.nomor_kursi ?? ''))
+    const daftarKunci: { nomor_kursi: string; pesanan_id: string }[] = []
     const rows: any[] = []
     const ringkas: any[] = []
     const idDewasa: string[] = []
@@ -156,6 +161,10 @@ export async function POST(request: Request) {
         induk_id: null
       })
       ringkas.push({ id: indukId, kode_tiket: kode, nama_penumpang: p.nama, is_balita: false })
+      daftarKunci.push({
+        nomor_kursi: nomorKursiDari.get(String(kursiId)) || '',
+        pesanan_id: indukId
+      })
 
       p.balita.forEach((namaBalita, bIdx) => {
         const idBalita = crypto.randomUUID()
@@ -182,8 +191,29 @@ export async function POST(request: Request) {
       })
     })
 
+    // Kunci kursi per potongan jalan SEBELUM pesanan disimpan.
+    await lepasKunciKedaluwarsa(admin)
+    const kunci = await kunciKursi(admin, {
+      jadwal: {
+        kapal_id: String(jadwal.kapal_id || ''),
+        tanggal: String(jadwal.tanggal || ''),
+        jam_berangkat: String(jadwal.jam_berangkat || ''),
+        rute_asal: String(jadwal.rute_asal || ''),
+        rute_tujuan: String(jadwal.rute_tujuan || '')
+      },
+      kanal: 'online',
+      daftar: daftarKunci
+    })
+
+    if (!kunci.ok) {
+      return NextResponse.json({ error: kunci.pesan }, { status: 409 })
+    }
+
     const { error: errInsert } = await admin.from('pesanan').insert(rows)
-    if (errInsert) throw new Error('Gagal menyimpan pesanan: ' + errInsert.message)
+    if (errInsert) {
+      await lepasKunciKursi(admin, daftarKunci.map((d) => d.pesanan_id))
+      throw new Error('Gagal menyimpan pesanan: ' + errInsert.message)
+    }
 
     if (sudahDibayar) {
       await admin.from('kursi').update({ status: 'terisi', waktu_hold: null }).in('id', kursiIds)

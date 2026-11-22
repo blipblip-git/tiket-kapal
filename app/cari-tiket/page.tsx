@@ -4,6 +4,13 @@ import { useEffect, useState, Suspense } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase, getProfile, getOperatorSession, type Profile } from '@/lib/supabase'
 import { beroperasiPada } from '@/lib/hari'
+import {
+  ambilPemakaianKursi,
+  ambilUrutanTitik,
+  intervalBentrok,
+  intervalSegmen,
+  kunciKeberangkatan,
+} from '@/lib/segmen'
 
 type JadwalTampil = {
   id: string
@@ -192,14 +199,52 @@ function CariTiketContent() {
     const menitSekarangWITA = witaTime.getUTCMinutes()
 
     if (jadwalData) {
+      // Cache per keberangkatan (kapal|tanggal|jam) supaya tidak query berulang
+      // untuk rute-rute yang berangkat bersamaan.
+      const cacheUrutan = new Map<string, Map<string, number> | null>()
+      const cachePakai = new Map<string, { aktif: boolean; data: any[] }>()
+
       for (const j of jadwalData) {
         const kapal = kapalMap.get(j.kapal_id)
         if (!kapal) continue
 
-        const { data: kursiData } = await supabase.from('kursi').select('status').eq('jadwal_id', j.id)
-        const total = kursiData?.length || 0
-        const terisi = kursiData?.filter((k) => k.status === 'terisi').length || 0
-        const hold = kursiData?.filter((k) => k.status === 'hold').length || 0
+        const infoSegmen = {
+          kapal_id: j.kapal_id,
+          tanggal: String((j as any).tanggal || tgl),
+          jam_berangkat: j.jam_berangkat,
+          rute_asal: j.rute_asal,
+          rute_tujuan: j.rute_tujuan,
+        }
+        const kunci = kunciKeberangkatan(infoSegmen)
+
+        let urutan = cacheUrutan.get(kunci)
+        if (urutan === undefined) {
+          urutan = await ambilUrutanTitik(supabase, infoSegmen)
+          cacheUrutan.set(kunci, urutan)
+        }
+
+        let pakai = cachePakai.get(kunci)
+        if (!pakai) {
+          pakai = await ambilPemakaianKursi(supabase, [kunci])
+          cachePakai.set(kunci, pakai)
+        }
+
+        let total = kapal.kapasitas || 0
+        let terisi = 0
+        let hold = 0
+
+        if (pakai.aktif) {
+          // Kursi terpakai = yang intervalnya beririsan dengan rute ini saja.
+          const { dari, sampai } = intervalSegmen(infoSegmen, urutan)
+          terisi = pakai.data.filter((p: any) =>
+            intervalBentrok(Number(p.segmen_dari), Number(p.segmen_sampai), dari, sampai)
+          ).length
+        } else {
+          const { data: kursiData } = await supabase.from('kursi').select('status').eq('jadwal_id', j.id)
+          total = kursiData?.length || 0
+          terisi = kursiData?.filter((k) => k.status === 'terisi').length || 0
+          hold = kursiData?.filter((k) => k.status === 'hold').length || 0
+        }
 
         const [jamB, menitB] = j.jam_berangkat.split(':').map(Number);
 

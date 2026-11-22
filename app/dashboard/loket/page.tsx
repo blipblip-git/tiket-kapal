@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { supabase, logoutOperator, catatAudit, getOperatorSession, type Profile } from '@/lib/supabase'
 import { beroperasiPada } from '@/lib/hari'
 import { idOperator } from '@/lib/tenant'
+import { lepasKunciKursi, nomorKursiTerpakai } from '@/lib/segmen'
 
 type JadwalTampil = {
   id: string | null
@@ -152,10 +153,27 @@ export default function DashboardLoketPage() {
         if (existingJadwal) {
           if (existingJadwal.status_jadwal === 'berangkat') continue
 
-          const { data: kursiData } = await supabase.from('kursi').select('status').eq('jadwal_id', existingJadwal.id)
-          const total = kursiData?.length || 0
-          const terisi = kursiData?.filter((k) => k.status === 'terisi').length || 0
-          const hold = kursiData?.filter((k) => k.status === 'hold').length || 0
+          // Kursi terpakai dihitung per potongan jalan (segmen).
+          const segmen = await nomorKursiTerpakai(supabase, {
+            kapal_id: existingJadwal.kapal_id,
+            tanggal: String(existingJadwal.tanggal || tgl),
+            jam_berangkat: existingJadwal.jam_berangkat,
+            rute_asal: existingJadwal.rute_asal,
+            rute_tujuan: existingJadwal.rute_tujuan,
+          })
+
+          let total = kapal.kapasitas || 0
+          let terisi = 0
+          let hold = 0
+
+          if (segmen.aktif) {
+            terisi = segmen.nomor.size
+          } else {
+            const { data: kursiData } = await supabase.from('kursi').select('status').eq('jadwal_id', existingJadwal.id)
+            total = kursiData?.length || 0
+            terisi = kursiData?.filter((k) => k.status === 'terisi').length || 0
+            hold = kursiData?.filter((k) => k.status === 'hold').length || 0
+          }
 
           finalList.push({
             id: existingJadwal.id,
@@ -322,6 +340,8 @@ export default function DashboardLoketPage() {
     }
 
     await supabase.from('kursi').update({ status: 'kosong' }).eq('id', pesanan.kursi_id)
+    // Lepas kunci per potongan jalan (kalau tabel kursi_pakai sudah aktif).
+    await lepasKunciKursi(supabase, [pesanan.id])
 
     setSelectedPesanan((prev) => prev.filter((id) => id !== pesanan.id))
 

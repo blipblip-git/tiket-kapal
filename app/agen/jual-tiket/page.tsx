@@ -4,6 +4,7 @@ import { useEffect, useState, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { supabase, getOperatorSession, type Profile } from '@/lib/supabase'
 import { beroperasiPada } from '@/lib/hari'
+import { nomorKursiTerpakai } from '@/lib/segmen'
 
 type JadwalTampil = {
   id: string
@@ -190,10 +191,28 @@ function JualTiketAgenContent() {
         const kapal = kapalMap.get(j.kapal_id)
         if (!kapal) continue
 
-        const { data: kursiData } = await supabase.from('kursi').select('status').eq('jadwal_id', j.id)
-        const total = kursiData?.length || 0
-        const terisi = kursiData?.filter((k) => k.status === 'terisi').length || 0
-        const hold = kursiData?.filter((k) => k.status === 'hold').length || 0
+        // Kursi terpakai dihitung per potongan jalan (segmen), bukan seluruh kursi jadwal.
+        const infoSegmen = {
+          kapal_id: j.kapal_id,
+          tanggal: String((j as any).tanggal || tgl),
+          jam_berangkat: j.jam_berangkat,
+          rute_asal: j.rute_asal,
+          rute_tujuan: j.rute_tujuan,
+        }
+        const segmen = await nomorKursiTerpakai(supabase, infoSegmen)
+
+        let total = kapal.kapasitas || 0
+        let terisi = 0
+        let hold = 0
+
+        if (segmen.aktif) {
+          terisi = segmen.nomor.size
+        } else {
+          const { data: kursiData } = await supabase.from('kursi').select('status').eq('jadwal_id', j.id)
+          total = kursiData?.length || 0
+          terisi = kursiData?.filter((k) => k.status === 'terisi').length || 0
+          hold = kursiData?.filter((k) => k.status === 'hold').length || 0
+        }
 
         const [jamB, menitB] = j.jam_berangkat.split(':').map(Number);
 

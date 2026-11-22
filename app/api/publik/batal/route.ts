@@ -6,6 +6,7 @@ import { NextResponse } from 'next/server'
 import { buatClientAdmin, pesanServiceKeyKosong } from '@/lib/serverAuth'
 import { catatPermintaan, kenaBatas, kunciIp } from '@/lib/rateLimit'
 import { asalDiizinkan } from '@/lib/publikGuard'
+import { lepasKunciKursi } from '@/lib/segmen'
 
 const BATAS = 30
 const JENDELA = 10 * 60 * 1000
@@ -62,6 +63,9 @@ export async function POST(request: Request) {
   if (errHapus) {
     return NextResponse.json({ error: 'Gagal membatalkan pesanan: ' + errHapus.message }, { status: 500 })
   }
+
+  // Lepas kunci per potongan jalan supaya kursi bisa dijual lagi.
+  await lepasKunciKursi(admin, semua.map((r) => r.id))
 
   if (kursiIds.length > 0) {
     const { error: errKursi } = await admin

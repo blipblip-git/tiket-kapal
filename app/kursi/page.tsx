@@ -3,6 +3,7 @@
 import { useEffect, useState, Suspense } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { supabase, bersihkanPesananExpired } from '@/lib/supabase'
+import { nomorKursiTerpakai } from '@/lib/segmen'
 import Link from 'next/link'
 
 type Kursi = {
@@ -22,7 +23,13 @@ function KursiContent() {
   const [error, setError] = useState('')
   const [dipilih, setDipilih] = useState<string[]>([])
 
-  const fetchKursi = async () => {
+  const fetchKursi = async (info?: {
+    kapal_id?: string
+    tanggal?: string
+    jam_berangkat?: string
+    rute_asal?: string
+    rute_tujuan?: string
+  }) => {
     if (!jadwalId) return
 
     const { data, error: errK } = await supabase
@@ -36,6 +43,22 @@ function KursiContent() {
       return
     }
 
+    // === STATUS KURSI PER POTONGAN JALAN (SEGMEN) ===
+    // Kalau tabel kursi_pakai sudah ada: kursi yang terkunci hanya kursi yang
+    // intervalnya beririsan dengan rute ini. Kursi yang dipakai penumpang rute
+    // lain (mis. lanjutan Tg Batu → Berau) tetap hijau.
+    let terpakai: Set<string> | null = null
+    if (info?.kapal_id && info?.tanggal && info?.jam_berangkat) {
+      const hasil = await nomorKursiTerpakai(supabase, {
+        kapal_id: info.kapal_id,
+        tanggal: info.tanggal,
+        jam_berangkat: info.jam_berangkat,
+        rute_asal: info.rute_asal || '',
+        rute_tujuan: info.rute_tujuan || '',
+      })
+      if (hasil.aktif) terpakai = hasil.nomor
+    }
+
     // === FILTER UNIQUE BERDASARKAN NOMOR KURSI ===
     const uniqueMap = new Map<string, Kursi>()
     ;(data || []).forEach((k) => {
@@ -45,11 +68,21 @@ function KursiContent() {
     })
     const uniqueKursi = Array.from(uniqueMap.values())
 
-    const sortedKursi = uniqueKursi.sort((a, b) => {
-      const numA = parseInt(a.nomor_kursi, 10)
-      const numB = parseInt(b.nomor_kursi, 10)
-      return numA - numB
-    })
+    const sortedKursi = uniqueKursi
+      .map((k) => ({
+        ...k,
+        status:
+          terpakai !== null
+            ? terpakai.has(String(k.nomor_kursi))
+              ? 'terisi'
+              : 'kosong'
+            : k.status,
+      }))
+      .sort((a, b) => {
+        const numA = parseInt(a.nomor_kursi, 10)
+        const numB = parseInt(b.nomor_kursi, 10)
+        return numA - numB
+      })
 
     setKursi(sortedKursi)
   }
@@ -63,13 +96,14 @@ function KursiContent() {
       }
 
       await bersihkanPesananExpired()
-      await fetchKursi()
 
       const { data: j } = await supabase
         .from('jadwal')
-        .select('kapal_id')
+        .select('kapal_id, tanggal, jam_berangkat, rute_asal, rute_tujuan')
         .eq('id', jadwalId)
         .single()
+
+      await fetchKursi(j as any)
 
       if (j?.kapal_id) {
         const { data: kap } = await supabase

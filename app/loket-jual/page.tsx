@@ -4,6 +4,7 @@ import { useEffect, useState, Suspense } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
 import { supabase, catatAudit } from '@/lib/supabase'
 import { snapshotFee } from '@/lib/fee'
+import { kunciKursi, lepasKunciKursi, nomorKursiTerpakai } from '@/lib/segmen'
 
 type ProfilePetugas = {
   id: string
@@ -130,14 +131,26 @@ function LoketJualContent() {
         kapasitas: kap?.kapasitas || 0,
       })
 
-      await fetchKursi()
+      await fetchKursi({
+        kapal_id: j.kapal_id,
+        tanggal: j.tanggal,
+        jam_berangkat: j.jam_berangkat,
+        rute_asal: j.rute_asal,
+        rute_tujuan: j.rute_tujuan,
+      })
       setLoading(false)
     }
 
     init()
   }, [jadwalId, router])
 
-  async function fetchKursi() {
+  async function fetchKursi(info?: {
+    kapal_id?: string
+    tanggal?: string
+    jam_berangkat?: string
+    rute_asal?: string
+    rute_tujuan?: string
+  }) {
     const { data: kursiData, error: errK } = await supabase
       .from('kursi')
       .select('id, nomor_kursi, status')
@@ -148,7 +161,27 @@ function LoketJualContent() {
       return
     }
 
+    // Status kursi per POTONGAN JALAN (segmen). Kalau tabel kursi_pakai belum
+    // ada, tetap pakai status lama (mode legacy).
+    let terpakai: Set<string> | null = null
+    if (info?.kapal_id && info?.tanggal && info?.jam_berangkat) {
+      const hasil = await nomorKursiTerpakai(supabase, {
+        kapal_id: info.kapal_id,
+        tanggal: info.tanggal,
+        jam_berangkat: info.jam_berangkat,
+        rute_asal: info.rute_asal || '',
+        rute_tujuan: info.rute_tujuan || '',
+      })
+      if (hasil.aktif) terpakai = hasil.nomor
+    }
+
     const kursiBersih = (kursiData || []).map((k: any) => {
+      if (terpakai) {
+        // Kursi dianggap terisi kalau intervalnya sudah dipakai, ATAU terjual
+        // di jadwal ini (data lama).
+        const dipakai = terpakai.has(String(k.nomor_kursi)) || k.status === 'terisi'
+        return { ...k, status: dipakai ? 'terisi' : 'kosong' }
+      }
       if (k.status === 'hold') {
         return { ...k, status: 'kosong' }
       }
@@ -300,10 +333,13 @@ function LoketJualContent() {
       const feeSnapshot = await snapshotFee(profile)
 
       const pesananData: any[] = []
+      const kunciList: { nomor_kursi: string; pesanan_id: string }[] = []
 
       penumpangList.forEach((p, idx) => {
         const indukId = generateUuid()
         const namaRapi = toTitleCase(p.nama);
+        const nomorKursi = kursiList.find((k) => k.id === kursiDipilih[idx])?.nomor_kursi
+        if (nomorKursi) kunciList.push({ nomor_kursi: String(nomorKursi), pesanan_id: indukId })
 
         pesananData.push({
           id: indukId,
@@ -350,12 +386,45 @@ function LoketJualContent() {
         })
       })
 
+      // Kunci kursi per potongan jalan dulu (jaminan DB). Kalau gagal, jangan
+      // simpan pesanan sama sekali.
+      const kunci = await kunciKursi(supabase, {
+        jadwal: {
+          kapal_id: jadwal.kapal_id,
+          tanggal: jadwal.tanggal,
+          jam_berangkat: jadwal.jam_berangkat,
+          rute_asal: jadwal.rute_asal,
+          rute_tujuan: jadwal.rute_tujuan,
+        },
+        kanal: kanalPesanan,
+        daftar: kunciList,
+        toleranIzin: true,
+      })
+
+      if (!kunci.ok) {
+        setError(kunci.pesan)
+        setLoadingSubmit(false)
+        setShowCashModal(false)
+        setShowQrisModal(false)
+        setStep('pilih-kursi')
+        setKursiDipilih([])
+        await fetchKursi({
+          kapal_id: jadwal.kapal_id,
+          tanggal: jadwal.tanggal,
+          jam_berangkat: jadwal.jam_berangkat,
+          rute_asal: jadwal.rute_asal,
+          rute_tujuan: jadwal.rute_tujuan,
+        })
+        return
+      }
+
       const { data: inserted, error: errInsert } = await supabase
         .from('pesanan')
         .insert(pesananData)
         .select()
 
       if (errInsert || !inserted) {
+        await lepasKunciKursi(supabase, kunciList.map((k) => k.pesanan_id))
         throw new Error('Gagal simpan pesanan: ' + (errInsert?.message || 'unknown'))
       }
 
