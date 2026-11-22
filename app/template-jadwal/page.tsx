@@ -257,12 +257,34 @@ function TemplateJadwalContent() {
   if (loading) return <p className="p-6 text-center text-gray-600 mt-10">Memuat data...</p>
   if (aksesError) return <p className="p-6 text-center text-red-600 mt-10">{aksesError}</p>
 
-  const grouped = templateList.reduce((acc, curr) => {
-    const key = `${curr.rute_asal} - ${curr.rute_tujuan}`
-    if (!acc[key]) acc[key] = []
-    acc[key].push(curr)
-    return acc
-  }, {} as Record<string, TemplateJadwal[]>)
+  // Kelompokkan per NAMA KAPAL dulu, baru per rute.
+  // Tujuan: semua rute yang dilayani satu kapal terlihat dalam satu kartu,
+  // jadi gampang dikontrol (kapal mana melayani rute apa saja).
+  type KelompokKapal = {
+    nama: string
+    kapasitas: number
+    total: number
+    rute: Record<string, TemplateJadwal[]>
+  }
+
+  const perKapal = Object.values(
+    templateList.reduce((acc, curr) => {
+      const namaKapal = curr.kapal?.nama || 'Kapal tidak dikenal'
+      if (!acc[namaKapal]) {
+        acc[namaKapal] = {
+          nama: namaKapal,
+          kapasitas: curr.kapal?.kapasitas || curr.kapasitas || 0,
+          total: 0,
+          rute: {},
+        }
+      }
+      const namaRute = `${curr.rute_asal} - ${curr.rute_tujuan}`
+      if (!acc[namaKapal].rute[namaRute]) acc[namaKapal].rute[namaRute] = []
+      acc[namaKapal].rute[namaRute].push(curr)
+      acc[namaKapal].total += 1
+      return acc
+    }, {} as Record<string, KelompokKapal>)
+  ).sort((a, b) => a.nama.localeCompare(b.nama))
 
   return (
     <div className="min-h-screen bg-gray-50 p-4 md:p-6">
@@ -409,55 +431,79 @@ function TemplateJadwalContent() {
         )}
 
         <div className="space-y-6">
-          {Object.keys(grouped).length === 0 && !loading && (
+          {perKapal.length === 0 && !loading && (
             <div className="text-center py-10 bg-white rounded-xl border border-dashed border-gray-300">
               <p className="text-gray-500">Belum ada jadwal yang dibuat.</p>
             </div>
           )}
 
-          {Object.entries(grouped).map(([rute, list]) => (
-            <div key={rute} className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-              <div className="bg-gray-50 px-4 py-3 border-b border-gray-200 flex justify-between items-center">
-                <h3 className="font-bold text-gray-900">Rute: {rute}</h3>
-                <span className="text-xs bg-gray-200 text-gray-700 px-2 py-1 rounded-full font-medium">{list.length} jadwal</span>
+          {perKapal.map((kapal) => {
+            // Rute diurutkan sesuai jam keberangkatan paling awal.
+            const daftarRute = Object.entries(kapal.rute).sort((a, b) => {
+              const jamA = a[1][0]?.jam_berangkat || ''
+              const jamB = b[1][0]?.jam_berangkat || ''
+              return jamA.localeCompare(jamB) || a[0].localeCompare(b[0])
+            })
+
+            return (
+              <div key={kapal.nama} className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+                {/* Header kapal */}
+                <div className="bg-blue-50 px-4 py-3 border-b border-blue-100 flex flex-wrap justify-between items-center gap-2">
+                  <div>
+                    <h3 className="font-bold text-gray-900">{kapal.nama}</h3>
+                    <p className="text-xs text-gray-600">
+                      Kapasitas {kapal.kapasitas} kursi &middot; {daftarRute.length} rute
+                    </p>
+                  </div>
+                  <span className="text-xs bg-blue-600 text-white px-2 py-1 rounded-full font-medium">
+                    {kapal.total} jadwal
+                  </span>
+                </div>
+
+                <div className="divide-y divide-gray-100">
+                  {daftarRute.map(([namaRute, list]) => (
+                    <div key={namaRute}>
+                      <div className="bg-gray-50 px-4 py-2 flex justify-between items-center">
+                        <p className="text-sm font-bold text-gray-800">Rute: {namaRute}</p>
+                        <span className="text-[11px] text-gray-500">{list.length} jadwal</span>
+                      </div>
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-sm text-left">
+                          <thead className="bg-white text-gray-500 border-b">
+                            <tr>
+                              <th className="px-4 py-3">Jam</th>
+                              <th className="px-4 py-3">Harga</th>
+                              <th className="px-4 py-3">Hari</th>
+                              <th className="px-4 py-3">Status</th>
+                              <th className="px-4 py-3 text-right">Aksi</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-gray-100">
+                            {list.map(t => (
+                              <tr key={t.id} className="hover:bg-gray-50">
+                                <td className="px-4 py-3 font-bold text-gray-900">{t.jam_berangkat.substring(0,5)}</td>
+                                <td className="px-4 py-3 text-gray-900">Rp {t.harga.toLocaleString('id-ID')}</td>
+                                <td className="px-4 py-3 text-gray-900 text-xs">{labelHari(t.hari_operasi)}</td>
+                                <td className="px-4 py-3">
+                                  <span className={`text-[10px] px-2 py-1 rounded-full font-bold ${t.aktif ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
+                                    {t.aktif ? 'AKTIF' : 'NONAKTIF'}
+                                  </span>
+                                </td>
+                                <td className="px-4 py-3 text-right space-x-2">
+                                  <button onClick={() => handleEdit(t)} className="text-blue-600 hover:underline font-medium">Edit</button>
+                                  <button onClick={() => handleHapus(t.id)} className="text-red-600 hover:underline font-medium">Hapus</button>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  ))}
+                </div>
               </div>
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm text-left">
-                  <thead className="bg-white text-gray-500 border-b">
-                    <tr>
-                      <th className="px-4 py-3">Jam</th>
-                      <th className="px-4 py-3">Kapal</th>
-                      <th className="px-4 py-3">Kapasitas</th>
-                      <th className="px-4 py-3">Harga</th>
-                      <th className="px-4 py-3">Hari</th>
-                      <th className="px-4 py-3">Status</th>
-                      <th className="px-4 py-3 text-right">Aksi</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-100">
-                    {list.map(t => (
-                      <tr key={t.id} className="hover:bg-gray-50">
-                        <td className="px-4 py-3 font-bold text-gray-900">{t.jam_berangkat.substring(0,5)}</td>
-                        <td className="px-4 py-3 text-gray-900">{t.kapal?.nama || '-'}</td>
-                        <td className="px-4 py-3 text-gray-900">{t.kapal?.kapasitas || t.kapasitas || 0} Kursi</td>
-                        <td className="px-4 py-3 text-gray-900">Rp {t.harga.toLocaleString('id-ID')}</td>
-                        <td className="px-4 py-3 text-gray-900 text-xs">{labelHari(t.hari_operasi)}</td>
-                        <td className="px-4 py-3">
-                          <span className={`text-[10px] px-2 py-1 rounded-full font-bold ${t.aktif ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
-                            {t.aktif ? 'AKTIF' : 'NONAKTIF'}
-                          </span>
-                        </td>
-                        <td className="px-4 py-3 text-right space-x-2">
-                          <button onClick={() => handleEdit(t)} className="text-blue-600 hover:underline font-medium">Edit</button>
-                          <button onClick={() => handleHapus(t.id)} className="text-red-600 hover:underline font-medium">Hapus</button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          ))}
+            )
+          })}
         </div>
       </div>
     </div>
