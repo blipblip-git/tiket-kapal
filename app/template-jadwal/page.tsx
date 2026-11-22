@@ -194,8 +194,15 @@ function TemplateJadwalContent() {
       }
 
       if (editId) {
+        const lama = templateList.find(t => t.id === editId)
         const { error: errUpd } = await supabase.from('template_jadwal').update(payload).eq('id', editId)
         if (errUpd) throw errUpd
+
+        // Harga hanya bisa diubah dari halaman ini. Kalau harganya berubah,
+        // ikutkan ke jadwal mendatang yang belum punya penjualan sama sekali.
+        if (!lama || Number(lama.harga) !== hargaFinal) {
+          await sinkronHargaJadwalMendatang(kapalId, ruteAsal, ruteTujuan, jamBerangkat, hargaFinal)
+        }
       } else {
         const { error: errIns } = await supabase.from('template_jadwal').insert(payload)
         if (errIns) throw errIns
@@ -209,6 +216,42 @@ function TemplateJadwalContent() {
     } finally {
       setProses(false)
     }
+  }
+
+  // Harga tiket HANYA boleh berubah dari Manajemen Jadwal.
+  // Saat harga sebuah rute diubah, jadwal mendatang yang belum punya penjualan
+  // ikut disesuaikan supaya tidak ada harga lama/karangan yang terpakai.
+  async function sinkronHargaJadwalMendatang(
+    kapalId: string,
+    asal: string,
+    tujuan: string,
+    jam: string,
+    hargaBaru: number
+  ) {
+    const hariIni = new Date(Date.now() + 8 * 60 * 60 * 1000).toISOString().split('T')[0]
+
+    const { data: jadwalTerkait } = await supabase
+      .from('jadwal')
+      .select('id')
+      .eq('kapal_id', kapalId)
+      .eq('rute_asal', asal)
+      .eq('rute_tujuan', tujuan)
+      .eq('jam_berangkat', jam)
+      .gte('tanggal', hariIni)
+
+    const ids = (jadwalTerkait || []).map((j: any) => j.id)
+    if (ids.length === 0) return
+
+    const { data: sudahDijual } = await supabase
+      .from('pesanan')
+      .select('jadwal_id')
+      .in('jadwal_id', ids)
+
+    const terjual = new Set((sudahDijual || []).map((p: any) => p.jadwal_id))
+    const bolehDiubah = ids.filter((id: string) => !terjual.has(id))
+    if (bolehDiubah.length === 0) return
+
+    await supabase.from('jadwal').update({ harga: hargaBaru }).in('id', bolehDiubah)
   }
 
   if (loading) return <p className="p-6 text-center text-gray-600 mt-10">Memuat data...</p>
@@ -342,7 +385,9 @@ function TemplateJadwalContent() {
 
               <p className="text-xs text-gray-500">
                 Kapasitas kursi otomatis mengikuti isian &quot;Kapasitas Kursi&quot; di Manajemen Kapal.
-                Harga baru hanya berlaku untuk jadwal yang dibuat setelah ini.
+                Harga tiket HANYA bisa diubah di halaman ini (Manajemen Jadwal).
+                Kalau harga diubah, jadwal mendatang yang belum ada penjualan otomatis ikut menyesuaikan;
+                tiket yang sudah terjual tidak berubah.
               </p>
 
               {kotaList.length === 0 && (

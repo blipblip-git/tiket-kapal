@@ -112,15 +112,20 @@ function JualTiketAgenContent() {
         );
         
         if (!existing) {
+          // Harga WAJIB dari Manajemen Jadwal. Template tanpa harga tidak dibuatkan jadwal.
+          const hargaTemplate = Number(t.harga)
+          if (!(hargaTemplate > 0)) continue
+
           newJadwalPayload.push({
             kapal_id: t.kapal_id,
             rute_asal: t.rute_asal,
             rute_tujuan: t.rute_tujuan,
             tanggal: tgl,
             jam_berangkat: t.jam_berangkat,
-            harga: t.harga || 150000,
+            harga: hargaTemplate,
             status: 'aktif',
             status_jadwal: 'open',
+            operator_id: t.operator_id || null,
           });
         }
       }

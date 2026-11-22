@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase, logoutOperator, catatAudit, getOperatorSession, type Profile } from '@/lib/supabase'
 import { beroperasiPada } from '@/lib/hari'
+import { idOperator } from '@/lib/tenant'
 
 type JadwalTampil = {
   id: string | null
@@ -177,7 +178,8 @@ export default function DashboardLoketPage() {
             rute_asal: t.rute_asal,
             rute_tujuan: t.rute_tujuan,
             jam_berangkat: jamStr,
-            harga: 150000,
+            // Harga selalu dari Manajemen Jadwal (template_jadwal) — tanpa harga cadangan.
+            harga: Number(t.harga) || 0,
             nama_kapal: kapal.nama,
             kapal_id: kapal.id,
             kapasitas: kapal.kapasitas,
@@ -333,6 +335,12 @@ export default function DashboardLoketPage() {
     let jadwalId = j.id
 
     if (j.isGenerated || !jadwalId) {
+      // Harga tiket wajib berasal dari Manajemen Jadwal. Kalau kosong, jangan dijual.
+      if (!(j.harga > 0)) {
+        alert('Harga rute ini belum diisi di Manajemen Jadwal. Isi dulu harganya, lalu coba lagi.')
+        return
+      }
+
       const { data: existing } = await supabase
         .from('jadwal')
         .select('id')
@@ -356,6 +364,8 @@ export default function DashboardLoketPage() {
             jam_berangkat: j.jam_berangkat,
             harga: j.harga,
             status: 'aktif',
+            status_jadwal: 'open',
+            operator_id: idOperator(profile),
           })
           .select()
           .single()
@@ -536,7 +546,9 @@ export default function DashboardLoketPage() {
 
                   {/* SISI KANAN: HARGA & AKSI */}
                   <div className="text-right flex flex-col items-end gap-2 flex-shrink-0 ml-2">
-                    <p className="font-bold text-xs md:text-base text-blue-600">Rp {j.harga.toLocaleString('id-ID')}</p>
+                    <p className="font-bold text-xs md:text-base text-blue-600">
+                      {j.harga > 0 ? `Rp ${j.harga.toLocaleString('id-ID')}` : 'Harga belum diisi'}
+                    </p>
                     
                     <div className="flex flex-col gap-1 mt-1 w-full items-end">
                       {j.status === 'open' && (

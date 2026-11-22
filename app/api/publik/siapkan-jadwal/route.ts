@@ -80,6 +80,10 @@ export async function POST(request: Request) {
 
     const baru: any[] = []
     for (const t of templatesOperasi as any[]) {
+      // Harga WAJIB dari Manajemen Jadwal (template_jadwal). Tanpa harga, jadwal tidak dibuat.
+      const hargaTemplate = Number(t.harga)
+      if (!(hargaTemplate > 0)) continue
+
       const sudahAda = jadwalData.find(
         (j) => j.kapal_id === t.kapal_id && j.jam_berangkat === t.jam_berangkat
       )
@@ -90,7 +94,7 @@ export async function POST(request: Request) {
           rute_tujuan: t.rute_tujuan,
           tanggal,
           jam_berangkat: t.jam_berangkat,
-          harga: t.harga || 150000,
+          harga: hargaTemplate,
           status: 'aktif',
           status_jadwal: 'open',
           operator_id: operatorId || t.operator_id || null

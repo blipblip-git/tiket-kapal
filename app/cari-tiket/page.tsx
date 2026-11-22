@@ -123,15 +123,25 @@ function CariTiketContent() {
       // Hanya template yang beroperasi pada hari dari tanggal yang dipilih.
       const templatesOperasi = (templates || []).filter((t: any) => beroperasiPada(tgl, t.hari_operasi))
 
-      if (templatesOperasi.length > 0) {
-        const newJadwalPayload = templatesOperasi.map((t) => ({
+      // Harga WAJIB ikut Manajemen Jadwal (template_jadwal). Tidak ada harga cadangan:
+      // template tanpa harga dilewati supaya tiket tidak pernah terjual dengan harga karangan.
+      const templatesSiap = (templatesOperasi as any[]).filter((t) => Number(t.harga) > 0)
+
+      if (templatesOperasi.length > 0 && templatesSiap.length === 0) {
+        console.warn('Harga jadwal belum diisi di Manajemen Jadwal untuk rute ini.')
+      }
+
+      if (templatesSiap.length > 0) {
+        const newJadwalPayload = templatesSiap.map((t) => ({
           kapal_id: t.kapal_id,
           rute_asal: t.rute_asal,
           rute_tujuan: t.rute_tujuan,
           tanggal: tgl,
           jam_berangkat: t.jam_berangkat,
-          harga: 150000, 
+          harga: Number(t.harga),
+          status: 'aktif',
           status_jadwal: 'open',
+          operator_id: t.operator_id || null,
         }))
 
         const { data: insertedJadwal, error: insertError } = await supabase
@@ -144,7 +154,12 @@ function CariTiketContent() {
           
           const kursiPayload: any[] = []
           for (const j of insertedJadwal) {
-            const t = templatesOperasi.find((x: any) => x.jam_berangkat === j.jam_berangkat)
+            const t = templatesSiap.find((x: any) =>
+              x.kapal_id === j.kapal_id &&
+              x.rute_asal === j.rute_asal &&
+              x.rute_tujuan === j.rute_tujuan &&
+              x.jam_berangkat === j.jam_berangkat
+            )
             const kapasitas = t?.kapal?.kapasitas || 0
             if (kapasitas > 0) {
               for (let i = 1; i <= kapasitas; i++) {
