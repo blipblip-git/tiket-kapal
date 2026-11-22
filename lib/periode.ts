@@ -50,6 +50,14 @@ export function formatRupiah(nilai: number): string {
   return `Rp ${nilai.toLocaleString('id-ID')}`
 }
 
+// "07:00:00" / "7.00" / "15:30" -> "07:00" / "15:30" (24 jam, tanpa detik & tanpa AM/PM)
+export function formatJam(jam?: string | null): string {
+  if (!jam) return '-'
+  const cocok = /^(\d{1,2})[:.](\d{2})/.exec(String(jam).trim())
+  if (!cocok) return String(jam)
+  return `${cocok[1].padStart(2, '0')}:${cocok[2]}`
+}
+
 // Tanggal cetak hari ini: "18/11/2026"
 export function tanggalCetakSekarang(): string {
   const now = new Date()

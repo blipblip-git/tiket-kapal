@@ -5,6 +5,7 @@ import { useSearchParams, useRouter } from 'next/navigation'
 import { supabase, getOperatorSession } from '@/lib/supabase'
 import { fetchPublik } from '@/lib/publikFetch'
 import { ambilPesananPublik } from '@/lib/publikPesanan'
+import { formatJam } from '@/lib/periode'
 
 type PesananItem = {
   id: string
@@ -192,7 +193,7 @@ function PembayaranContent() {
               </div>
               <div className="flex justify-between">
                 <span className="text-gray-600">Jam</span>
-                <span className="font-medium text-gray-900">{detail.jam_berangkat}</span>
+                <span className="font-medium text-gray-900">{formatJam(detail.jam_berangkat)}</span>
               </div>
             </div>
             

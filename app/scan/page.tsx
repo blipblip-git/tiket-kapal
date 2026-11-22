@@ -4,6 +4,7 @@ import { useEffect, useState, useRef, Suspense } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase, getProfile, getOperatorSession, type Profile } from '@/lib/supabase'
 import { Html5Qrcode } from 'html5-qrcode'
+import { formatJam } from '@/lib/periode'
 
 type HasilScan = {
   status: 'valid' | 'sudah_boarding' | 'tidak_valid' | 'terlalu_awal' | 'terlambat' | 'salah_rute'
@@ -231,7 +232,7 @@ function ScanContent() {
       if (selisihMenit < -5) {
         setHasil({
           status: 'terlambat',
-          pesan: `Tiket hangus! Sudah melewati batas toleransi 5 menit dari jam keberangkatan (${j.jam_berangkat}).`
+          pesan: `Tiket hangus! Sudah melewati batas toleransi 5 menit dari jam keberangkatan (${formatJam(j.jam_berangkat)}).`
         })
         return
       }
@@ -387,7 +388,7 @@ function ScanContent() {
                   {hasil.balita && hasil.balita.length > 0 && (
                     <p>Balita ({hasil.balita.length}): <b>{hasil.balita.map((b) => b.nama_penumpang).join(', ')}</b></p>
                   )}
-                  <p>Kapal: {hasil.pesanan.jadwal?.rute_asal} &rarr; {hasil.pesanan.jadwal?.rute_tujuan} ({hasil.pesanan.jadwal?.jam_berangkat})</p>
+                  <p>Kapal: {hasil.pesanan.jadwal?.rute_asal} &rarr; {hasil.pesanan.jadwal?.rute_tujuan} ({formatJam(hasil.pesanan.jadwal?.jam_berangkat)})</p>
                 </div>
               )}
               {hasil.status !== 'valid' && (

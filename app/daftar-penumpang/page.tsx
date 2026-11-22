@@ -3,6 +3,7 @@
 import { useEffect, useState, Suspense } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
 import { supabase, getOperatorSession, getProfile } from '@/lib/supabase'
+import { formatJam } from '@/lib/periode'
 
 type Penumpang = {
   id: string
@@ -130,7 +131,7 @@ function DaftarPenumpangContent() {
               {detailJadwal.rute_asal} → {detailJadwal.rute_tujuan} • {detailJadwal.nama_kapal}
             </p>
             <p className="text-sm text-gray-600">
-              {detailJadwal.tanggal} • Jam {detailJadwal.jam_berangkat}
+              {detailJadwal.tanggal} • Jam {formatJam(detailJadwal.jam_berangkat)}
             </p>
           </div>
           <button onClick={handleKembali} className="text-sm bg-white px-4 py-2 rounded shadow-sm border border-gray-200 hover:bg-gray-50 text-gray-700 font-medium">

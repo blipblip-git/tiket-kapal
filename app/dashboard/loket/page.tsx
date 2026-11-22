@@ -6,6 +6,7 @@ import { supabase, logoutOperator, catatAudit, getOperatorSession, type Profile 
 import { beroperasiPada } from '@/lib/hari'
 import { idOperator } from '@/lib/tenant'
 import { lepasKunciKursi, nomorKursiTerpakai } from '@/lib/segmen'
+import { formatJam } from '@/lib/periode'
 
 type JadwalTampil = {
   id: string | null
@@ -494,7 +495,7 @@ export default function DashboardLoketPage() {
                   <div key={g.grup_id} className="bg-white border rounded overflow-hidden">
                     <div className="bg-gray-50 px-4 py-2 border-b flex justify-between items-center">
                       <div className="text-xs text-gray-600">
-                        <b>Rute:</b> {g.rute_asal} → {g.rute_tujuan} • <b>Jam:</b> {g.jam_berangkat} • <b>HP:</b> {g.nomor_hp} • <span className="text-gray-400">Dipesan {formatWaktu(g.waktu_pesan_terawal)}</span>
+                        <b>Rute:</b> {g.rute_asal} → {g.rute_tujuan} • <b>Jam:</b> {formatJam(g.jam_berangkat)} • <b>HP:</b> {g.nomor_hp} • <span className="text-gray-400">Dipesan {formatWaktu(g.waktu_pesan_terawal)}</span>
                       </div>
                       <label className="flex items-center gap-2 cursor-pointer text-xs font-bold text-gray-700">
                         <input type="checkbox" checked={isAllSelected} onChange={() => toggleGrup(g)} className="w-4 h-4 text-blue-600 rounded" />
@@ -555,7 +556,7 @@ export default function DashboardLoketPage() {
                   <div className="flex items-center gap-3 md:gap-4 flex-1">
 
                     <div>
-                      <p className="font-bold text-sm md:text-base text-gray-900">{j.jam_berangkat}</p>
+                      <p className="font-bold text-sm md:text-base text-gray-900">{formatJam(j.jam_berangkat)}</p>
                       <p className="text-xs md:text-sm font-bold text-blue-700">{j.rute_asal} - {j.rute_tujuan}</p>
                       <p className="text-[10px] md:text-xs text-gray-700">{j.nama_kapal}</p>
                       <p className="text-[10px] md:text-xs text-gray-700 mt-1">

@@ -4,6 +4,7 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase, getProfile, getOperatorSession, type Profile } from '@/lib/supabase'
+import Jam24 from '@/components/Jam24'
 
 export default function PengaturanPage() {
   const router = useRouter()
@@ -136,11 +137,11 @@ export default function PengaturanPage() {
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Jam Mulai Kerja</label>
-                  <input type="time" value={jamMulai} onChange={(e) => setJamMulai(e.target.value)} className="w-full border rounded px-3 py-2 text-gray-900" />
+                  <Jam24 value={jamMulai} onChange={setJamMulai} ariaLabel="Jam mulai kerja" />
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Jam Selesai Kerja</label>
-                  <input type="time" value={jamSelesai} onChange={(e) => setJamSelesai(e.target.value)} className="w-full border rounded px-3 py-2 text-gray-900" />
+                  <Jam24 value={jamSelesai} onChange={setJamSelesai} ariaLabel="Jam selesai kerja" />
                 </div>
               </div>
               <p className="text-xs text-gray-500 mt-2">Jika petugas login melewati jam selesai, sistem akan otomatis mengeluarkan mereka (logout).</p>

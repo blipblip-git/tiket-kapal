@@ -6,6 +6,7 @@ import { supabase, getProfile, getOperatorSession, type Profile } from '@/lib/su
 import { idOperator } from '@/lib/tenant'
 import { SEMUA_HARI, LABEL_HARI, labelHari, hariOperasiAktif, type NamaHari } from '@/lib/hari'
 import { bersihkanJadwalTurunan, setStatusJadwalTurunan } from '@/lib/bersihJadwal'
+import Jam24 from '@/components/Jam24'
 
 type TemplateJadwal = {
   id: string
@@ -391,7 +392,8 @@ function TemplateJadwalContent() {
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Jam Berangkat *</label>
-                  <input type="time" value={jamBerangkat} onChange={e => setJamBerangkat(e.target.value)} className="w-full border rounded-md px-3 py-2 text-gray-900 focus:ring-blue-500 focus:border-blue-500" required />
+                  <Jam24 value={jamBerangkat} onChange={setJamBerangkat} required ariaLabel="Jam berangkat" />
+                  <p className="text-xs text-gray-500 mt-1">Pilih jam lalu menit. Format 24 jam, contoh 15 : 00 = jam 3 sore.</p>
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Harga (Rp) *</label>
