@@ -2,12 +2,10 @@
 
 import { useEffect, useState, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { supabase, getProfile, getOperatorSession, type Profile } from '@/lib/supabase'
+import { getProfile, getOperatorSession, type Profile } from '@/lib/supabase'
 import { bulanSekarang } from '@/lib/periode'
-import { idOperator, ambilOperatorKapal, cocokOperator } from '@/lib/tenant'
 import { muatLokasiAgen } from '@/lib/laporanFee'
-
-type RuteKapal = { rute_asal: string; rute_tujuan: string }
+import { muatRutePemilik, urutkanRute, ujungRute, type RuteKapal } from '@/lib/rute'
 
 type Kartu = {
   label: string
@@ -60,58 +58,13 @@ function LaporanPenjualanAdminContent() {
     init()
   }, [router])
 
-  // Ambil rute milik penyewa sendiri (Master Rute, cadangan: jadwal kapalnya).
-  // Tidak ada rute bawaan: kalau penyewa belum input, daftar ini kosong.
+  // Ambil rute milik penyewa sendiri lewat sumber tunggal lib/rute.ts
+  // (Master Rute + template Manajemen Jadwal + jadwal yang sudah ada).
   useEffect(() => {
     async function muatRute() {
       if (!profile) return
-      const operatorId = idOperator(profile)
-
-      const kumpulan: RuteKapal[] = []
-
-      let qRute = supabase.from('master_rute').select('rute_asal, rute_tujuan, operator_id').order('created_at', { ascending: true })
-      // Baris Master Rute ber-operator_id NULL = rute umum (dibuat superadmin),
-      // jadi ikut dibaca semua penyewa. Rute penyewa lain tetap tersaring.
-      if (operatorId) qRute = qRute.or(`operator_id.eq.${operatorId},operator_id.is.null`)
-      const { data: dataRute } = await qRute
-      ;(dataRute || []).forEach((r: any) => {
-        if (r.rute_asal && r.rute_tujuan) kumpulan.push({ rute_asal: r.rute_asal, rute_tujuan: r.rute_tujuan })
-      })
-
-      // Rute dari Manajemen Jadwal (template). Form jadwal sekarang TIDAK lagi
-      // mengisi master_rute, jadi ini sumber utama kartu untuk penyewa baru.
-      let qTemplate = supabase.from('template_jadwal').select('rute_asal, rute_tujuan, kapal_id, operator_id')
-      // Sertakan template lama yang operator_id-nya NULL; pemiliknya ditentukan
-      // lewat kapal oleh cocokOperator() di bawah.
-      if (operatorId) qTemplate = qTemplate.or(`operator_id.eq.${operatorId},operator_id.is.null`)
-      const { data: dataTemplate } = await qTemplate
-      const petaOperatorKapalTemplate = await ambilOperatorKapal(
-        (dataTemplate || []).map((t: any) => t.kapal_id)
-      )
-      ;(dataTemplate || []).forEach((t: any) => {
-        if (!t.rute_asal || !t.rute_tujuan) return
-        if (!cocokOperator(t, operatorId, petaOperatorKapalTemplate)) return
-        kumpulan.push({ rute_asal: t.rute_asal, rute_tujuan: t.rute_tujuan })
-      })
-
-      // Rute yang sudah pernah dipakai di jadwal milik penyewa ini
-      // (termasuk jadwal lama yang operator_id-nya NULL).
-      const { data: dataJadwal } = await supabase
-        .from('jadwal')
-        .select('rute_asal, rute_tujuan, kapal_id, operator_id')
-        .limit(1000)
-      const petaOperatorKapal = await ambilOperatorKapal(
-        (dataJadwal || []).map((j: any) => j.kapal_id)
-      )
-      ;(dataJadwal || []).forEach((j: any) => {
-        if (!j.rute_asal || !j.rute_tujuan) return
-        if (!cocokOperator(j, operatorId, petaOperatorKapal)) return
-        kumpulan.push({ rute_asal: j.rute_asal, rute_tujuan: j.rute_tujuan })
-      })
-
-      const unik = Array.from(new Map(kumpulan.map(r => [`${r.rute_asal}|${r.rute_tujuan}`, r])).values())
-      // Urutan mengikuti urutan input penyewa (bukan urutan nama daerah).
-      setRuteList(unik)
+      const daftarRute = await muatRutePemilik(profile)
+      setRuteList(urutkanRute(daftarRute))
 
       // Daerah untuk Laporan Fee = lokasi agen yang terdaftar di penyewa ini.
       const daftarLokasiFee = await muatLokasiAgen(profile)
@@ -128,10 +81,7 @@ function LaporanPenjualanAdminContent() {
 
   const bulanAktif = bulanSekarang()
 
-  // Semua kartu dibentuk dari data milik penyewa sendiri (Master Rute, template
-  // Manajemen Jadwal, atau jadwal kapalnya). Penyewa baru / belum input = tanpa kartu.
-  //
-  // Daerah keberangkatan (asal) dipakai untuk Laporan Gabungan.
+  // Daerah keberangkatan (asal) -> syarat Laporan Gabungan.
   const kotaAsal = Array.from(
     new Set(ruteList.map(r => (r.rute_asal || '').trim()).filter(Boolean))
   )
@@ -140,17 +90,11 @@ function LaporanPenjualanAdminContent() {
   // asal DAN tujuan. Jadi rute Tarakan → Nunukan langsung memunculkan
   // "Laporan Tarakan" + "Laporan Nunukan" sejak diinput di Manajemen Jadwal,
   // walau arah balik belum dibuat dan belum ada penjualan sama sekali.
-  const kotaList = Array.from(
-    new Set(
-      ruteList
-        .flatMap(r => [r.rute_asal, r.rute_tujuan])
-        .map(s => (s || '').trim())
-        .filter(Boolean)
-    )
-  )
+  const kotaList = ujungRute(ruteList)
   const warnaKota = (idx: number) => WARNA_RUTE[idx % WARNA_RUTE.length]
 
-  const menuUtama: Kartu[] = kotaList.map((kota, idx) => ({
+  // Panel kanan untuk menu "Laporan Penjualan Daerah".
+  const menuDaerah: Kartu[] = kotaList.map((kota, idx) => ({
     label: `Laporan ${kota}`,
     deskripsi: `Rekap penjualan keberangkatan dari ${kota}`,
     color: warnaKota(idx),
@@ -158,7 +102,7 @@ function LaporanPenjualanAdminContent() {
   }))
 
   if (kotaAsal.length >= 2) {
-    menuUtama.push({
+    menuDaerah.push({
       label: 'Laporan Gabungan',
       deskripsi: `Perbandingan pendapatan ${kotaAsal.join(' & ')}`,
       color: 'bg-purple-50 border-purple-200 text-purple-800 hover:bg-purple-100',
@@ -166,26 +110,7 @@ function LaporanPenjualanAdminContent() {
     })
   }
 
-  if (ruteList.length > 0) {
-    menuUtama.push({
-      label: 'Manifest Kapal',
-      deskripsi: 'Daftar penumpang dan status boarding (per rute)',
-      color: 'bg-orange-50 border-orange-200 text-orange-800 hover:bg-orange-100',
-      link: '/laporan-penjualan-admin?menu=manifest'
-    })
-  }
-
-  // Laporan Fee hanya muncul kalau penyewa sudah punya agen (ada lokasi agen).
-  if (lokasiFee.length > 0) {
-    menuUtama.push({
-      label: 'Laporan Fee',
-      deskripsi: 'Fee per tiket untuk semua agen di setiap daerah (harian & bulanan)',
-      color: 'bg-red-50 border-red-200 text-red-800 hover:bg-red-100',
-      link: '/laporan-penjualan-admin?menu=fee'
-    })
-  }
-
-  const subMenu: { [key: string]: { judul: string; deskripsi: string; kartu: Kartu[] } } = {}
+  const subMenu: { [key: string]: { judul: string; deskripsi: string; kartu: Kartu[]; kosong?: string } } = {}
 
   kotaList.forEach((kota, idx) => {
     subMenu[`kota:${kota}`] = {
@@ -208,50 +133,92 @@ function LaporanPenjualanAdminContent() {
     }
   })
 
-  // Submenu Laporan Fee: pilih daerah dulu, lalu Harian / Bulanan.
-  if (lokasiFee.length > 0) {
-    subMenu.fee = {
-      judul: 'Laporan Fee',
-      deskripsi: 'Pilih daerah untuk melihat fee agen',
-      kartu: lokasiFee.map((lokasi, idx) => ({
-        label: `Laporan Fee ${lokasi}`,
-        deskripsi: 'Fee harian & bulanan semua agen di daerah ini',
-        color: WARNA_FEE[idx % WARNA_FEE.length],
-        link: `/laporan-penjualan-admin?menu=fee:${encodeURIComponent(lokasi)}`
-      }))
-    }
+  // Normalisasi tautan lama (bookmark / tombol Kembali versi sebelumnya):
+  //   ?menu=tarakan            -> kota:Tarakan
+  //   ?menu=fee:Tarakan        -> fee:agen:Tarakan
+  const menuMentah = (menuParam || 'daerah').trim()
+  let menu = menuMentah
+  if (menu === 'tarakan') menu = 'kota:Tarakan'
+  if (menu === 'tanjung-selor') menu = 'kota:Tanjung Selor'
+  if (menu === 'kota:tarakan') menu = 'kota:Tarakan'
+  if (menu === 'kota:tanjung-selor') menu = 'kota:Tanjung Selor'
+  if (menu.startsWith('fee:') && menu !== 'fee:agen' && menu !== 'fee:platform' && !menu.startsWith('fee:agen:')) {
+    menu = `fee:agen:${menu.slice('fee:'.length)}`
+  }
 
-    lokasiFee.forEach((lokasi) => {
-      subMenu[`fee:${lokasi}`] = {
-        judul: `Laporan Fee ${lokasi}`,
-        deskripsi: 'Semua agen ditampilkan, fee dihitung per tiket dewasa',
-        kartu: [
-          {
-            label: 'Laporan Fee Harian',
-            deskripsi: 'Rekap fee per jam & kapal untuk 1 tanggal',
-            color: WARNA_FEE[0],
-            link: `/laporan-fee-harian?lokasi=${encodeURIComponent(lokasi)}`
-          },
-          {
-            label: 'Laporan Fee Bulanan',
-            deskripsi: 'Rekap fee per tanggal & kapal dalam 1 bulan',
-            color: WARNA_FEE[1],
-            link: `/laporan-fee-bulanan?lokasi=${encodeURIComponent(lokasi)}`
-          }
-        ]
+  // Laporan Fee: 2 kartu (Agen & Platform), lalu turun ke detail masing-masing.
+  // Selalu tampil (bukan hanya saat ada agen) supaya menu utama tetap 3 kartu.
+  subMenu.fee = {
+    judul: 'Laporan Fee',
+    deskripsi: 'Pilih jenis fee yang ingin dilihat',
+    kartu: [
+      {
+        label: 'Laporan Fee Agen',
+        deskripsi: 'Fee per tiket untuk semua agen di setiap daerah (harian & bulanan)',
+        color: WARNA_FEE[0],
+        link: '/laporan-penjualan-admin?menu=fee:agen'
+      },
+      {
+        label: 'Laporan Fee Platform',
+        deskripsi: 'Fee platform dari penjualan offline dan online (harian & bulanan)',
+        color: WARNA_FEE[1],
+        link: '/laporan-penjualan-admin?menu=fee:platform'
       }
-    })
+    ]
   }
 
-  // Kompatibilitas tautan lama (bookmark / tombol Kembali versi sebelumnya).
-  const aliasMenuLama: { [slug: string]: string } = {
-    tarakan: 'Tarakan',
-    'tanjung-selor': 'Tanjung Selor'
+  subMenu['fee:agen'] = {
+    judul: 'Laporan Fee Agen',
+    deskripsi: 'Pilih daerah untuk melihat fee agen',
+    kartu: lokasiFee.map((lokasi, idx) => ({
+      label: `Laporan Fee ${lokasi}`,
+      deskripsi: 'Fee harian & bulanan semua agen di daerah ini',
+      color: WARNA_FEE[idx % WARNA_FEE.length],
+      link: `/laporan-penjualan-admin?menu=fee:agen:${encodeURIComponent(lokasi)}`
+    })),
+    kosong: 'Belum ada agen terdaftar. Tambahkan agen di Manajemen Agen untuk melihat laporan fee agen.'
   }
-  Object.entries(aliasMenuLama).forEach(([slug, kota]) => {
-    const menuKota = subMenu[`kota:${kota}`]
-    if (menuKota) subMenu[slug] = menuKota
+
+  lokasiFee.forEach((lokasi) => {
+    const kartuFee: Kartu[] = [
+      {
+        label: 'Laporan Fee Harian',
+        deskripsi: 'Rekap fee per jam & kapal untuk 1 tanggal',
+        color: WARNA_FEE[0],
+        link: `/laporan-fee-harian?lokasi=${encodeURIComponent(lokasi)}`
+      },
+      {
+        label: 'Laporan Fee Bulanan',
+        deskripsi: 'Rekap fee per tanggal & kapal dalam 1 bulan',
+        color: WARNA_FEE[1],
+        link: `/laporan-fee-bulanan?lokasi=${encodeURIComponent(lokasi)}`
+      }
+    ]
+    subMenu[`fee:agen:${lokasi}`] = {
+      judul: `Laporan Fee ${lokasi}`,
+      deskripsi: 'Semua agen ditampilkan, fee dihitung per tiket dewasa',
+      kartu: kartuFee
+    }
   })
+
+  subMenu['fee:platform'] = {
+    judul: 'Laporan Fee Platform',
+    deskripsi: 'Pilih kanal penjualan',
+    kartu: [
+      {
+        label: 'Laporan Fee Offline',
+        deskripsi: 'Fee platform dari penjualan agen, loket, mobile, dan petugas',
+        color: WARNA_FEE[0],
+        link: '/laporan-fee-platform?kanal=offline&mode=harian'
+      },
+      {
+        label: 'Laporan Fee Online',
+        deskripsi: 'Fee platform dari penjualan online (web)',
+        color: WARNA_FEE[1],
+        link: '/laporan-fee-platform?kanal=online&mode=harian'
+      }
+    ]
+  }
 
   if (kotaAsal.length >= 2) {
     subMenu.gabungan = {
@@ -274,58 +241,133 @@ function LaporanPenjualanAdminContent() {
     }
   }
 
+  // Manifest = SEMUA rute milik kapal penyewa (bukan cuma 1 daerah).
   if (ruteList.length > 0) {
     subMenu.manifest = {
       judul: 'Manifest Kapal',
-      deskripsi: 'Pilih rute keberangkatan untuk melihat manifest penumpang',
+      deskripsi: 'Semua rute milik kapal Anda (termasuk rute tanpa penumpang)',
       kartu: ruteList.map((r, idx) => ({
-        label: `Manifest ${r.rute_asal}`,
-        deskripsi: `Daftar penumpang rute ${r.rute_asal} → ${r.rute_tujuan}`,
+        label: `Manifest ${r.rute_asal} → ${r.rute_tujuan}`,
+        deskripsi: `Daftar penumpang & status boarding rute ${r.rute_asal} → ${r.rute_tujuan}`,
         color: warnaKota(idx),
         link: `/superadmin/pusat-kontrol/admin/manifest?lokasi=${encodeURIComponent(r.rute_asal)}&tujuan=${encodeURIComponent(r.rute_tujuan)}`
       }))
     }
   }
 
-  const subAktif = menuParam ? subMenu[menuParam] : null
-  const menuTampil: Kartu[] = subAktif ? subAktif.kartu : menuUtama
+  // Sidebar vertikal: 3 kartu utama (Daerah, Manifest, Fee).
+  const navUtama = [
+    {
+      kunci: 'daerah',
+      label: 'Laporan Penjualan Daerah',
+      deskripsi: 'Kartu laporan per daerah',
+      link: '/laporan-penjualan-admin?menu=daerah'
+    },
+    ...(ruteList.length > 0
+      ? [{
+          kunci: 'manifest',
+          label: 'Manifest Kapal',
+          deskripsi: 'Manifest per rute kapal',
+          link: '/laporan-penjualan-admin?menu=manifest'
+        }]
+      : []),
+    {
+      kunci: 'fee',
+      label: 'Laporan Fee',
+      deskripsi: 'Fee agen & fee platform',
+      link: '/laporan-penjualan-admin?menu=fee'
+    }
+  ]
+  const navAktif = menu === 'manifest' ? 'manifest' : menu.startsWith('fee') ? 'fee' : 'daerah'
+
+  // Menu induk untuk tombol Kembali (kosong = sudah di level teratas).
+  const indukMenu =
+    menu.startsWith('kota:') || menu === 'gabungan'
+      ? 'daerah'
+      : menu.startsWith('fee:agen:')
+        ? 'fee:agen'
+        : menu === 'fee:agen' || menu === 'fee:platform'
+          ? 'fee'
+          : ''
+
+  const subAktif: { judul: string; deskripsi: string; kartu: Kartu[]; kosong?: string } | null =
+    menu === 'daerah'
+      ? { judul: 'Laporan Penjualan Daerah', deskripsi: 'Pilih daerah yang ingin dilihat', kartu: menuDaerah }
+      : subMenu[menu] || null
+  const menuTampil: Kartu[] = subAktif ? subAktif.kartu : menuDaerah
 
   return (
     <div className="min-h-screen bg-gray-50 p-4 md:p-6">
-      <div className="max-w-4xl mx-auto">
-        
-        <div className="flex justify-between items-center mb-6">
+      <div className="max-w-6xl mx-auto">
+
+        <div className="flex justify-between items-start gap-3 mb-5">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">{subAktif ? subAktif.judul : 'Laporan Penjualan'}</h1>
-            <p className="text-sm text-gray-600">{subAktif ? subAktif.deskripsi : 'Pilih jenis laporan yang ingin Anda lihat'}</p>
+            <h1 className="text-2xl font-bold text-gray-900">Laporan Penjualan</h1>
+            <p className="text-sm text-gray-600">Pilih jenis laporan yang ingin Anda lihat</p>
           </div>
-          <button onClick={() => router.push(subAktif ? '/laporan-penjualan-admin' : '/dashboard')} className="text-sm text-blue-600 hover:underline bg-white px-3 py-1.5 rounded border border-gray-200">
+          <button
+            onClick={() => router.push(indukMenu ? `/laporan-penjualan-admin?menu=${encodeURIComponent(indukMenu)}` : '/dashboard')}
+            className="text-sm text-blue-600 hover:underline bg-white px-3 py-1.5 rounded border border-gray-200"
+          >
             &larr; Kembali
           </button>
         </div>
 
-        {menuTampil.length === 0 ? (
-          <div className="bg-white border border-gray-200 rounded-xl p-8 text-center">
-            <p className="text-sm text-gray-600">
-              Belum ada rute terdaftar untuk akun ini. Kartu laporan daerah muncul otomatis
-              setelah rute diinput di Manajemen Jadwal atau Master Rute, walau belum ada
-              penjualan.
-            </p>
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6">
-            {menuTampil.map((menu, idx) => (
+        <div className="grid grid-cols-1 md:grid-cols-[280px_1fr] gap-4 md:gap-6 items-start">
+          {/* Sidebar vertikal (kiri) */}
+          <aside className="flex flex-col gap-3 md:sticky md:top-4">
+            {navUtama.map((nav) => (
               <button
-                key={idx}
-                onClick={() => router.push(menu.link)}
-                className={`flex flex-col items-start p-6 rounded-xl border-2 transition-all shadow-sm ${menu.color}`}
+                key={nav.kunci}
+                onClick={() => router.push(nav.link)}
+                className={`text-left p-4 rounded-xl border-2 transition-all shadow-sm ${
+                  navAktif === nav.kunci
+                    ? 'bg-blue-600 border-blue-600 text-white'
+                    : 'bg-white border-gray-200 text-gray-900 hover:bg-gray-50'
+                }`}
               >
-                <h2 className="text-xl font-bold mb-2">{menu.label}</h2>
-                <p className="text-sm opacity-80 text-left">{menu.deskripsi}</p>
+                <p className="text-sm md:text-base font-bold">{nav.label}</p>
+                <p className={`text-xs mt-1 ${navAktif === nav.kunci ? 'text-blue-100' : 'text-gray-500'}`}>
+                  {nav.deskripsi}
+                </p>
               </button>
             ))}
-          </div>
-        )}
+          </aside>
+
+          {/* Panel kanan */}
+          <main className="bg-white rounded-xl border border-gray-200 p-4 md:p-5 shadow-sm">
+            <div className="mb-4">
+              <h2 className="text-lg md:text-xl font-bold text-gray-900">
+                {subAktif?.judul || 'Laporan Penjualan Daerah'}
+              </h2>
+              <p className="text-xs md:text-sm text-gray-600">
+                {subAktif?.deskripsi || 'Pilih daerah yang ingin dilihat'}
+              </p>
+            </div>
+
+            {menuTampil.length === 0 ? (
+              <div className="border border-dashed border-gray-300 rounded-xl p-6 text-center">
+                <p className="text-sm text-gray-600">
+                  {subAktif?.kosong ||
+                    'Belum ada rute terdaftar untuk akun ini. Kartu laporan daerah muncul otomatis setelah rute diinput di Manajemen Jadwal atau Master Rute, walau belum ada penjualan.'}
+                </p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 md:gap-4">
+                {menuTampil.map((kartu, idx) => (
+                  <button
+                    key={idx}
+                    onClick={() => router.push(kartu.link)}
+                    className={`flex flex-col items-start p-4 md:p-5 rounded-xl border-2 transition-all shadow-sm ${kartu.color}`}
+                  >
+                    <h3 className="text-base md:text-lg font-bold mb-1.5 text-left">{kartu.label}</h3>
+                    <p className="text-xs md:text-sm opacity-80 text-left">{kartu.deskripsi}</p>
+                  </button>
+                ))}
+              </div>
+            )}
+          </main>
+        </div>
 
       </div>
     </div>

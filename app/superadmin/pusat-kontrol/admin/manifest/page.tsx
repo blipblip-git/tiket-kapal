@@ -4,6 +4,7 @@ import { useEffect, useState, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { supabase, getProfile, getOperatorSession, formatDaftarAbk, type Profile } from '@/lib/supabase'
 import { cocokOperator } from '@/lib/tenant'
+import { muatRutePemilik, urutkanRute, type RuteKapal } from '@/lib/rute'
 
 type RincianPenumpang = {
   id: string
@@ -28,13 +29,17 @@ type LaporanPerJam = {
 function ManifestSuperadminContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
-  const lokasi = searchParams.get('lokasi') || 'Tarakan'
-  const tujuan = searchParams.get('tujuan') || ''
+  // TIDAK ada daerah bawaan: tanpa ?lokasi= halaman menampilkan daftar SEMUA
+  // rute milik penyewa, supaya manifest tidak selalu jatuh ke Tarakan.
+  const lokasi = (searchParams.get('lokasi') || '').trim()
+  const tujuan = (searchParams.get('tujuan') || '').trim()
   const operatorIdParam = searchParams.get('operator') || ''
 
   const [profile, setProfile] = useState<Profile | null>(null)
   const [loading, setLoading] = useState(true)
   const [laporan, setLaporan] = useState<LaporanPerJam[]>([])
+  const [ruteList, setRuteList] = useState<RuteKapal[]>([])
+  const [ruteLoading, setRuteLoading] = useState(true)
   const [tanggal, setTanggal] = useState(() => {
     const today = new Date()
     const offset = today.getTimezoneOffset() * 60000
@@ -57,8 +62,23 @@ function ManifestSuperadminContent() {
   }, [router])
 
   useEffect(() => {
+    async function muatRute() {
+      if (!profile) return
+      const daftarRute = await muatRutePemilik(profile)
+      setRuteList(urutkanRute(daftarRute))
+      setRuteLoading(false)
+    }
+    muatRute()
+  }, [profile])
+
+  useEffect(() => {
     async function fetchData() {
       if (!profile) return
+      if (!lokasi) {
+        setLaporan([])
+        setLoading(false)
+        return
+      }
       setLoading(true)
 
       let targetOperatorId = operatorIdParam
@@ -187,6 +207,53 @@ function ManifestSuperadminContent() {
   if (loading) return <p className="p-6 text-center text-gray-600">Memuat...</p>
   if (!profile) return null
 
+  const urlManifest = (asal: string, tuj: string) =>
+    `/superadmin/pusat-kontrol/admin/manifest?lokasi=${encodeURIComponent(asal)}&tujuan=${encodeURIComponent(tuj)}${
+      operatorIdParam ? `&operator=${encodeURIComponent(operatorIdParam)}` : ''
+    }`
+
+  // Tanpa ?lokasi= -> tampilkan SEMUA rute milik penyewa (bukan default Tarakan).
+  if (!lokasi) {
+    return (
+      <div className="min-h-screen bg-gray-50 p-4 md:p-6">
+        <div className="max-w-md mx-auto bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+          <div className="flex justify-between items-start gap-2 px-4 py-3 border-b border-gray-200">
+            <div>
+              <h1 className="text-xl font-bold text-gray-900">Manifest Kapal</h1>
+              <p className="text-sm text-gray-600">Pilih rute keberangkatan</p>
+            </div>
+            <button onClick={() => router.push('/laporan-penjualan-admin?menu=manifest')} className="text-xs text-blue-600 hover:underline bg-gray-50 px-2 py-1.5 rounded border border-gray-200">
+              &larr; Kembali
+            </button>
+          </div>
+          <div className="p-4 space-y-2">
+            {ruteLoading ? (
+              <p className="p-4 text-center text-sm text-gray-500">Memuat rute...</p>
+            ) : ruteList.length === 0 ? (
+              <p className="p-4 text-center text-xs text-gray-600">
+                Belum ada rute terdaftar. Input rute di Manajemen Jadwal atau Master Rute dulu.
+              </p>
+            ) : (
+              ruteList.map((r) => (
+                <button
+                  key={`${r.rute_asal}|${r.rute_tujuan}`}
+                  onClick={() => router.push(urlManifest(r.rute_asal, r.rute_tujuan))}
+                  className="w-full text-left p-3 rounded-lg border-2 border-gray-200 hover:border-blue-400 hover:bg-blue-50 transition"
+                >
+                  <p className="text-sm font-bold text-gray-900">Manifest {r.rute_asal} → {r.rute_tujuan}</p>
+                  <p className="text-[11px] text-gray-600">Daftar penumpang & status boarding</p>
+                </button>
+              ))
+            )}
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  const ruteAktif = ruteList.find((r) => r.rute_asal === lokasi && (!tujuan || r.rute_tujuan === tujuan))
+  const kunciRuteAktif = ruteAktif ? `${ruteAktif.rute_asal}|${ruteAktif.rute_tujuan}` : ''
+
   const now = new Date()
   const hariIniStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
   const jamSekarang = String(now.getHours()).padStart(2, '0') + ':' + String(now.getMinutes()).padStart(2, '0')
@@ -240,9 +307,31 @@ function ManifestSuperadminContent() {
                     &larr; Kembali
                   </button>
                 </div>
-                <div>
-                  <label className="block text-xs font-bold text-gray-700 mb-1">Pilih Tanggal</label>
-                  <input type="date" value={tanggal} onChange={(e) => setTanggal(e.target.value)} className="w-full border rounded-md px-3 py-2 text-sm text-gray-900 shadow-sm focus:ring-blue-500 focus:border-blue-500" />
+                <div className="space-y-2">
+                  {ruteList.length > 0 && (
+                    <div>
+                      <label className="block text-xs font-bold text-gray-700 mb-1">Pilih Rute</label>
+                      <select
+                        value={kunciRuteAktif}
+                        onChange={(e) => {
+                          const [asal, tuj] = e.target.value.split('|')
+                          if (asal && tuj) router.replace(urlManifest(asal, tuj))
+                        }}
+                        className="w-full border rounded-md px-3 py-2 text-sm text-gray-900 shadow-sm focus:ring-blue-500 focus:border-blue-500"
+                      >
+                        {!kunciRuteAktif && <option value="">Pilih rute...</option>}
+                        {ruteList.map((r) => (
+                          <option key={`${r.rute_asal}|${r.rute_tujuan}`} value={`${r.rute_asal}|${r.rute_tujuan}`}>
+                            {r.rute_asal} → {r.rute_tujuan}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
+                  <div>
+                    <label className="block text-xs font-bold text-gray-700 mb-1">Pilih Tanggal</label>
+                    <input type="date" value={tanggal} onChange={(e) => setTanggal(e.target.value)} className="w-full border rounded-md px-3 py-2 text-sm text-gray-900 shadow-sm focus:ring-blue-500 focus:border-blue-500" />
+                  </div>
                 </div>
               </div>
             </div>

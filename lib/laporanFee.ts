@@ -375,8 +375,12 @@ export async function muatLaporanFeePlatform(opts: {
   mode: 'harian' | 'bulanan'
   tanggal?: string
   bulan?: string
+  /** Batasi ke 1 penyewa (dipakai Admin Utama). Kosong/undefined = semua penyewa. */
+  operatorId?: string | null
+  /** 'offline' = kanal agen/loket/mobile/keberangkatan/petugas, 'online' = web. */
+  kanal?: 'offline' | 'online'
 }): Promise<HasilLaporanPlatform> {
-  const { mode, tanggal, bulan } = opts
+  const { mode, tanggal, bulan, operatorId, kanal } = opts
   const feeBerlaku = await ambilFeePlatform()
   const kosong: HasilLaporanPlatform = { blok: [], totalTiket: 0, totalFee: 0, feeBerlaku }
 
@@ -389,7 +393,14 @@ export async function muatLaporanFeePlatform(opts: {
     .filter(Boolean)
     .join(', ')
 
-  let query = supabase.from('pesanan').select(kolom).eq('status', 'paid').in('kanal', [...KANAL_FEE_PLATFORM])
+  const daftarKanal =
+    kanal === 'online'
+      ? ['online']
+      : kanal === 'offline'
+        ? [...KANAL_FEE_PLATFORM].filter((k) => k !== 'online')
+        : [...KANAL_FEE_PLATFORM]
+
+  let query = supabase.from('pesanan').select(kolom).eq('status', 'paid').in('kanal', daftarKanal)
 
   if (mode === 'harian') {
     query = query.eq('jadwal.tanggal', tanggal || '')
@@ -423,6 +434,7 @@ export async function muatLaporanFeePlatform(opts: {
     if (!jadwal || !jadwal.tanggal) return
 
     const pemilik = pemilikJadwal(jadwal, petaOperatorKapal) || 'tanpa-penyewa'
+    if (operatorId && pemilik !== operatorId) return
     if (!petaBlok.has(pemilik)) {
       petaBlok.set(pemilik, {
         operatorId: pemilik,

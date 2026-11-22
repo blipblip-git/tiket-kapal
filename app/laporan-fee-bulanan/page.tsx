@@ -78,7 +78,7 @@ function LaporanFeeBulananContent() {
 
   const menuKembali = sayaSendiri
     ? '/agen/laporan-fee'
-    : `/laporan-penjualan-admin?menu=fee:${encodeURIComponent(lokasiParam)}`
+    : `/laporan-penjualan-admin?menu=fee:agen:${encodeURIComponent(lokasiParam)}`
 
   if (loading && !hasil) return <p className="p-6 text-center text-gray-600 mt-10">Memuat...</p>
   if (error) return <p className="p-6 text-center text-red-600 mt-10">{error}</p>
