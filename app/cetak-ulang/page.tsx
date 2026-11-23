@@ -331,8 +331,9 @@ function CetakUlangContent() {
               </div>
 
               <div id="area-tiket-ulang" className="bg-white rounded-lg shadow-md p-4 md:p-6 text-gray-900 w-full border border-gray-200 print:shadow-none print:p-0 print:border-none">
-                <div className="text-center mb-3">
-                  <p className="text-[10px] text-gray-500 uppercase tracking-wide">Kode Tiket</p>
+                <div className="text-center mb-3 space-y-1">
+                  <p className="font-bold text-xs md:text-sm leading-tight break-words">{detailPilih.kapal}</p>
+                  <p className="text-[11px] md:text-sm leading-tight break-words">{detailPilih.jadwal}</p>
                   <p className="font-bold text-sm">{detailPilih.kode_tiket}</p>
                 </div>
                 
@@ -344,10 +345,6 @@ function CetakUlangContent() {
                       Memuat QR...
                     </div>
                   )}
-                </div>
-
-                <div className="text-center mb-1 md:mb-2 font-bold text-xs md:text-sm leading-tight break-words">
-                  {detailPilih.kapal}
                 </div>
 
                 <hr className="my-3 border-dashed border-gray-300" />
@@ -366,10 +363,6 @@ function CetakUlangContent() {
                       <span className="font-medium text-gray-900 text-right">{detailPilih.nama_balita.join(', ')}</span>
                     </div>
                   )}
-                  <div className="flex justify-between">
-                    <span className="text-gray-500">Rute</span>
-                    <span className="font-medium text-gray-900 text-right">{detailPilih.jadwal_singkat}</span>
-                  </div>
                   <div className="flex justify-between">
                     <span className="text-gray-500">Tgl / Jam</span>
                     <span className="font-medium text-gray-900">{detailPilih.tanggal} / {detailPilih.jam.substring(0,5)}</span>

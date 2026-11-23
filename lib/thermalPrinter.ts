@@ -1,5 +1,28 @@
 import QRCode from 'qrcode'
 
+const LEBAR_BARIS_THERMAL = 32
+
+function barisTeks(nilai: string): string {
+  const isi = String(nilai || '-').trim() || '-'
+  const kata = isi.split(/\s+/)
+  const hasil: string[] = []
+  let baris = ''
+
+  for (const k of kata) {
+    if (!baris) {
+      baris = k
+    } else if (`${baris} ${k}`.length <= LEBAR_BARIS_THERMAL) {
+      baris += ` ${k}`
+    } else {
+      hasil.push(baris)
+      baris = k
+    }
+  }
+  if (baris) hasil.push(baris)
+
+  return hasil.map((b) => `${b}\n`).join('')
+}
+
 export async function cetakTiketThermal(tiket: any) {
   const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)
   
@@ -79,15 +102,15 @@ export async function cetakTiketThermal(tiket: any) {
       textData += '\x1B\x33\x05' 
       textData += '\x1B\x4A\x0A' 
       textData += '\x1B\x61\x01' 
+      textData += barisTeks(tiket.kapal)
+      textData += barisTeks(tiket.jadwal || tiket.jadwal_singkat || '-')
       textData += `${tiket.kode_tiket}\n` 
-      textData += `${tiket.kapal || '-'}\n`
       textData += '\x1B\x61\x00' 
       textData += '--------------------------------\n'
       textData += `Nama / Kursi : ${tiket.nama_penumpang} / ${tiket.kursi}\n`
       if (tiket.nama_balita && tiket.nama_balita.length > 0) {
         textData += `Nama Balita  : ${tiket.nama_balita.join(', ')}\n`
       }
-      textData += `Rute         : ${tiket.jadwal_singkat || tiket.jadwal || '-'}\n`
       const jamPotong = tiket.jam.substring(0, 5) 
       textData += `Tgl/Jam      : ${tiket.tanggal}/${jamPotong}\n` 
       textData += '--------------------------------\n'
@@ -186,15 +209,15 @@ export async function cetakTiketThermal(tiket: any) {
     textData += '\x1B\x33\x05' 
     textData += '\x1B\x4A\x0A' 
     textData += '\x1B\x61\x01' 
+    textData += barisTeks(tiket.kapal)
+    textData += barisTeks(tiket.jadwal || tiket.jadwal_singkat || '-')
     textData += `${tiket.kode_tiket}\n` 
-    textData += `${tiket.kapal || '-'}\n`
     textData += '\x1B\x61\x00' 
     textData += '--------------------------------\n'
     textData += `Nama / Kursi : ${tiket.nama_penumpang} / ${tiket.kursi}\n`
     if (tiket.nama_balita && tiket.nama_balita.length > 0) {
       textData += `Nama Balita  : ${tiket.nama_balita.join(', ')}\n`
     }
-    textData += `Rute         : ${tiket.jadwal_singkat || tiket.jadwal || '-'}\n`
     const jamPotong = tiket.jam.substring(0, 5) 
     textData += `Tgl/Jam      : ${tiket.tanggal}/${jamPotong}\n` 
     textData += '--------------------------------\n'

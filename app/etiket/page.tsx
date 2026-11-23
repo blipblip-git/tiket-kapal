@@ -4,7 +4,6 @@ import { useEffect, useRef, useState, Suspense } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
 import { supabase, getOperatorSession } from '@/lib/supabase'
 import { ambilPesananPublik, type PesananPublik } from '@/lib/publikPesanan'
-import { petaKodeKota, kodeUntukLokasi } from '@/lib/fee'
 import QRCode from 'qrcode'
 import { toPng } from 'html-to-image'
 import { jsPDF } from 'jspdf'
@@ -16,7 +15,6 @@ type Detail = {
   jam_berangkat: string
   harga: number
   nama_kapal: string
-  rute_singkat: string
 }
 
 type TiketLengkap = {
@@ -89,16 +87,18 @@ function TiketCard({ tiket, detail }: { tiket: TiketLengkap; detail: Detail }) {
 
   return (
     <div className="thermal-card p-3 md:p-6 text-gray-900 bg-white flex flex-col">
-      <div className="text-center mb-2 md:mb-4">
+      <div className="text-center mb-2 md:mb-4 space-y-1">
+        <p className="font-bold text-xs md:text-sm leading-tight break-words">
+          {detail.nama_kapal}
+        </p>
+        <p className="text-[11px] md:text-sm leading-tight break-words">
+          {detail.rute_asal} - {detail.rute_tujuan}
+        </p>
         <p className="font-bold text-xs md:text-sm thermal-title">{tiket.pesanan.kode_tiket}</p>
       </div>
 
       <div className="flex justify-center mb-2 md:mb-4">
         <img src={tiket.qrUrl} alt="QR Code" className="w-28 h-28 md:w-40 md:h-40 thermal-qr object-contain" />
-      </div>
-
-      <div className="text-center mb-1 md:mb-2 font-bold text-xs md:text-sm leading-tight break-words">
-        {detail.nama_kapal}
       </div>
 
       <hr className="my-2 md:my-4 border-dashed border-gray-300" />
@@ -117,10 +117,6 @@ function TiketCard({ tiket, detail }: { tiket: TiketLengkap; detail: Detail }) {
             <span className="font-medium text-gray-900 text-right">{tiket.nama_balita.join(', ')}</span>
           </div>
         )}
-        <div className="flex justify-between">
-          <span className="text-gray-500">Rute</span>
-          <span className="font-medium text-gray-900 text-right">{detail.rute_singkat}</span>
-        </div>
         <div className="flex justify-between">
           <span className="text-gray-500">Tgl/Jam</span>
           <span className="font-medium text-gray-900">{detail.tanggal}/{detail.jam_berangkat.substring(0, 5)}</span>
@@ -200,7 +196,6 @@ function EtiketPublikContent() {
         if (kap?.nama) namaKapal = kap.nama
       }
 
-      const petaKota = await petaKodeKota()
       const ruteAsal = j?.rute_asal || '-'
       const ruteTujuan = j?.rute_tujuan || '-'
 
@@ -210,10 +205,7 @@ function EtiketPublikContent() {
         tanggal: j?.tanggal || '-',
         jam_berangkat: j?.jam_berangkat || '',
         harga: Number(j?.harga || 0),
-        nama_kapal: namaKapal,
-        rute_singkat: j
-          ? `${kodeUntukLokasi(ruteAsal, petaKota)} - ${kodeUntukLokasi(ruteTujuan, petaKota)}`
-          : '-'
+        nama_kapal: namaKapal
       })
 
       const tiketLengkap: TiketLengkap[] = []
