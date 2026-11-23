@@ -3,6 +3,7 @@
 import { useEffect, useState, Suspense, useRef } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
 import { supabase, getProfile, getOperatorSession, type Profile } from '@/lib/supabase'
+import { petaKodeKota, kodeUntukLokasi } from '@/lib/fee'
 import QRCode from 'qrcode'
 import { toPng } from 'html-to-image'
 import { jsPDF } from 'jspdf'
@@ -31,6 +32,7 @@ type Detail = {
   jam_berangkat: string
   harga: number
   nama_kapal: string
+  rute_singkat: string
 }
 
 type TiketLengkap = {
@@ -173,6 +175,7 @@ function EtiketSuperadminContent() {
               .maybeSingle()
             if (kap) namaKapal = kap.nama
           }
+          const petaKota = await petaKodeKota()
           detailJadwal = {
             rute_asal: j.rute_asal,
             rute_tujuan: j.rute_tujuan,
@@ -180,6 +183,7 @@ function EtiketSuperadminContent() {
             jam_berangkat: j.jam_berangkat,
             harga: j.harga,
             nama_kapal: namaKapal,
+            rute_singkat: `${kodeUntukLokasi(j.rute_asal, petaKota)} - ${kodeUntukLokasi(j.rute_tujuan, petaKota)}`,
           }
           setDetail(detailJadwal)
         }
@@ -400,26 +404,8 @@ function EtiketSuperadminContent() {
 
   async function handleCetakThermal(t: TiketLengkap) {
     setPesanShare('Menghubungkan ke printer...')
-    
-    let jadwalSingkat = `${detail?.rute_asal} - ${detail?.rute_tujuan}`
-    
-    if (detail) {
-      const { data: asalData } = await supabase
-        .from('master_kota')
-        .select('singkatan')
-        .eq('nama_kota', detail.rute_asal)
-        .maybeSingle()
-      
-      const { data: tujuanData } = await supabase
-        .from('master_kota')
-        .select('singkatan')
-        .eq('nama_kota', detail.rute_tujuan)
-        .maybeSingle()
-      
-      if (asalData?.singkatan && tujuanData?.singkatan) {
-        jadwalSingkat = `${asalData.singkatan} - ${tujuanData.singkatan}`
-      }
-    }
+
+    const jadwalSingkat = detail?.rute_singkat || `${detail?.rute_asal} - ${detail?.rute_tujuan}`
 
     const result = await cetakTiketThermal({
       ...t.pesanan,
@@ -488,7 +474,7 @@ function EtiketSuperadminContent() {
           <img src={tiket.qrUrl} alt="QR Code" className="w-28 h-28 md:w-40 md:h-40 thermal-qr object-contain" />
         </div>
         
-        <div className="text-center mb-1 md:mb-2 font-bold text-xs md:text-sm">{detail?.rute_asal} - {detail?.rute_tujuan}</div>
+        <div className="text-center mb-1 md:mb-2 font-bold text-xs md:text-sm leading-tight break-words">{detail?.nama_kapal}</div>
         
         <hr className="my-2 md:my-4 border-dashed border-gray-300" />
         
@@ -507,8 +493,8 @@ function EtiketSuperadminContent() {
             </div>
           )}
           <div className="flex justify-between">
-            <span className="text-gray-500">Kapal</span>
-            <span className="font-medium text-gray-900 text-right">{detail?.nama_kapal}</span>
+            <span className="text-gray-500">Rute</span>
+            <span className="font-medium text-gray-900 text-right">{detail?.rute_singkat}</span>
           </div>
           <div className="flex justify-between">
             <span className="text-gray-500">Tgl/Jam</span>

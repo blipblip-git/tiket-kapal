@@ -3,6 +3,7 @@
 import { useState, useEffect, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { supabase, getOperatorSession, getProfile, type Profile } from '@/lib/supabase'
+import { kodeDaerah } from '@/lib/fee'
 import QRCode from 'qrcode'
 import { toPng } from 'html-to-image'
 import { cetakTiketThermal } from '@/lib/thermalPrinter'
@@ -103,8 +104,8 @@ function CetakUlangSuperadminContent() {
       const mapped = data.map((item: any) => {
         const asal = item.jadwal?.rute_asal || ''
         const tujuan = item.jadwal?.rute_tujuan || ''
-        const singAsal = kotaMap.get(asal) || asal
-        const singTujuan = kotaMap.get(tujuan) || tujuan
+        const singAsal = kotaMap.get(asal) || kodeDaerah(asal)
+        const singTujuan = kotaMap.get(tujuan) || kodeDaerah(tujuan)
 
         // CARI NAMA PENJUAL ASLI
         let teksLoketLayar = '-'
@@ -354,6 +355,10 @@ function CetakUlangSuperadminContent() {
                   )}
                 </div>
 
+                <div className="text-center mb-1 md:mb-2 font-bold text-xs md:text-sm leading-tight break-words">
+                  {detailPilih.kapal}
+                </div>
+
                 <hr className="my-3 border-dashed border-gray-300" />
                 
                 <div className="text-[11px] md:text-sm space-y-1.5">
@@ -371,12 +376,8 @@ function CetakUlangSuperadminContent() {
                     </div>
                   )}
                   <div className="flex justify-between">
-                    <span className="text-gray-500">Kapal</span>
-                    <span className="font-medium text-gray-900 text-right">{detailPilih.kapal}</span>
-                  </div>
-                  <div className="flex justify-between">
                     <span className="text-gray-500">Rute</span>
-                    <span className="font-medium text-gray-900 text-right">{detailPilih.jadwal}</span>
+                    <span className="font-medium text-gray-900 text-right">{detailPilih.jadwal_singkat}</span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-gray-500">Tgl / Jam</span>

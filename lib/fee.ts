@@ -54,9 +54,18 @@ export async function tabelPlatformAda(): Promise<boolean> {
 // belum terdaftar, dibentuk otomatis dari huruf konsonan nama lokasi
 // (Tarakan -> TRK, KTT -> KTT).
 const KODE_LOKASI_KHUSUS: { [lokasi: string]: string } = {
+  berau: 'BRU',
+  bunyu: 'BNY',
+  'kabupaten tanah tidung': 'KTT',
+  malinau: 'MLN',
+  nunukan: 'NNK',
+  sebatik: 'SBK',
+  sembakung: 'SMG',
+  'sungai nyamuk': 'SNK',
+  'tanah kuning': 'TKG',
   tarakan: 'TRK',
-  'tanjung selor': 'TJS',
-  'tanjung batu': 'TJB'
+  'tanjung batu': 'TJB',
+  'tanjung selor': 'TJS'
 }
 
 export function kodeDaerah(lokasi: string): string {

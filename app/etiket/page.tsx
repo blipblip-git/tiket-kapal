@@ -4,6 +4,7 @@ import { useEffect, useRef, useState, Suspense } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
 import { supabase, getOperatorSession } from '@/lib/supabase'
 import { ambilPesananPublik, type PesananPublik } from '@/lib/publikPesanan'
+import { petaKodeKota, kodeUntukLokasi } from '@/lib/fee'
 import QRCode from 'qrcode'
 import { toPng } from 'html-to-image'
 import { jsPDF } from 'jspdf'
@@ -15,6 +16,7 @@ type Detail = {
   jam_berangkat: string
   harga: number
   nama_kapal: string
+  rute_singkat: string
 }
 
 type TiketLengkap = {
@@ -95,8 +97,8 @@ function TiketCard({ tiket, detail }: { tiket: TiketLengkap; detail: Detail }) {
         <img src={tiket.qrUrl} alt="QR Code" className="w-28 h-28 md:w-40 md:h-40 thermal-qr object-contain" />
       </div>
 
-      <div className="text-center mb-1 md:mb-2 font-bold text-xs md:text-sm">
-        {detail.rute_asal} - {detail.rute_tujuan}
+      <div className="text-center mb-1 md:mb-2 font-bold text-xs md:text-sm leading-tight break-words">
+        {detail.nama_kapal}
       </div>
 
       <hr className="my-2 md:my-4 border-dashed border-gray-300" />
@@ -116,8 +118,8 @@ function TiketCard({ tiket, detail }: { tiket: TiketLengkap; detail: Detail }) {
           </div>
         )}
         <div className="flex justify-between">
-          <span className="text-gray-500">Kapal</span>
-          <span className="font-medium text-gray-900 text-right">{detail.nama_kapal}</span>
+          <span className="text-gray-500">Rute</span>
+          <span className="font-medium text-gray-900 text-right">{detail.rute_singkat}</span>
         </div>
         <div className="flex justify-between">
           <span className="text-gray-500">Tgl/Jam</span>
@@ -198,13 +200,20 @@ function EtiketPublikContent() {
         if (kap?.nama) namaKapal = kap.nama
       }
 
+      const petaKota = await petaKodeKota()
+      const ruteAsal = j?.rute_asal || '-'
+      const ruteTujuan = j?.rute_tujuan || '-'
+
       setDetail({
-        rute_asal: j?.rute_asal || '-',
-        rute_tujuan: j?.rute_tujuan || '-',
+        rute_asal: ruteAsal,
+        rute_tujuan: ruteTujuan,
         tanggal: j?.tanggal || '-',
         jam_berangkat: j?.jam_berangkat || '',
         harga: Number(j?.harga || 0),
-        nama_kapal: namaKapal
+        nama_kapal: namaKapal,
+        rute_singkat: j
+          ? `${kodeUntukLokasi(ruteAsal, petaKota)} - ${kodeUntukLokasi(ruteTujuan, petaKota)}`
+          : '-'
       })
 
       const tiketLengkap: TiketLengkap[] = []
