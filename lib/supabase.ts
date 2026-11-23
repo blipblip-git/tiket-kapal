@@ -30,6 +30,9 @@ export type Profile = {
   sesi_aktif?: string | null
   api_token?: string | null
   auth_user_id?: string | null
+  // Waktu login (ISO) dari /login. Dipakai auto-logout: sesi hanya ditutup
+  // kalau benar-benar melewati jam selesai kerja, bukan saat login setelahnya.
+  login_at?: string
 }
 
 // ==================== NAMA PERUSAHAAN UNTUK HEADER DASHBOARD ====================
@@ -79,7 +82,7 @@ export type AuditLog = {
   petugas_id: string | null
   petugas_email: string
   aksi: string
-  detail: any
+  detail: unknown
   waktu: string
   operator_id: string | null
 }
@@ -335,6 +338,11 @@ export async function cekAutoLogout(profile: Profile): Promise<boolean> {
   if (!profile || profile.role === 'admin_utama') return false
   if (profile.auto_logout === false) return false
 
+  // Sesi lama (sebelum ada login_at) tidak boleh langsung ditendang: kalau
+  // dicek dengan jam dinding saja, login malam hari akan langsung logout.
+  const loginAt = profile.login_at ? new Date(profile.login_at) : null
+  if (!loginAt || Number.isNaN(loginAt.getTime())) return false
+
   // Sesi dari /login tidak membawa auto_logout & jam override, ambil yang terbaru.
   let data = profile
   if (!data.operator_id || typeof data.auto_logout === 'undefined') {
@@ -357,12 +365,18 @@ export async function cekAutoLogout(profile: Profile): Promise<boolean> {
   const jamSelesai = data.jam_selesai_kerja_override || pengaturan.jam_selesai_kerja
   if (!jamSelesai) return false
 
-  const sekarang = new Date()
   const [jamH, jamM] = String(jamSelesai).split(':').map(Number)
-  const targetSelesai = new Date()
-  targetSelesai.setHours(jamH, jamM, 0, 0)
+  if (!Number.isFinite(jamH) || !Number.isFinite(jamM)) return false
 
-  return sekarang >= targetSelesai
+  // Batas logout pertama SETELAH waktu login. Contoh: login 21:00 saat jam
+  // selesai 17:00 -> batasnya besok 17:00, jadi tidak langsung ditendang.
+  const targetSelesai = new Date(loginAt)
+  targetSelesai.setHours(jamH, jamM, 0, 0)
+  if (loginAt >= targetSelesai) {
+    targetSelesai.setDate(targetSelesai.getDate() + 1)
+  }
+
+  return Date.now() >= targetSelesai.getTime()
 }
 
 // ==================== FUNGSI PEMBERSIH PESANAN EXPIRED (10 MENIT) ====================

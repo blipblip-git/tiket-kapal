@@ -10,6 +10,9 @@ function pesanDariQuery(kode: string | null): string {
   if (kode === 'session_expired') {
     return 'Sesi login berakhir. Silakan login ulang untuk melanjutkan.'
   }
+  if (kode === 'jam_kerja_selesai') {
+    return 'Jam kerja selesai. Silakan login kembali untuk melanjutkan.'
+  }
   return ''
 }
 
@@ -81,7 +84,10 @@ function LoginContent() {
         email: data.email, nomor_hp: data.nomor_hp,
         operator_id: data.operator_id || null,
         nama_perusahaan: data.nama_perusahaan || null,
-        api_token: hasil.api_token || null
+        api_token: hasil.api_token || null,
+        // Dicatat supaya auto-logout hanya berlaku kalau sesi ini melewati
+        // jam selesai kerja, bukan memblokir login di luar jam kerja.
+        login_at: new Date().toISOString()
       }))
 
       setPesan('Login berhasil, mengalihkan...');
@@ -99,8 +105,8 @@ function LoginContent() {
         }
       }, 500);
       
-    } catch (err: any) {
-      setPesan('Error: ' + err.message);
+    } catch (err) {
+      setPesan('Error: ' + (err instanceof Error ? err.message : 'Terjadi kesalahan'))
       setLoading(false)
     }
   }

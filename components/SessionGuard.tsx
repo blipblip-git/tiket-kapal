@@ -67,7 +67,7 @@ export default function SessionGuard() {
         cekAutoLogout(sesiLokal).then((harusLogout) => {
           if (harusLogout) {
             console.log('Jam kerja selesai, auto-logout petugas...')
-            logoutOperator()
+            logoutOperator('jam_kerja_selesai')
           }
         })
 
