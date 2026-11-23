@@ -49,6 +49,52 @@ type HasilAuth =
   | { ok: false; response: NextResponse }
 
 /**
+ * Cari profil pemilik token Supabase Auth.
+ *
+ * Ada dua jenis akun di aplikasi ini:
+ * 1. Penyewa yang dibuat lewat /api/superadmin/tambah-penyewa -> profiles.id = auth.uid().
+ * 2. Staf (Admin Utama lama, agen, petugas) -> /api/auth/login membuat akun
+ *    Supabase Auth terpisah dan menyimpannya di profiles.auth_user_id, jadi
+ *    auth.uid() TIDAK sama dengan profiles.id.
+ *
+ * SQL pengamanan (my_profile_id/is_admin_utama/is_superadmin) sudah memakai
+ * `auth_user_id = auth.uid() or id = auth.uid()`. Helper ini menyamakan
+ * perilaku server supaya API admin tidak menolak Admin Utama yang sah.
+ */
+async function ambilProfilDariAuth(
+  admin: SupabaseClient,
+  userId: string
+): Promise<{ profile: ProfilSuperadmin | null; error: string | null }> {
+  const kolom = 'id, nama, role, aktif'
+
+  const { data: langsung, error: errorLangsung } = await admin
+    .from('profiles')
+    .select(kolom)
+    .eq('id', userId)
+    .maybeSingle()
+
+  if (errorLangsung) return { profile: null, error: errorLangsung.message }
+  if (langsung) return { profile: langsung as ProfilSuperadmin, error: null }
+
+  const { data: viaAuth, error: errorAuth } = await admin
+    .from('profiles')
+    .select(kolom)
+    .eq('auth_user_id', userId)
+    .maybeSingle()
+
+  if (errorAuth) {
+    // Database lama mungkin belum punya kolom auth_user_id. Jangan lempar 500:
+    // anggap profil tidak ditemukan (tetap ditolak oleh pemeriksaan role).
+    if (/auth_user_id|does not exist|schema cache/i.test(errorAuth.message || '')) {
+      return { profile: null, error: null }
+    }
+    return { profile: null, error: errorAuth.message }
+  }
+
+  return { profile: (viaAuth as ProfilSuperadmin | null) || null, error: null }
+}
+
+/**
  * Wajib sesi Supabase Auth milik Superadmin.
  * Dipakai oleh semua API /api/superadmin/* supaya endpoint tidak bisa dipanggil
  * sembarang orang (dulu bisa di-POST tanpa login).
@@ -79,16 +125,12 @@ export async function wajibSuperadmin(request: Request): Promise<HasilAuth> {
     }
   }
 
-  const { data: profile, error: profileError } = await admin
-    .from('profiles')
-    .select('id, nama, role, aktif')
-    .eq('id', userData.user.id)
-    .maybeSingle()
+  const { profile, error: profileError } = await ambilProfilDariAuth(admin, userData.user.id)
 
   if (profileError) {
     return {
       ok: false,
-      response: NextResponse.json({ error: 'Gagal memeriksa profil: ' + profileError.message }, { status: 500 })
+      response: NextResponse.json({ error: 'Gagal memeriksa profil: ' + profileError }, { status: 500 })
     }
   }
 
@@ -136,16 +178,12 @@ export async function wajibAdmin(request: Request): Promise<HasilAuth> {
     }
   }
 
-  const { data: profile, error: profileError } = await admin
-    .from('profiles')
-    .select('id, nama, role, aktif')
-    .eq('id', userData.user.id)
-    .maybeSingle()
+  const { profile, error: profileError } = await ambilProfilDariAuth(admin, userData.user.id)
 
   if (profileError) {
     return {
       ok: false,
-      response: NextResponse.json({ error: 'Gagal memeriksa profil: ' + profileError.message }, { status: 500 })
+      response: NextResponse.json({ error: 'Gagal memeriksa profil: ' + profileError }, { status: 500 })
     }
   }
 

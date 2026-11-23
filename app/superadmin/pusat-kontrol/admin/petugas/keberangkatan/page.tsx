@@ -17,6 +17,7 @@ export default function AdminPetugasPage() {
   const [me, setMe] = useState<Profile | null>(null)
   const [petugas, setPetugas] = useState<Profile[]>([])
   const [loading, setLoading] = useState(true)
+  const [aksesDitolak, setAksesDitolak] = useState(false)
   const [aksiLoading, setAksiLoading] = useState<string | null>(null)
   const [pesan, setPesan] = useState<{ tipe: 'ok' | 'err'; teks: string } | null>(null)
 
@@ -61,7 +62,17 @@ export default function AdminPetugasPage() {
         router.push('/superadmin')
         return
       }
-      
+
+      // Halaman ini hanya untuk Admin Utama penyewa / Superadmin.
+      // Kolektor, petugas, dan agen tidak boleh membuka manajemen akun.
+      const role = (profile.role || '').trim().toLowerCase()
+      if (role !== 'admin_utama' && role !== 'superadmin') {
+        setAksesDitolak(true)
+        setPesan({ tipe: 'err', teks: 'Akses ditolak. Halaman ini hanya untuk Admin Utama atau Superadmin aktif.' })
+        setLoading(false)
+        return
+      }
+
       // Ambil operator_id dari URL (jika Superadmin lagi ngetes), atau dari Profil (jika Admin asli)
       const urlParams = new URLSearchParams(window.location.search)
       const urlOperatorId = urlParams.get('operator')
@@ -243,6 +254,7 @@ export default function AdminPetugasPage() {
   }
 
   if (loading) return <p className="p-6 text-center text-gray-500">Memuat data operator…</p>
+  if (aksesDitolak) return <p className="p-6 text-center text-red-600 mt-10">Akses ditolak. Halaman ini hanya untuk Admin Utama atau Superadmin aktif.</p>
 
   // Satu tabel ringkas seperti Manajemen Agen. Lokasi tetap ditampilkan
   // sebagai kolom, jadi tidak perlu lagi kartu/header biru per lokasi.

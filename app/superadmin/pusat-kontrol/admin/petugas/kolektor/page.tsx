@@ -16,6 +16,7 @@ export default function AdminPetugasKolektorPage() {
   const [me, setMe] = useState<Profile | null>(null)
   const [kolektor, setKolektor] = useState<Profile[]>([])
   const [loading, setLoading] = useState(true)
+  const [aksesDitolak, setAksesDitolak] = useState(false)
   const [aksiLoading, setAksiLoading] = useState<string | null>(null)
   const [pesan, setPesan] = useState<{ tipe: 'ok' | 'err'; teks: string } | null>(null)
 
@@ -54,6 +55,16 @@ export default function AdminPetugasKolektorPage() {
       }
       if (!profile) {
         router.push('/superadmin')
+        return
+      }
+
+      // Halaman ini hanya untuk Admin Utama penyewa / Superadmin.
+      // Kolektor, petugas, dan agen tidak boleh membuka manajemen akun.
+      const role = (profile.role || '').trim().toLowerCase()
+      if (role !== 'admin_utama' && role !== 'superadmin') {
+        setAksesDitolak(true)
+        setPesan({ tipe: 'err', teks: 'Akses ditolak. Halaman ini hanya untuk Admin Utama atau Superadmin aktif.' })
+        setLoading(false)
         return
       }
 
@@ -241,6 +252,7 @@ export default function AdminPetugasKolektorPage() {
   }
 
   if (loading) return <p className="p-6 text-center text-gray-500">Memuat data kolektor…</p>
+  if (aksesDitolak) return <p className="p-6 text-center text-red-600 mt-10">Akses ditolak. Halaman ini hanya untuk Admin Utama atau Superadmin aktif.</p>
 
   const perLokasi = Array.from(
     new Set([
