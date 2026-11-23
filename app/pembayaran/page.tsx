@@ -4,18 +4,10 @@ import { useEffect, useState, Suspense } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
 import { supabase, getOperatorSession } from '@/lib/supabase'
 import { fetchPublik } from '@/lib/publikFetch'
-import { ambilPesananPublik } from '@/lib/publikPesanan'
+import { ambilPesananPublik, type PesananPublik } from '@/lib/publikPesanan'
 import { formatJam } from '@/lib/periode'
 
-type PesananItem = {
-  id: string
-  nama_penumpang: string
-  kode_tiket: string
-  status: string
-  jadwal_id: string
-  kursi_id: string | null
-  is_balita: boolean
-}
+type PesananItem = PesananPublik
 
 type Detail = {
   rute_asal: string

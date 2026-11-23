@@ -13,12 +13,47 @@ type Tiket = {
   waktu_pesan: string
   grup_transaksi_id: string
   jadwal_id: string
+  is_balita: boolean
+  induk_id: string | null
   jadwal?: {
     rute_asal: string
     rute_tujuan: string
     tanggal: string
     jam_berangkat: string
   }
+}
+
+type KartuTiket = {
+  utama: Tiket
+  balita: Tiket[]
+}
+
+/**
+ * Satu kartu = satu tiket dewasa + balita yang menempel padanya.
+ * Baris balita tidak ditampilkan sebagai kartu terpisah supaya pembeli
+ * cukup melihat/menyimpan satu boarding pass per orang tua.
+ */
+function susunKartu(daftar: Tiket[]): KartuTiket[] {
+  const dewasa = daftar.filter((t) => !t.is_balita)
+  const balita = daftar.filter((t) => t.is_balita)
+  const terpakai = new Set<string>()
+
+  const kartu = dewasa.map((utama) => {
+    const anak = balita.filter((b) => {
+      if (terpakai.has(b.id)) return false
+      if (b.induk_id) return b.induk_id === utama.id
+      // Data lama: induk_id kosong. Tempelkan ke dewasa pertama di grup yang sama.
+      if (!b.grup_transaksi_id) return false
+      const dewasaPertama = dewasa.find((d) => d.grup_transaksi_id === b.grup_transaksi_id)
+      return dewasaPertama?.id === utama.id
+    })
+    anak.forEach((b) => terpakai.add(b.id))
+    return { utama, balita: anak }
+  })
+
+  // Balita yatim (tanpa baris dewasa) tetap ditampilkan apa adanya.
+  const sisa = balita.filter((b) => !terpakai.has(b.id))
+  return [...kartu, ...sisa.map((b) => ({ utama: b, balita: [] as Tiket[] }))]
 }
 
 function CekTiketContent() {
@@ -81,11 +116,12 @@ function CekTiketContent() {
     router.push(`/pembayaran?pesanan=${ids}`)
   }
 
-  const handleLihatEtiket = (grupId: string, idPesanan: string) => {
-    const tiketGrup = hasil.filter(t => t.grup_transaksi_id === grupId && t.status === 'paid')
-    const ids = tiketGrup.length > 0 ? tiketGrup.map(t => t.id).join(',') : idPesanan
+  const handleLihatEtiket = (utama: Tiket, balita: Tiket[]) => {
+    const ids = [utama.id, ...balita.map((b) => b.id)].join(',')
     router.push(`/etiket?pesanan=${ids}`)
   }
+
+  const kartu = susunKartu(hasil)
 
   return (
     <div className="min-h-[100dvh] bg-gray-100 flex flex-col items-center pt-12 pb-8 px-4 overflow-y-auto">
@@ -132,42 +168,56 @@ function CekTiketContent() {
       {hasil.length > 0 && (
         <div className="w-full max-w-md space-y-3">
           <h2 className="font-bold text-gray-900 px-1">Hasil Pencarian:</h2>
-          {hasil.map((t) => (
-            <div key={t.id} className="bg-white p-4 rounded-xl shadow-sm border border-gray-200">
-              <div className="flex justify-between items-center mb-1">
-                <span className="font-bold text-gray-900">{t.nama_penumpang}</span>
-                <span className={`text-[10px] px-2 py-0.5 rounded font-bold ${
-                  t.status === 'paid' ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'
-                }`}>
-                  {t.status === 'paid' ? 'LUNAS' : 'BELUM BAYAR'}
-                </span>
+          {kartu.map(({ utama, balita }) => {
+            const semuaLunas = utama.status === 'paid' && balita.every((b) => b.status === 'paid')
+            const jumlahOrang = 1 + balita.length
+            return (
+              <div key={utama.id} className="bg-white p-4 rounded-xl shadow-sm border border-gray-200">
+                <div className="flex justify-between items-center mb-1">
+                  <span className="font-bold text-gray-900">
+                    {utama.nama_penumpang}
+                    {utama.is_balita && <span className="text-[10px] text-orange-600 ml-1">(Balita)</span>}
+                  </span>
+                  <span className={`text-[10px] px-2 py-0.5 rounded font-bold ${
+                    semuaLunas ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'
+                  }`}>
+                    {semuaLunas ? 'LUNAS' : 'BELUM BAYAR'}
+                  </span>
+                </div>
+                <p className="text-xs text-gray-500 font-mono mb-1">Kode: {utama.kode_tiket}</p>
+
+                {balita.length > 0 && (
+                  <div className="text-[11px] text-orange-700 bg-orange-50 border border-orange-100 rounded px-2 py-1 mb-2">
+                    <p className="font-semibold">Balita: {balita.map((b) => b.nama_penumpang).join(', ')}</p>
+                    <p className="text-[10px] text-orange-600">{jumlahOrang} orang (1 dewasa + {balita.length} balita)</p>
+                  </div>
+                )}
+
+                {utama.jadwal && (
+                  <p className="text-[11px] text-blue-700 font-medium mb-3">
+                    {utama.jadwal.rute_asal} - {utama.jadwal.rute_tujuan} <br/>
+                    {new Date(utama.jadwal.tanggal).toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' })} | {utama.jadwal.jam_berangkat.substring(0, 5)}
+                  </p>
+                )}
+
+                {semuaLunas ? (
+                  <button
+                    onClick={() => handleLihatEtiket(utama, balita)}
+                    className="w-full bg-blue-600 text-white py-2 rounded-md text-sm font-bold hover:bg-blue-700 transition-colors"
+                  >
+                    Lihat E-Tiket
+                  </button>
+                ) : (
+                  <button
+                    onClick={() => handleLanjutBayar(utama.grup_transaksi_id)}
+                    className="w-full bg-orange-500 text-white py-2 rounded-md text-sm font-bold hover:bg-orange-600 transition-colors"
+                  >
+                    Lanjutkan Pembayaran
+                  </button>
+                )}
               </div>
-              <p className="text-xs text-gray-500 font-mono mb-1">Kode: {t.kode_tiket}</p>
-              
-              {t.jadwal && (
-                <p className="text-[11px] text-blue-700 font-medium mb-3">
-                  {t.jadwal.rute_asal} - {t.jadwal.rute_tujuan} <br/>
-                  {new Date(t.jadwal.tanggal).toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' })} | {t.jadwal.jam_berangkat.substring(0, 5)}
-                </p>
-              )}
-              
-              {t.status === 'pending' ? (
-                <button
-                  onClick={() => handleLanjutBayar(t.grup_transaksi_id)}
-                  className="w-full bg-orange-500 text-white py-2 rounded-md text-sm font-bold hover:bg-orange-600 transition-colors"
-                >
-                  Lanjutkan Pembayaran
-                </button>
-              ) : (
-                <button 
-                  onClick={() => handleLihatEtiket(t.grup_transaksi_id, t.id)}
-                  className="w-full bg-blue-600 text-white py-2 rounded-md text-sm font-bold hover:bg-blue-700 transition-colors"
-                >
-                  Lihat E-Tiket
-                </button>
-              )}
-            </div>
-          ))}
+            )
+          })}
         </div>
       )}
 

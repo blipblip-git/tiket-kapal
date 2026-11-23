@@ -56,10 +56,12 @@ Setelah SQL itu dijalankan:
 
 - Anon **tidak bisa lagi** `select` tabel `pesanan`/`pembayaran` sama sekali
   (dulu `status='paid'` membuat semua tiket lunas semua tenant bisa diunduh).
-- `/pembayaran`, `/pembayaran/cash`, `/cek-tiket` memakai RPC terbatas:
+- `/pembayaran`, `/pembayaran/cash`, `/cek-tiket`, `/etiket` memakai RPC terbatas:
   `publik_pesanan_ids(uuid[])` (hanya ID yang diketahui, lunas atau < 15 menit)
   dan `publik_tiket_hp(text)` (hanya tiket milik nomor HP yang dimasukkan,
-  tanpa NIK/HP di hasil).
+  tanpa NIK/HP di hasil). Jalankan `supabase/publik-etiket-balita.sql` setelah
+  tahap 3 agar hasilnya juga memuat `is_balita`, `induk_id`,
+  `grup_transaksi_id`, dan `kanal` (balita menempel ke tiket orang tuanya).
 - `/api/publik/*` wajib header `x-lintasair-channel: web` + Origin/Referer domain
   resmi (opsional tambah domain lain lewat env `PUBLIK_ALLOWED_ORIGINS`, dipisah koma)
   dan dibatasi rate limit per IP. Ini **bukan** API key — memang dipakai browser pembeli.
