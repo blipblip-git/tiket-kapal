@@ -35,11 +35,12 @@ body {
   overflow-x: hidden;
 }
 
-/* 2. Kunci tinggi layar HANYA untuk HP, biar tablet/laptop aman */
+/* 2. Di HP pakai tinggi minimum (bukan tinggi tetap) supaya konten tetap
+   bisa di-scroll dan di-zoom tanpa terpotong. Tablet/laptop tidak berubah. */
 @media (max-width: 768px) {
   html, body {
-    height: 100dvh;
-    overflow-y: auto; /* Tetap izinkan scroll kalau konten panjang */
+    height: auto;
+    min-height: 100dvh;
   }
 }
 

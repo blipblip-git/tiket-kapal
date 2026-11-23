@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import SessionGuard from "@/components/SessionGuard";
@@ -20,6 +20,14 @@ export const metadata: Metadata = {
   other: {
     google: "notranslate",
   },
+};
+
+// Izinkan pengguna melakukan pinch-zoom di HP/tablet (jangan dikunci 1x).
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 5,
+  userScalable: true,
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {

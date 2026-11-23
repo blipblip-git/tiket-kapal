@@ -242,21 +242,21 @@ export default function AdminPetugasPage() {
       <div className="max-w-6xl mx-auto">
         
         {/* HEADER */}
-        <div className="mb-6 flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-bold text-gray-800 flex items-center gap-2">
+        <div className="mb-6 flex flex-col md:flex-row md:items-start md:justify-between gap-3">
+          <div className="min-w-0">
+            <h1 className="text-xl md:text-2xl font-bold text-gray-800 flex flex-wrap items-center gap-2">
               Manajemen Petugas
-              <span className="text-xs bg-green-100 text-green-700 px-2 py-1 rounded-full flex items-center gap-1 border border-green-300">
+              <span className="text-xs bg-green-100 text-green-700 px-2 py-1 rounded-full inline-flex items-center gap-1 border border-green-300 whitespace-nowrap">
                 <span className="w-2 h-2 rounded-full bg-green-500"></span> Mode Pusat Kontrol
               </span>
             </h1>
             <p className="text-sm text-gray-500 mt-1">Kelola akun petugas keberangkatan (Scan & Manifest) untuk kapal Anda.</p>
           </div>
-          <div className="flex gap-3">
-            <button onClick={() => setModalTambah(true)} className="bg-green-600 text-white px-4 py-2 rounded shadow hover:bg-green-700 text-sm font-medium">
+          <div className="flex gap-2 w-full md:w-auto">
+            <button onClick={() => setModalTambah(true)} className="flex-1 md:flex-none whitespace-nowrap bg-green-600 text-white px-4 py-2 rounded shadow hover:bg-green-700 text-sm font-medium">
               + Tambah Petugas
             </button>
-            <button onClick={() => router.push('/superadmin/pusat-kontrol/admin/petugas')} className="text-sm text-blue-600 hover:underline px-2">
+            <button onClick={() => router.push('/superadmin/pusat-kontrol/admin/petugas')} className="flex-1 md:flex-none whitespace-nowrap text-sm bg-white border border-gray-300 text-gray-700 hover:bg-gray-100 px-3 py-2 rounded shadow-sm font-medium">
               ← Kembali
             </button>
           </div>
@@ -277,7 +277,8 @@ export default function AdminPetugasPage() {
               <div className="bg-blue-600 px-4 py-3 border-b">
                 <h2 className="text-white font-bold">📍 Lokasi: {grup.lokasi}</h2>
               </div>
-              <table className="w-full text-sm">
+              <div className="hidden md:block overflow-x-auto">
+                <table className="w-full min-w-[900px] text-sm">
                 <thead className="bg-gray-50 text-gray-700 border-b">
                   <tr>
                     <th className="text-left px-4 py-3 w-12">No</th>
@@ -354,7 +355,88 @@ export default function AdminPetugasPage() {
                     )
                   })}
                 </tbody>
-              </table>
+                </table>
+              </div>
+
+              {/* HP: kartu per petugas (tabel 7 kolom tidak muat di layar kecil) */}
+              <div className="md:hidden divide-y divide-gray-100">
+                {grup.data.map((p, idx) => {
+                  const isEditing = editId === p.id
+
+                  if (isEditing) {
+                    return (
+                      <div key={p.id} className="p-4 bg-yellow-50 space-y-3">
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="text-xs font-bold text-gray-500">#{idx + 1}</span>
+                          <span className="text-xs font-medium text-gray-600">Petugas Keberangkatan</span>
+                        </div>
+                        <div>
+                          <label className="block text-xs font-medium text-gray-700 mb-1">Nama</label>
+                          <input type="text" value={editNama} onChange={(e) => setEditNama(e.target.value)} className="w-full border rounded px-3 py-2 text-gray-900" />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-medium text-gray-700 mb-1">Unit</label>
+                          <input type="text" value={editUnit} onChange={(e) => setEditUnit(e.target.value)} className="w-full border rounded px-3 py-2 text-gray-900" placeholder="Loket 1" />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-medium text-gray-700 mb-1">No. HP</label>
+                          <input type="tel" value={editHp} onChange={(e) => setEditHp(e.target.value)} className="w-full border rounded px-3 py-2 text-gray-900" />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-medium text-gray-700 mb-1">Password Baru (opsional)</label>
+                          <input type="text" value={editPass} onChange={(e) => setEditPass(e.target.value)} className="w-full border rounded px-3 py-2 text-gray-900" placeholder="Kosongkan jika tidak ganti password" />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-medium text-gray-700 mb-1">Lokasi Tugas</label>
+                          <select value={editLokasi} onChange={(e) => setEditLokasi(e.target.value)} className="w-full border rounded px-3 py-2 text-gray-900">
+                            {pilihanLokasi(lokasiList, editLokasi).map((lok) => <option key={lok} value={lok}>{lok}</option>)}
+                          </select>
+                        </div>
+                        <div className="flex gap-2 pt-1">
+                          <button onClick={() => handleSimpanEdit(p.id)} disabled={editLoading} className="flex-1 bg-blue-600 text-white px-3 py-2 rounded text-sm hover:bg-blue-700 font-bold disabled:opacity-50">
+                            {editLoading ? 'Menyimpan...' : 'Simpan'}
+                          </button>
+                          <button onClick={batalEdit} disabled={editLoading} className="flex-1 bg-gray-400 text-white px-3 py-2 rounded text-sm hover:bg-gray-500 disabled:opacity-50">
+                            Batal
+                          </button>
+                        </div>
+                      </div>
+                    )
+                  }
+
+                  return (
+                    <div key={p.id} className="p-4 space-y-2.5">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <p className="font-bold text-gray-900 break-words">{idx + 1}. {p.nama}</p>
+                          <p className="text-sm font-bold text-blue-700 break-words">Unit: {(p as any).unit || '-'}</p>
+                        </div>
+                        {p.aktif ? (
+                          <span className="shrink-0 inline-block px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-700">Aktif</span>
+                        ) : (
+                          <span className="shrink-0 inline-block px-2 py-1 rounded-full text-xs font-medium bg-red-100 text-red-700">Nonaktif</span>
+                        )}
+                      </div>
+                      <div className="text-sm text-gray-600 space-y-0.5">
+                        <p>No. HP: <span className="text-gray-900">{p.nomor_hp || '-'}</span></p>
+                        <p>Role: <span className="text-gray-900">Petugas Keberangkatan</span></p>
+                        <p className="text-xs text-gray-400">{p.password_hash || p.password_plain ? '••••••••' : '-'}</p>
+                      </div>
+                      <div className="flex flex-wrap gap-2 pt-1">
+                        <button onClick={() => kirimWA(p)} className="bg-green-100 text-green-700 px-3 py-2 rounded text-xs hover:bg-green-200 font-medium" title="Kirim WA">
+                          WA
+                        </button>
+                        <button onClick={() => mulaiEdit(p)} className="bg-blue-100 text-blue-700 px-3 py-2 rounded text-xs hover:bg-blue-200">
+                          Edit
+                        </button>
+                        <button onClick={() => toggleAktif(p)} className={`px-3 py-2 rounded text-xs ${p.aktif ? 'bg-orange-100 text-orange-700 hover:bg-orange-200' : 'bg-green-100 text-green-700 hover:bg-green-200'}`}>
+                          {p.aktif ? 'Nonaktifkan' : 'Aktifkan'}
+                        </button>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
             </div>
           ))
         )}
@@ -363,7 +445,7 @@ export default function AdminPetugasPage() {
       {/* MODAL TAMBAH */}
       {modalTambah && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-lg shadow-xl max-w-sm w-full p-6">
+          <div className="bg-white rounded-lg shadow-xl max-w-sm w-full p-6 max-h-[90dvh] overflow-y-auto">
             <h3 className="text-lg font-bold mb-4 text-gray-800">Tambah Petugas</h3>
             <form onSubmit={handleTambah}>
               <label className="block text-sm font-medium text-gray-700 mb-1">Nama Lengkap</label>

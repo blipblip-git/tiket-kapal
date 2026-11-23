@@ -144,8 +144,8 @@ export default function DashboardAdminPage() {
   const totalPendapatanKeseluruhan = statPerRute.reduce((sum, item) => sum + item.pendapatan, 0)
 
   return (
-    <div className="h-[100dvh] w-full bg-gray-100 p-3 md:p-6 flex flex-col overflow-hidden">
-      <div className="max-w-4xl w-full mx-auto flex flex-col h-full">
+    <div className="min-h-[100dvh] w-full bg-gray-100 p-3 md:p-6 flex flex-col">
+      <div className="max-w-4xl w-full mx-auto flex flex-col">
         
         {/* HEADER (Format Seragam: Nama Perusahaan / Judul / Nama) */}
         <DashboardHeader
@@ -156,10 +156,10 @@ export default function DashboardAdminPage() {
           refreshing={refreshing}
           aksi={
             <>
-              <button onClick={() => router.push('/ganti-password')} className="bg-gray-600 text-white px-2 py-1.5 md:px-4 md:py-2 rounded hover:bg-gray-700 text-[10px] md:text-sm font-medium">
+              <button onClick={() => router.push('/ganti-password')} className="bg-gray-600 text-white px-3 py-2 rounded hover:bg-gray-700 text-xs md:text-sm font-medium whitespace-nowrap">
                 {teks.tombol_ganti_password}
               </button>
-              <button onClick={handleLogout} className="bg-red-600 text-white px-3 py-1.5 md:px-4 md:py-2 rounded hover:bg-red-700 text-[10px] md:text-sm font-medium">
+              <button onClick={handleLogout} className="bg-red-600 text-white px-3 py-2 rounded hover:bg-red-700 text-xs md:text-sm font-medium whitespace-nowrap">
                 {teks.tombol_logout}
               </button>
             </>
@@ -199,8 +199,8 @@ export default function DashboardAdminPage() {
         </div>
 
         {/* MENU GRID */}
-        <div className="bg-white p-3 md:p-6 rounded shadow flex-1 flex flex-col overflow-hidden">
-          <div className="grid grid-cols-2 md:grid-cols-3 gap-2 md:gap-3 flex-1 overflow-y-auto content-start">
+        <div className="bg-white p-3 md:p-6 rounded shadow flex flex-col">
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-2 md:gap-3 content-start">
             
             <button onClick={() => router.push('/kapal')} className="flex items-center justify-center h-16 md:h-24 p-2 border border-teal-200 bg-teal-50 rounded-lg hover:bg-teal-100 text-center transition shadow-sm">
               <p className="font-bold text-xs md:text-sm text-teal-800">{teks.menu_kapal}</p>

@@ -492,33 +492,35 @@ function TemplateJadwalContent() {
                 <div className="divide-y divide-gray-100">
                   {daftarRute.map(([namaRute, list]) => (
                     <div key={namaRute}>
-                      <div className="bg-gray-50 px-4 py-2 flex justify-between items-center">
+                      <div className="bg-gray-50 px-4 py-2 flex flex-wrap justify-between items-center gap-1">
                         <p className="text-sm font-bold text-gray-800">Rute: {namaRute}</p>
                         <span className="text-[11px] text-gray-500">{list.length} jadwal</span>
                       </div>
-                      <div className="overflow-x-auto">
-                        <table className="w-full text-sm text-left">
+
+                      {/* DESKTOP: tabel penuh */}
+                      <div className="hidden md:block overflow-x-auto">
+                        <table className="w-full min-w-[560px] text-sm text-left">
                           <thead className="bg-white text-gray-500 border-b">
                             <tr>
-                              <th className="px-4 py-3">Jam</th>
-                              <th className="px-4 py-3">Harga</th>
-                              <th className="px-4 py-3">Hari</th>
-                              <th className="px-4 py-3">Status</th>
-                              <th className="px-4 py-3 text-right">Aksi</th>
+                              <th className="px-4 py-3 whitespace-nowrap">Jam</th>
+                              <th className="px-4 py-3 whitespace-nowrap">Harga</th>
+                              <th className="px-4 py-3 whitespace-nowrap">Hari</th>
+                              <th className="px-4 py-3 whitespace-nowrap">Status</th>
+                              <th className="px-4 py-3 text-right whitespace-nowrap">Aksi</th>
                             </tr>
                           </thead>
                           <tbody className="divide-y divide-gray-100">
                             {list.map(t => (
                               <tr key={t.id} className="hover:bg-gray-50">
-                                <td className="px-4 py-3 font-bold text-gray-900">{t.jam_berangkat.substring(0,5)}</td>
-                                <td className="px-4 py-3 text-gray-900">Rp {t.harga.toLocaleString('id-ID')}</td>
+                                <td className="px-4 py-3 font-bold text-gray-900 whitespace-nowrap">{t.jam_berangkat.substring(0,5)}</td>
+                                <td className="px-4 py-3 text-gray-900 whitespace-nowrap">Rp {t.harga.toLocaleString('id-ID')}</td>
                                 <td className="px-4 py-3 text-gray-900 text-xs">{labelHari(t.hari_operasi)}</td>
                                 <td className="px-4 py-3">
                                   <span className={`text-[10px] px-2 py-1 rounded-full font-bold ${t.aktif ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
                                     {t.aktif ? 'AKTIF' : 'NONAKTIF'}
                                   </span>
                                 </td>
-                                <td className="px-4 py-3 text-right space-x-2">
+                                <td className="px-4 py-3 text-right space-x-2 whitespace-nowrap">
                                   <button onClick={() => handleEdit(t)} className="text-blue-600 hover:underline font-medium">Edit</button>
                                   <button onClick={() => handleHapus(t.id)} className="text-red-600 hover:underline font-medium">Hapus</button>
                                 </td>
@@ -526,6 +528,32 @@ function TemplateJadwalContent() {
                             ))}
                           </tbody>
                         </table>
+                      </div>
+
+                      {/* HP: kartu ringkas, tidak ada kolom yang terpotong */}
+                      <div className="md:hidden divide-y divide-gray-100">
+                        {list.map(t => (
+                          <div key={t.id} className="p-4">
+                            <div className="flex items-start justify-between gap-3">
+                              <div className="min-w-0">
+                                <p className="text-lg font-bold text-gray-900 leading-none">{t.jam_berangkat.substring(0,5)}</p>
+                                <p className="mt-1 text-sm font-semibold text-gray-900">Rp {t.harga.toLocaleString('id-ID')}</p>
+                              </div>
+                              <span className={`shrink-0 text-[10px] px-2 py-1 rounded-full font-bold ${t.aktif ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
+                                {t.aktif ? 'AKTIF' : 'NONAKTIF'}
+                              </span>
+                            </div>
+                            <p className="mt-2 text-xs text-gray-500">Hari: <span className="text-gray-700">{labelHari(t.hari_operasi)}</span></p>
+                            <div className="mt-3 flex gap-2">
+                              <button onClick={() => handleEdit(t)} className="flex-1 bg-blue-50 text-blue-700 px-3 py-2 rounded-md text-sm font-medium hover:bg-blue-100">
+                                Edit
+                              </button>
+                              <button onClick={() => handleHapus(t.id)} className="flex-1 bg-red-50 text-red-600 px-3 py-2 rounded-md text-sm font-medium hover:bg-red-100">
+                                Hapus
+                              </button>
+                            </div>
+                          </div>
+                        ))}
                       </div>
                     </div>
                   ))}
