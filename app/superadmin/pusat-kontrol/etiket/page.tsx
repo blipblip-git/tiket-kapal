@@ -425,12 +425,18 @@ function EtiketSuperadminContent() {
     const sesi = getOperatorSession()
     
     if (sesi) {
+      // Setelah selesai mencetak, petugas/agen langsung dibawa ke halaman
+      // Jual Tiket agar tidak perlu kembali lewat dashboard lagi.
       if (sesi.role === 'agen') {
-        router.replace('/dashboard/agen')
+        router.replace('/agen/jual-tiket')
         return
       }
       if (sesi.role === 'terminal_keberangkatan') {
-        router.replace('/dashboard/keberangkatan')
+        router.replace('/cari-tiket')
+        return
+      }
+      if (sesi.role === 'petugas_loket' || sesi.role === 'petugas_mobile') {
+        router.replace('/dashboard/loket')
         return
       }
       if (sesi.role === 'admin_utama') {
