@@ -40,11 +40,11 @@ export default function AdminPetugasPage() {
   // Lokasi dari Master Rute (master_kota + master_rute).
   const { lokasiList } = useLokasiOperasional()
 
-  // Form tambah: pakai lokasi pertama Master Rute kalau default tidak ada di sana.
-  useEffect(() => {
-    if (lokasiList.length === 0) return
-    if (!lokasiList.includes(inputLokasi)) setInputLokasi(lokasiList[0])
-  }, [lokasiList, inputLokasi])
+  // Lokasi efektif untuk form tambah: pakai lokasi pertama Master Rute
+  // kalau nilai default belum ada, tanpa setState di dalam effect.
+  const inputLokasiForm = lokasiList.length === 0 || lokasiList.includes(inputLokasi)
+    ? inputLokasi
+    : lokasiList[0]
 
   useEffect(() => {
     async function init() {
@@ -141,7 +141,7 @@ export default function AdminPetugasPage() {
       nomor_hp: inputHp,
       nama: inputNama, 
       role: inputRole, 
-      lokasi: inputLokasi, 
+      lokasi: inputLokasiForm,
       unit: inputUnit, 
       aktif: true, 
       ...(await fieldPasswordBaru(inputPass)),
@@ -165,8 +165,8 @@ export default function AdminPetugasPage() {
     setEditNama(p.nama)
     setEditHp(p.nomor_hp || '')
     setEditPass('') // password lama tidak bisa ditampilkan (sudah di-hash)
-    setEditLokasi((p as any).lokasi || 'Tarakan')
-    setEditUnit((p as any).unit || '')
+    setEditLokasi(p.lokasi || 'Tarakan')
+    setEditUnit(p.unit || '')
     setPesan(null)
   }
 
@@ -182,7 +182,7 @@ export default function AdminPetugasPage() {
 
     setEditLoading(true)
 
-    const updateData: Record<string, any> = {
+    const updateData: Record<string, unknown> = {
       nama: editNama,
       nomor_hp: editHp,
       email: null,
@@ -220,22 +220,21 @@ export default function AdminPetugasPage() {
       noHpMurni = '62' + noHpMurni.slice(1)
     }
     
-    const pesan = `Halo ${p.nama}, ini pesan dari Admin. Berikut informasi akun Anda:\n\nNo HP: ${p.nomor_hp || noHpMurni}\nRole: Petugas Keberangkatan\nUnit: ${(p as any).unit || '-'}\nLokasi: ${(p as any).lokasi}\n\nPassword TIDAK dikirim lewat chat demi keamanan. Minta Admin mereset password bila lupa.`
+    const pesan = `Halo ${p.nama}, ini pesan dari Admin. Berikut informasi akun Anda:\n\nNo HP: ${p.nomor_hp || noHpMurni}\nRole: Petugas Keberangkatan\nUnit: ${p.unit || '-'}\nLokasi: ${p.lokasi || '-'}\n\nPassword TIDAK dikirim lewat chat demi keamanan. Minta Admin mereset password bila lupa.`
     const url = `https://wa.me/${noHpMurni}?text=${encodeURIComponent(pesan)}`
     window.open(url, '_blank')
   }
 
   if (loading) return <p className="p-6 text-center text-gray-500">Memuat data operator…</p>
 
-  const petugasPerLokasi = Array.from(
-    new Set([
-      ...lokasiList,
-      ...petugas.map((p) => String((p as any).lokasi || 'Tarakan').trim()).filter(Boolean),
-    ])
-  ).map((lok) => ({
-    lokasi: lok,
-    data: petugas.filter((p) => String((p as any).lokasi || 'Tarakan').trim() === lok),
-  })).filter((grup) => grup.data.length > 0)
+  // Satu tabel ringkas seperti Manajemen Agen. Lokasi tetap ditampilkan
+  // sebagai kolom, jadi tidak perlu lagi kartu/header biru per lokasi.
+  const petugasUrut = [...petugas].sort((a, b) => {
+    const lokA = (a.lokasi || 'Tarakan').trim()
+    const lokB = (b.lokasi || 'Tarakan').trim()
+    if (lokA !== lokB) return lokA.localeCompare(lokB, 'id')
+    return a.nama.localeCompare(b.nama, 'id')
+  })
 
   return (
     <div className="min-h-screen bg-gray-50 py-8 px-4">
@@ -268,178 +267,93 @@ export default function AdminPetugasPage() {
           </div>
         )}
 
-        {/* TABEL PER LOKASI */}
-        {petugasPerLokasi.length === 0 ? (
-          <div className="bg-white p-8 text-center text-gray-500 rounded shadow">Belum ada data petugas.</div>
-        ) : (
-          petugasPerLokasi.map((grup) => (
-            <div key={grup.lokasi} className="mb-8 bg-white rounded-lg shadow overflow-hidden">
-              <div className="bg-blue-600 px-4 py-3 border-b">
-                <h2 className="text-white font-bold">📍 Lokasi: {grup.lokasi}</h2>
-              </div>
-              <div className="hidden md:block overflow-x-auto">
-                <table className="w-full min-w-[900px] text-sm">
-                <thead className="bg-gray-50 text-gray-700 border-b">
-                  <tr>
-                    <th className="text-left px-4 py-3 w-12">No</th>
-                    <th className="text-left px-4 py-3">Nama</th>
-                    <th className="text-left px-4 py-3">Unit</th>
-                    <th className="text-left px-4 py-3">Role</th>
-                    <th className="text-left px-4 py-3">No. HP / Pass</th>
-                    <th className="text-center px-4 py-3">Status</th>
-                    <th className="text-center px-4 py-3">Aksi</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {grup.data.map((p, idx) => {
-                    const isEditing = editId === p.id
-
-                    if (isEditing) {
-                      return (
-                        <tr key={p.id} className="bg-yellow-50 border-t border-yellow-200">
-                          <td className="px-4 py-2 text-center font-bold">{idx + 1}</td>
-                          <td className="px-4 py-2"><input type="text" value={editNama} onChange={(e) => setEditNama(e.target.value)} className="border rounded px-2 py-1 w-full text-gray-900" /></td>
-                          <td className="px-4 py-2"><input type="text" value={editUnit} onChange={(e) => setEditUnit(e.target.value)} className="border rounded px-2 py-1 w-full text-gray-900" placeholder="Loket 1" /></td>
-                          <td className="px-4 py-2 text-gray-600 font-medium">Petugas Keberangkatan</td>
-                          <td className="px-4 py-2 space-y-1">
-                             <input type="tel" value={editHp} onChange={(e) => setEditHp(e.target.value)} className="border rounded px-2 py-1 w-full text-gray-900" />
-                             <input type="text" value={editPass} onChange={(e) => setEditPass(e.target.value)} className="border rounded px-2 py-1 w-full text-gray-900" placeholder="Kosongkan jika tidak ganti password" />
-                          </td>
-                          <td className="px-4 py-2 text-center">
-                            <select value={editLokasi} onChange={(e) => setEditLokasi(e.target.value)} className="border rounded px-2 py-1 text-gray-900 w-full">
-                              {pilihanLokasi(lokasiList, editLokasi).map((lok) => <option key={lok} value={lok}>{lok}</option>)}
-                            </select>
-                          </td>
-                          <td className="px-4 py-2 text-center space-x-1 whitespace-nowrap">
-                            <button onClick={() => handleSimpanEdit(p.id)} disabled={editLoading} className="bg-blue-600 text-white px-3 py-1 rounded text-xs hover:bg-blue-700 font-bold">
-                              {editLoading ? '...' : 'Simpan'}
-                            </button>
-                            <button onClick={batalEdit} disabled={editLoading} className="bg-gray-400 text-white px-3 py-1 rounded text-xs hover:bg-gray-500">
-                              Batal
-                            </button>
-                          </td>
-                        </tr>
-                      )
-                    }
-
-                    return (
-                      <tr key={p.id} className="border-t border-gray-100 hover:bg-gray-50">
-                        <td className="px-4 py-3 text-center font-bold text-gray-500">{idx + 1}</td>
-                        <td className="px-4 py-3 font-medium text-gray-900">{p.nama}</td>
-                        <td className="px-4 py-3 font-bold text-blue-700">{(p as any).unit || '-'}</td>
-                        <td className="px-4 py-3 text-gray-600">Petugas Keberangkatan</td>
-                        <td className="px-4 py-3 text-gray-600">
-                          {/* PERBAIKAN: Pake nomor_hp, bukan email */}
-                          <div>{p.nomor_hp || '-'}</div>
-                          <div className="text-xs text-gray-400">{p.password_hash || p.password_plain ? '••••••••' : '-'}</div>
-                        </td>
-                        <td className="px-4 py-3 text-center">
-                          {p.aktif ? (
-                            <span className="inline-block px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-700">Aktif</span>
-                          ) : (
-                            <span className="inline-block px-2 py-1 rounded-full text-xs font-medium bg-red-100 text-red-700">Nonaktif</span>
-                          )}
-                        </td>
-                        <td className="px-4 py-3 text-center space-x-1 whitespace-nowrap">
-                          <button onClick={() => kirimWA(p)} className="bg-green-100 text-green-700 px-2 py-1 rounded text-xs hover:bg-green-200 font-medium" title="Kirim WA">
-                            WA
-                          </button>
-                          <button onClick={() => mulaiEdit(p)} className="bg-blue-100 text-blue-700 px-2 py-1 rounded text-xs hover:bg-blue-200">
-                            Edit
-                          </button>
-                          <button onClick={() => toggleAktif(p)} className={`px-2 py-1 rounded text-xs ${p.aktif ? 'bg-orange-100 text-orange-700 hover:bg-orange-200' : 'bg-green-100 text-green-700 hover:bg-green-200'}`}>
-                            {p.aktif ? 'Nonaktifkan' : 'Aktifkan'}
-                          </button>
-                        </td>
-                      </tr>
-                    )
-                  })}
-                </tbody>
-                </table>
-              </div>
-
-              {/* HP: kartu per petugas (tabel 7 kolom tidak muat di layar kecil) */}
-              <div className="md:hidden divide-y divide-gray-100">
-                {grup.data.map((p, idx) => {
+        {/* TABEL PETUGAS */}
+        <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[780px] text-sm text-left">
+              <thead className="bg-gray-50 text-gray-700 border-b">
+                <tr>
+                  <th className="px-4 py-3 w-12">No</th>
+                  <th className="px-4 py-3">Nama</th>
+                  <th className="px-4 py-3">Unit</th>
+                  <th className="px-4 py-3">Lokasi</th>
+                  <th className="px-4 py-3">No. HP / Pass</th>
+                  <th className="px-4 py-3 text-center">Status</th>
+                  <th className="px-4 py-3 text-center">Aksi</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {petugasUrut.map((p, idx) => {
                   const isEditing = editId === p.id
 
                   if (isEditing) {
                     return (
-                      <div key={p.id} className="p-4 bg-yellow-50 space-y-3">
-                        <div className="flex items-center justify-between gap-2">
-                          <span className="text-xs font-bold text-gray-500">#{idx + 1}</span>
-                          <span className="text-xs font-medium text-gray-600">Petugas Keberangkatan</span>
-                        </div>
-                        <div>
-                          <label className="block text-xs font-medium text-gray-700 mb-1">Nama</label>
-                          <input type="text" value={editNama} onChange={(e) => setEditNama(e.target.value)} className="w-full border rounded px-3 py-2 text-gray-900" />
-                        </div>
-                        <div>
-                          <label className="block text-xs font-medium text-gray-700 mb-1">Unit</label>
-                          <input type="text" value={editUnit} onChange={(e) => setEditUnit(e.target.value)} className="w-full border rounded px-3 py-2 text-gray-900" placeholder="Loket 1" />
-                        </div>
-                        <div>
-                          <label className="block text-xs font-medium text-gray-700 mb-1">No. HP</label>
-                          <input type="tel" value={editHp} onChange={(e) => setEditHp(e.target.value)} className="w-full border rounded px-3 py-2 text-gray-900" />
-                        </div>
-                        <div>
-                          <label className="block text-xs font-medium text-gray-700 mb-1">Password Baru (opsional)</label>
-                          <input type="text" value={editPass} onChange={(e) => setEditPass(e.target.value)} className="w-full border rounded px-3 py-2 text-gray-900" placeholder="Kosongkan jika tidak ganti password" />
-                        </div>
-                        <div>
-                          <label className="block text-xs font-medium text-gray-700 mb-1">Lokasi Tugas</label>
-                          <select value={editLokasi} onChange={(e) => setEditLokasi(e.target.value)} className="w-full border rounded px-3 py-2 text-gray-900">
+                      <tr key={p.id} className="bg-yellow-50">
+                        <td className="px-4 py-2 text-center font-bold text-gray-500">{idx + 1}</td>
+                        <td className="px-4 py-2">
+                          <input type="text" value={editNama} onChange={(e) => setEditNama(e.target.value)} className="w-full border rounded px-2 py-1 text-gray-900" />
+                        </td>
+                        <td className="px-4 py-2">
+                          <input type="text" value={editUnit} onChange={(e) => setEditUnit(e.target.value)} className="w-full border rounded px-2 py-1 text-gray-900" placeholder="Loket 1" />
+                        </td>
+                        <td className="px-4 py-2">
+                          <select value={editLokasi} onChange={(e) => setEditLokasi(e.target.value)} className="w-full border rounded px-2 py-1 text-gray-900">
                             {pilihanLokasi(lokasiList, editLokasi).map((lok) => <option key={lok} value={lok}>{lok}</option>)}
                           </select>
-                        </div>
-                        <div className="flex gap-2 pt-1">
-                          <button onClick={() => handleSimpanEdit(p.id)} disabled={editLoading} className="flex-1 bg-blue-600 text-white px-3 py-2 rounded text-sm hover:bg-blue-700 font-bold disabled:opacity-50">
-                            {editLoading ? 'Menyimpan...' : 'Simpan'}
+                        </td>
+                        <td className="px-4 py-2 space-y-1">
+                          <input type="tel" value={editHp} onChange={(e) => setEditHp(e.target.value)} className="w-full border rounded px-2 py-1 text-gray-900" />
+                          <input type="text" value={editPass} onChange={(e) => setEditPass(e.target.value)} className="w-full border rounded px-2 py-1 text-gray-900" placeholder="Kosongkan jika tidak ganti password" />
+                        </td>
+                        <td className="px-4 py-2 text-center text-gray-400">—</td>
+                        <td className="px-4 py-2 text-center space-x-1 whitespace-nowrap">
+                          <button onClick={() => handleSimpanEdit(p.id)} disabled={editLoading} className="bg-blue-600 text-white px-3 py-1 rounded text-xs hover:bg-blue-700 font-bold disabled:opacity-50">
+                            {editLoading ? '...' : 'Simpan'}
                           </button>
-                          <button onClick={batalEdit} disabled={editLoading} className="flex-1 bg-gray-400 text-white px-3 py-2 rounded text-sm hover:bg-gray-500 disabled:opacity-50">
+                          <button onClick={batalEdit} disabled={editLoading} className="bg-gray-400 text-white px-3 py-1 rounded text-xs hover:bg-gray-500 disabled:opacity-50">
                             Batal
                           </button>
-                        </div>
-                      </div>
+                        </td>
+                      </tr>
                     )
                   }
 
                   return (
-                    <div key={p.id} className="p-4 space-y-2.5">
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="min-w-0">
-                          <p className="font-bold text-gray-900 break-words">{idx + 1}. {p.nama}</p>
-                          <p className="text-sm font-bold text-blue-700 break-words">Unit: {(p as any).unit || '-'}</p>
-                        </div>
-                        {p.aktif ? (
-                          <span className="shrink-0 inline-block px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-700">Aktif</span>
-                        ) : (
-                          <span className="shrink-0 inline-block px-2 py-1 rounded-full text-xs font-medium bg-red-100 text-red-700">Nonaktif</span>
-                        )}
-                      </div>
-                      <div className="text-sm text-gray-600 space-y-0.5">
-                        <p>No. HP: <span className="text-gray-900">{p.nomor_hp || '-'}</span></p>
-                        <p>Role: <span className="text-gray-900">Petugas Keberangkatan</span></p>
-                        <p className="text-xs text-gray-400">{p.password_hash || p.password_plain ? '••••••••' : '-'}</p>
-                      </div>
-                      <div className="flex flex-wrap gap-2 pt-1">
-                        <button onClick={() => kirimWA(p)} className="bg-green-100 text-green-700 px-3 py-2 rounded text-xs hover:bg-green-200 font-medium" title="Kirim WA">
-                          WA
+                    <tr key={p.id} className="hover:bg-gray-50">
+                      <td className="px-4 py-3 text-center font-bold text-gray-500">{idx + 1}</td>
+                      <td className="px-4 py-3 font-bold text-gray-900">{p.nama}</td>
+                      <td className="px-4 py-3 font-bold text-blue-700">{p.unit || '-'}</td>
+                      <td className="px-4 py-3 font-medium text-gray-900">{(p.lokasi || 'Tarakan').trim()}</td>
+                      <td className="px-4 py-3 text-gray-600">
+                        <div>{p.nomor_hp || '-'}</div>
+                        <div className="text-xs text-gray-400">{p.password_hash || p.password_plain ? '••••••••' : '-'}</div>
+                      </td>
+                      <td className="px-4 py-3 text-center">
+                        <span className={`text-[10px] px-2 py-1 rounded-full font-bold ${p.aktif ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
+                          {p.aktif ? 'AKTIF' : 'NONAKTIF'}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 text-center whitespace-nowrap">
+                        <button onClick={() => kirimWA(p)} className="text-green-600 hover:underline font-medium" title="Kirim WA">WA</button>
+                        <span className="text-gray-300 mx-2">|</span>
+                        <button onClick={() => mulaiEdit(p)} className="text-blue-600 hover:underline font-medium">Edit</button>
+                        <span className="text-gray-300 mx-2">|</span>
+                        <button onClick={() => toggleAktif(p)} disabled={aksiLoading === p.id} className={p.aktif ? 'text-orange-600 hover:underline font-medium disabled:opacity-50' : 'text-green-600 hover:underline font-medium disabled:opacity-50'}>
+                          {aksiLoading === p.id ? '...' : p.aktif ? 'Nonaktifkan' : 'Aktifkan'}
                         </button>
-                        <button onClick={() => mulaiEdit(p)} className="bg-blue-100 text-blue-700 px-3 py-2 rounded text-xs hover:bg-blue-200">
-                          Edit
-                        </button>
-                        <button onClick={() => toggleAktif(p)} className={`px-3 py-2 rounded text-xs ${p.aktif ? 'bg-orange-100 text-orange-700 hover:bg-orange-200' : 'bg-green-100 text-green-700 hover:bg-green-200'}`}>
-                          {p.aktif ? 'Nonaktifkan' : 'Aktifkan'}
-                        </button>
-                      </div>
-                    </div>
+                      </td>
+                    </tr>
                   )
                 })}
-              </div>
+              </tbody>
+            </table>
+          </div>
+          {petugasUrut.length === 0 && !loading && (
+            <div className="text-center py-10">
+              <p className="text-gray-500">Belum ada data petugas.</p>
             </div>
-          ))
-        )}
+          )}
+        </div>
       </div>
 
       {/* MODAL TAMBAH */}
@@ -458,8 +372,8 @@ export default function AdminPetugasPage() {
               <input type="text" value={inputUnit} onChange={(e) => setInputUnit(e.target.value)} className="w-full border rounded px-3 py-2 mb-3 text-gray-900" placeholder="Contoh: Terminal 1" required />
 
               <label className="block text-sm font-medium text-gray-700 mb-1">Lokasi Tugas</label>
-              <select value={inputLokasi} onChange={(e) => setInputLokasi(e.target.value)} className="w-full border rounded px-3 py-2 mb-3 text-gray-900" required>
-                {pilihanLokasi(lokasiList, inputLokasi).map((lok) => <option key={lok} value={lok}>{lok}</option>)}
+              <select value={inputLokasiForm} onChange={(e) => setInputLokasi(e.target.value)} className="w-full border rounded px-3 py-2 mb-3 text-gray-900" required>
+                {pilihanLokasi(lokasiList, inputLokasiForm).map((lok) => <option key={lok} value={lok}>{lok}</option>)}
               </select>
 
               <label className="block text-sm font-medium text-gray-700 mb-1">Password</label>

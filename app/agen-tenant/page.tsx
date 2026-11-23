@@ -35,22 +35,19 @@ function AgenTenantContent() {
   const [lokasi, setLokasi] = useState('Tarakan')
   const [password, setPassword] = useState('')
   const [aktif, setAktif] = useState(true)
-  const [fee, setFee] = useState('0')
+  const [fee, setFee] = useState('')
   const [adaKolomFee, setAdaKolomFee] = useState(true)
   
   const [proses, setProses] = useState(false)
 
-  // Pilihan "Lokasi Operasional" WAJIB dari Master Rute (master_kota + master_rute),
-  // bukan daftar tetap Tarakan/Tanjung Selor.
+  // Lokasi dari Master Rute (master_kota + master_rute).
   const { lokasiList } = useLokasiOperasional()
 
-  // Kalau Master Rute belum memuat Tarakan (atau daftar baru selesai dimuat),
-  // pakai lokasi pertama dari Master Rute untuk form baru.
-  useEffect(() => {
-    if (editId) return
-    if (lokasiList.length === 0) return
-    if (!lokasiList.includes(lokasi)) setLokasi(lokasiList[0])
-  }, [lokasiList, lokasi, editId])
+  // Lokasi efektif untuk form: kalau daftar Master Rute belum memuat nilai
+  // default, pakai lokasi pertama. Saat edit, pertahankan lokasi lama.
+  const lokasiForm = lokasiList.length === 0 || editId || lokasiList.includes(lokasi)
+    ? lokasi
+    : lokasiList[0]
 
   useEffect(() => {
     async function init() {
@@ -94,7 +91,7 @@ function AgenTenantContent() {
     setLokasi('Tarakan')
     setPassword('')
     setAktif(true)
-    setFee('0')
+    setFee('')
     setError('')
   }
 
@@ -105,7 +102,9 @@ function AgenTenantContent() {
     setLokasi(a.lokasi || 'Tarakan')
     setPassword('') // password lama tidak bisa ditampilkan (sudah di-hash)
     setAktif(a.aktif)
-    setFee(String(Number(a.fee || 0)))
+    // Fee 0 / kosong ditampilkan kosong supaya admin bisa langsung mengetik
+    // angka baru tanpa harus menghapus "0" terlebih dahulu.
+    setFee(a.fee && Number(a.fee) > 0 ? String(Number(a.fee)) : '')
     setShowForm(true)
   }
 
@@ -131,11 +130,10 @@ function AgenTenantContent() {
     setError('')
 
     try {
-      const payload: Record<string, any> = {
-        id: crypto.randomUUID(), // Generate UUID otomatis
+      const payload: Record<string, string | number | boolean | null> = {
         nama,
         nomor_hp: nomorHp,
-        lokasi,
+        lokasi: lokasiForm,
         role: 'agen',
         aktif,
         operator_id: profile.id
@@ -153,19 +151,21 @@ function AgenTenantContent() {
       }
 
       if (editId) {
-        const { id, ...updatePayload } = payload 
-        const { error: errUpd } = await supabase.from('profiles').update(updatePayload).eq('id', editId)
+        const { error: errUpd } = await supabase.from('profiles').update(payload).eq('id', editId)
         if (errUpd) throw errUpd
       } else {
-        const { error: errIns } = await supabase.from('profiles').insert(payload)
+        const { error: errIns } = await supabase.from('profiles').insert({
+          ...payload,
+          id: crypto.randomUUID(), // Generate UUID otomatis
+        })
         if (errIns) throw errIns
       }
 
       setShowForm(false)
       resetForm()
       fetchData(profile)
-    } catch (err: any) {
-      setError(err.message || 'Terjadi kesalahan')
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Terjadi kesalahan')
     } finally {
       setProses(false)
     }
@@ -220,8 +220,8 @@ function AgenTenantContent() {
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Lokasi Operasional</label>
-                  <select value={lokasi} onChange={e => setLokasi(e.target.value)} className="w-full border rounded-md px-3 py-2 text-gray-900 focus:ring-purple-500 focus:border-purple-500">
-                    {pilihanLokasi(lokasiList, lokasi).map(l => (
+                  <select value={lokasiForm} onChange={e => setLokasi(e.target.value)} className="w-full border rounded-md px-3 py-2 text-gray-900 focus:ring-purple-500 focus:border-purple-500">
+                    {pilihanLokasi(lokasiList, lokasiForm).map(l => (
                       <option key={l} value={l}>{l}</option>
                     ))}
                   </select>
