@@ -24,39 +24,60 @@ export default function SessionGuard() {
       return
     }
 
-    // 2. Halaman publik yang tidak perlu dicek login
-    const halamanPublik = [
-      '/', 
-      '/login', 
-      '/cek-tiket', 
-      '/etiket', 
-      '/form', 
-      '/superadmin', // Halaman login superadmin
-      '/syahbandar', 
-      '/kursi', 
-      '/pembayaran'
+    // 2. Hanya halaman staf/admin yang perlu dicek login.
+    // PENTING: jangan memakai daftar halaman publik dengan startsWith('/') — '/'
+    // cocok dengan SEMUA path, sehingga guard ini tidak pernah berjalan (bug lama).
+    const awalanWajibLogin = [
+      '/dashboard', // termasuk /dashboard-superadmin/...
+      '/agen', // termasuk /agen-tenant
+      '/audit',
+      '/backup-data',
+      '/cetak-ulang',
+      '/ganti-password',
+      '/kapal',
+      '/laporan',
+      '/pengaturan',
+      '/pilih-mode',
+      '/pusat-laporan-keberangkatan',
+      '/rekap-bagi-hasil',
+      '/scan',
+      '/template-jadwal',
+      '/superadmin/pusat-kontrol',
     ]
-    
-    if (halamanPublik.some(path => pathname === path || pathname.startsWith(path))) {
+
+    const wajibLogin = awalanWajibLogin.some((awalan) => pathname.startsWith(awalan))
+    if (!wajibLogin) {
       return
     }
 
     // 3. CEK SESI LOKAL (PETUGAS/AGEN) DULU: single session + auto-logout jam kerja
     const sesiLokal = getOperatorSession()
     if (sesiLokal) {
-      cekAutoLogout(sesiLokal).then((harusLogout) => {
-        if (harusLogout) {
-          console.log('Jam kerja selesai, auto-logout petugas...')
-          logoutOperator()
+      // Sesi lokal (localStorage) saja TIDAK cukup sejak security-tahap2.sql.
+      // Tanpa token Supabase Auth, semua query jalan sebagai anon: halaman admin
+      // tampil kosong / "permission denied for table profiles". Jadi kalau token
+      // Auth sudah hilang atau kedaluwarsa, paksa login ulang.
+      supabase.auth.getSession().then(({ data: { session } }) => {
+        if (!session) {
+          console.log('Sesi Supabase Auth tidak ada, memaksa login ulang...')
+          logoutOperator('session_expired')
+          return
         }
-      })
 
-      // 3b. Akun/perusahaan dinonaktifkan atau dihapus Superadmin -> tendang.
-      cekStatusOperator(sesiLokal).then((masihAktif) => {
-        if (!masihAktif) {
-          console.log('Akun atau perusahaan dinonaktifkan, mengalihkan ke login...')
-          logoutOperator()
-        }
+        cekAutoLogout(sesiLokal).then((harusLogout) => {
+          if (harusLogout) {
+            console.log('Jam kerja selesai, auto-logout petugas...')
+            logoutOperator()
+          }
+        })
+
+        // 3b. Akun/perusahaan dinonaktifkan atau dihapus Superadmin -> tendang.
+        cekStatusOperator(sesiLokal).then((masihAktif) => {
+          if (!masihAktif) {
+            console.log('Akun atau perusahaan dinonaktifkan, mengalihkan ke login...')
+            logoutOperator()
+          }
+        })
       })
       return
     }
@@ -70,7 +91,8 @@ export default function SessionGuard() {
       cekValidasiSesi().then((isValid) => {
         if (!isValid) {
           console.log('Sesi tidak valid, mengalihkan ke login...')
-          router.push('/login')
+          // Superadmin punya halaman login sendiri di /superadmin.
+          router.push(pathname.startsWith('/superadmin') ? '/superadmin' : '/login')
         }
       })
     })

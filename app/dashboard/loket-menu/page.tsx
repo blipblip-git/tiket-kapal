@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { getOperatorSession, type Profile } from '@/lib/supabase'
+import { getOperatorSession, hapusSesiAuthLokal, type Profile } from '@/lib/supabase'
 
 export default function DashboardLoketMenuPage() {
   const router = useRouter()
@@ -20,6 +20,7 @@ export default function DashboardLoketMenuPage() {
   }, [router])
 
   function handleLogout() {
+    hapusSesiAuthLokal()
     localStorage.removeItem('petugas_session')
     localStorage.removeItem('mode_kerja')
     router.push('/login')

@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { supabase, getProfile, getOperatorSession, ambilNamaPerusahaan, type Profile } from '@/lib/supabase'
+import { supabase, getProfile, getOperatorSession, ambilNamaPerusahaan, hapusSesiAuthLokal, type Profile } from '@/lib/supabase'
 import { idOperator, ambilOperatorKapal, cocokOperator } from '@/lib/tenant'
 import DashboardHeader from '@/components/DashboardHeader'
 
@@ -128,6 +128,7 @@ export default function DashboardAdminPage() {
     }
     localStorage.removeItem('petugas_session')
     localStorage.removeItem('mode_kerja')
+    hapusSesiAuthLokal()
     router.push('/login')
   }
 

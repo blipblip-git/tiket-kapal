@@ -240,13 +240,39 @@ export async function logout() {
   }
 }
 
-export function logoutOperator() {
-  if (typeof window !== 'undefined') {
-    localStorage.removeItem('petugas_session')
-    localStorage.removeItem('admin_session_token')
-    localStorage.removeItem('mode_kerja')
-    window.location.href = '/login'
+// ==================== HAPUS SESI AUTH DI BROWSER ====================
+// Sejak security-tahap2.sql, token Supabase Auth adalah "KTP" staf ke database.
+// Kalau token tertinggal setelah logout, halaman bisa memakai akun lama atau
+// tampil kosong. Hapus langsung dari storage (format sb-<ref>-auth-token[.n]),
+// lalu beri tahu client Supabase (best-effort) supaya state di memori ikut bersih.
+export function hapusSesiAuthLokal() {
+  if (typeof window === 'undefined') return
+
+  try {
+    Object.keys(localStorage)
+      .filter((kunci) => kunci.startsWith('sb-') && kunci.includes('-auth-token'))
+      .forEach((kunci) => localStorage.removeItem(kunci))
+  } catch {
+    // localStorage bisa diblokir (mode privat) — abaikan.
   }
+
+  try {
+    void supabase.auth.signOut({ scope: 'local' }).catch(() => undefined)
+  } catch {
+    // abaikan
+  }
+}
+
+export function logoutOperator(alasan?: string) {
+  if (typeof window === 'undefined') return
+
+  hapusSesiAuthLokal()
+  localStorage.removeItem('petugas_session')
+  localStorage.removeItem('admin_session_token')
+  localStorage.removeItem('mode_kerja')
+  window.location.href = alasan
+    ? `/login?pesan=${encodeURIComponent(alasan)}`
+    : '/login'
 }
 
 // ==================== CATAT AUDIT ====================

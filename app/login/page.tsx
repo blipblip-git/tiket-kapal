@@ -5,6 +5,14 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import { adalahKolektor } from '@/lib/kolektor'
 import { supabase } from '@/lib/supabase'
 
+// Pesan dari SessionGuard / cekValidasiSesi: sesi lama sudah tidak dipakai.
+function pesanDariQuery(kode: string | null): string {
+  if (kode === 'session_expired') {
+    return 'Sesi login berakhir. Silakan login ulang untuk melanjutkan.'
+  }
+  return ''
+}
+
 function LoginContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -13,7 +21,7 @@ function LoginContent() {
   const [tab, setTab] = useState<'operator' | 'syahbandar'>(initialTab)
   const [noHp, setNoHp] = useState('')
   const [password, setPassword] = useState('')
-  const [pesan, setPesan] = useState('')
+  const [pesan, setPesan] = useState(() => pesanDariQuery(searchParams.get('pesan')))
   const [loading, setLoading] = useState(false)
   const [showPassword, setShowPassword] = useState(false)
 
@@ -44,15 +52,28 @@ function LoginContent() {
 
       // Sesi Supabase Auth dipasang di browser. Inilah "KTP digital" staf untuk
       // database: setiap tulis/baca akan dikenali sebagai akun ini (RLS).
-      if (hasil.session?.access_token && hasil.session?.refresh_token) {
-        try {
-          await supabase.auth.setSession({
-            access_token: hasil.session.access_token,
-            refresh_token: hasil.session.refresh_token
-          })
-        } catch (err) {
-          console.error('Gagal memasang sesi pengaman:', err)
-        }
+      // Tanpa sesi ini (mis. SUPABASE_SERVICE_ROLE_KEY tidak terbaca di server),
+      // staf bisa masuk aplikasi tetapi semua baca/tulis ditolak dan halaman
+      // tampil kosong. Jadi jangan lanjut login kalau sesinya tidak ada.
+      if (!hasil.session?.access_token || !hasil.session?.refresh_token) {
+        console.error('Sesi pengaman tidak tersedia:', hasil.peringatan)
+        setPesan(
+          'Login gagal: sesi pengaman tidak bisa dipasang. Hubungi Admin Utama (periksa SUPABASE_SERVICE_ROLE_KEY di server).'
+        )
+        setLoading(false)
+        return
+      }
+
+      try {
+        await supabase.auth.setSession({
+          access_token: hasil.session.access_token,
+          refresh_token: hasil.session.refresh_token
+        })
+      } catch (err) {
+        console.error('Gagal memasang sesi pengaman:', err)
+        setPesan('Login gagal: sesi pengaman tidak bisa dipasang di browser ini. Coba lagi.')
+        setLoading(false)
+        return
       }
 
       localStorage.setItem('petugas_session', JSON.stringify({

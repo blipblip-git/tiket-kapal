@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { supabase, getOperatorSession, type Profile } from '@/lib/supabase'
+import { supabase, getOperatorSession, hapusSesiAuthLokal, type Profile } from '@/lib/supabase'
 import { adalahKolektor } from '@/lib/kolektor'
 
 // Dashboard akun KOLEKTOR: penagih uang cash dari agen & petugas di lokasi
@@ -32,6 +32,7 @@ export default function DashboardKolektorPage() {
     }
     localStorage.removeItem('petugas_session')
     localStorage.removeItem('mode_kerja')
+    hapusSesiAuthLokal()
     router.replace('/login')
   }
 

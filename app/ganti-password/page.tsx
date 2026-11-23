@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { supabase, getOperatorSession } from '@/lib/supabase'
+import { supabase, getOperatorSession, hapusSesiAuthLokal } from '@/lib/supabase'
 import { fieldPasswordBaru } from '@/lib/password'
 
 export default function GantiPasswordPage() {
@@ -96,6 +96,9 @@ export default function GantiPasswordPage() {
     setTimeout(() => {
       // Logout paksa setelah ganti password (hanya akun yang barusan diganti)
       if (user && user.id === idProfil) supabase.auth.signOut()
+      // Token Auth browser ini juga harus dibuang, kalau tidak sesi lama tetap
+      // dianggap sah oleh database meski layar sudah kembali ke /login.
+      hapusSesiAuthLokal()
       localStorage.removeItem('petugas_session')
       router.push('/login')
     }, 2000)

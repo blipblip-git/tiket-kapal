@@ -43,7 +43,12 @@ export default function SuperAdminLoginPage() {
       // JIKA LOLOS, KITA BONGKAR PAKSA DI SINI
       // ==========================================
       alert('LOGIN SUKSES! Role terdeteksi: "superadmin". Lanjut pindah halaman...')
-      
+
+      // Sesi staf yang tertinggal dari /login (mis. selesai menguji tenant)
+      // tidak boleh menimpa akun Superadmin di halaman Pusat Kontrol.
+      localStorage.removeItem('petugas_session')
+      localStorage.removeItem('mode_kerja')
+
       // Coba pindah halaman manual
       window.location.href = '/dashboard-superadmin'
 
