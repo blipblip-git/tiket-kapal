@@ -14,9 +14,29 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
+// Alamat situs & izin indeks mesin pencari diatur lewat env, supaya pindah
+// domain (vercel.app -> www.lintasair.com) cukup ganti env + redeploy.
+const SITUS = (process.env.NEXT_PUBLIC_SITE_URL || "https://tiket-kapal.vercel.app")
+  .trim()
+  .replace(/\/+$/, "")
+
+const BOLEH_DIINDEKS = process.env.NEXT_PUBLIC_INDEXABLE === "true"
+
+function alamatSitus(): URL {
+  try {
+    return new URL(SITUS)
+  } catch {
+    return new URL("https://tiket-kapal.vercel.app")
+  }
+}
+
 export const metadata: Metadata = {
+  metadataBase: alamatSitus(),
   title: "Tiket Kapal Kaltara",
   description: "Sistem Penjualan Tiket Kapal Kalimantan Utara",
+  robots: BOLEH_DIINDEKS
+    ? { index: true, follow: true }
+    : { index: false, follow: false },
   other: {
     google: "notranslate",
   },
