@@ -9,6 +9,8 @@ import { pastikanSesiStaf } from '@/lib/akunAuth'
 import { hashPasswordServer, kolomPasswordHashBelumAda, verifyPassword } from '@/lib/passwordServer'
 import { buatTokenSesi } from '@/lib/sessionToken'
 import { ROLE_KOLEKTOR, adalahKolektor } from '@/lib/kolektor'
+import { normalisasiNomorHp, nomorHpValid } from '@/lib/nomorHp'
+import { diLuarJamKerja, JAM_MULAI_DEFAULT, JAM_SELESAI_DEFAULT, rentangJamKerja } from '@/lib/jamKerja'
 import type { SupabaseClient } from '@supabase/supabase-js'
 
 
@@ -109,7 +111,7 @@ export async function POST(request: Request) {
   const admin = buatClientAdmin()
   if (!admin) return pesanServiceKeyKosong()
 
-  let body: { identifier?: unknown; login?: unknown; password?: unknown; profil_id?: unknown }
+  let body: { identifier?: unknown; login?: unknown; password?: unknown }
   try {
     body = await request.json()
   } catch {
@@ -118,9 +120,6 @@ export async function POST(request: Request) {
 
   const identifier = String(body.identifier ?? body.login ?? '').trim()
   const password = String(body.password ?? '')
-  // Diisi hanya kalau pengguna memilih salah satu akun saat nomor HP/email
-  // dipakai beberapa profil. Tetap diverifikasi ulang dengan password.
-  const profilIdDipilih = String(body.profil_id ?? '').trim()
 
   if (!identifier || !password) {
     return NextResponse.json({ error: 'Nomor HP/Email dan password wajib diisi.' }, { status: 400 })
@@ -138,18 +137,27 @@ export async function POST(request: Request) {
   }
 
   try {
+    // Nomor HP disimpan dalam bentuk baku 08..., tetapi input pengguna boleh
+    // memakai +62/62/spasi. Query tetap dicoba dengan bentuk asli untuk data lama.
+    const identifierHp = !identifier.includes('@') && nomorHpValid(identifier)
+      ? normalisasiNomorHp(identifier)
+      : ''
+
     // Cari berdasarkan email dulu, lalu nomor HP (tanpa menyisipkan input ke filter PostgREST).
     let hasil = await cariProfil(admin, 'email', identifier)
     if (hasil.profiles.length === 0 && !hasil.error) {
       hasil = await cariProfil(admin, 'nomor_hp', identifier)
+    }
+    if (hasil.profiles.length === 0 && !hasil.error && identifierHp && identifierHp !== identifier) {
+      hasil = await cariProfil(admin, 'nomor_hp', identifierHp)
     }
 
     if (hasil.error) {
       return NextResponse.json({ error: 'Gagal memeriksa akun: ' + hasil.error }, { status: 500 })
     }
 
-    // Nomor HP yang sama bisa dipakai beberapa akun. Cocokkan password ke semua
-    // kandidat; kalau hanya satu yang cocok, langsung masuk tanpa pilihan.
+    // Cocokkan password ke semua kandidat. Kalau ada lebih dari satu akun yang
+    // cocok, data nomor HP sedang ganda: tolak, jangan beri pilihan akun.
     const cocokPassword = hasil.profiles.filter((p) => {
       const hash = p.password_hash || null
       return hash
@@ -162,30 +170,14 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Nomor HP/Email atau password salah.' }, { status: 401 })
     }
 
-    // Kalau pengguna sudah memilih akun, hanya akun itu yang boleh dipakai.
-    const kandidat = profilIdDipilih
-      ? cocokPassword.filter((p) => p.id === profilIdDipilih)
-      : cocokPassword
-
-    if (kandidat.length === 0) {
-      catatGagal(kunci)
-      return NextResponse.json({ error: 'Nomor HP/Email atau password salah.' }, { status: 401 })
-    }
-
-    if (kandidat.length > 1) {
+    if (cocokPassword.length > 1) {
       return NextResponse.json({
-        error: 'Nomor HP/Email ini dipakai lebih dari satu akun. Pilih akun yang ingin dipakai.',
-        pilihan_akun: kandidat.map((p) => ({
-          id: p.id,
-          nama: p.nama,
-          role: adalahKolektor(p) ? ROLE_KOLEKTOR : p.role,
-          lokasi: p.lokasi,
-          unit: p.unit
-        }))
+        error: 'Nomor HP ini terdaftar pada lebih dari satu akun. Satu nomor HP hanya boleh untuk satu login. Hubungi Admin Utama agar salah satu akun diganti nomor HP-nya.',
+        kode: 'nomor_hp_ganda'
       }, { status: 409 })
     }
 
-    const profil = kandidat[0]
+    const profil = cocokPassword[0]
     const hash = profil.password_hash || null
 
     if (profil.aktif === false) {
@@ -210,6 +202,38 @@ export async function POST(request: Request) {
         return NextResponse.json({
           error: `Perusahaan ${induk?.nama_perusahaan || 'penyewa'} sedang dinonaktifkan. Hubungi Admin Utama / pemilik platform.`
         }, { status: 403 })
+      }
+    }
+
+    // Jam operasional dari Admin Utama wajib dipatuhi. Admin Utama sendiri
+    // dikecualikan. Kalau Admin Utama mematikan auto-logout, pembatasan ikut mati.
+    const roleLogin = adalahKolektor(profil) ? ROLE_KOLEKTOR : (profil.role || '')
+    if (roleLogin !== 'admin_utama' && roleLogin !== 'superadmin') {
+      const operatorId = profil.operator_id || profil.id
+      const { data: setelan, error: errorSetelan } = await admin
+        .from('pengaturan_sistem')
+        .select('jam_mulai_kerja, jam_selesai_kerja, auto_logout_aktif')
+        .eq('operator_id', operatorId)
+        .order('updated_at', { ascending: false })
+        .limit(1)
+        .maybeSingle()
+
+      if (errorSetelan) {
+        return NextResponse.json({
+          error: 'Gagal memeriksa jam operasional: ' + errorSetelan.message
+        }, { status: 500 })
+      }
+
+      if (setelan && setelan.auto_logout_aktif !== false) {
+        const jamMulai = setelan.jam_mulai_kerja || JAM_MULAI_DEFAULT
+        const jamSelesai = setelan.jam_selesai_kerja || JAM_SELESAI_DEFAULT
+
+        if (diLuarJamKerja(new Date(), jamMulai, jamSelesai)) {
+          return NextResponse.json({
+            error: `Login ditolak. Sekarang di luar jam operasional (${rentangJamKerja(jamMulai, jamSelesai)}). Hubungi Admin Utama jika jam kerja perlu diubah.`,
+            kode: 'di_luar_jam_kerja'
+          }, { status: 403 })
+        }
       }
     }
 

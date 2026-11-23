@@ -4,6 +4,8 @@ import { useEffect, useState, Suspense } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase, getProfile, getOperatorSession, type Profile } from '@/lib/supabase'
 import { fieldPasswordBaru } from '@/lib/password'
+import { validasiNomorHpUnik, pesanGagalSimpanAkun } from '@/lib/validasiAkun'
+import { normalisasiNomorHp } from '@/lib/nomorHp'
 import { feeProfilAda, kodeDaerah } from '@/lib/fee'
 import { useLokasiOperasional, pilihanLokasi } from '@/lib/lokasi'
 
@@ -126,13 +128,21 @@ function AgenTenantContent() {
       return
     }
 
+    const cekNomor = await validasiNomorHpUnik(nomorHp, editId)
+    if (!cekNomor.ok) {
+      setError(cekNomor.pesan)
+      return
+    }
+
+    const nomorHpBaku = normalisasiNomorHp(nomorHp)
+
     setProses(true)
     setError('')
 
     try {
       const payload: Record<string, string | number | boolean | null> = {
         nama,
-        nomor_hp: nomorHp,
+        nomor_hp: nomorHpBaku,
         lokasi: lokasiForm,
         role: 'agen',
         aktif,
@@ -165,7 +175,7 @@ function AgenTenantContent() {
       resetForm()
       fetchData(profile)
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Terjadi kesalahan')
+      setError(pesanGagalSimpanAkun(err))
     } finally {
       setProses(false)
     }

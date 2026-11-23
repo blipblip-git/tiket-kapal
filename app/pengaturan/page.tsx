@@ -144,16 +144,16 @@ export default function PengaturanPage() {
                   <Jam24 value={jamSelesai} onChange={setJamSelesai} ariaLabel="Jam selesai kerja" />
                 </div>
               </div>
-              <p className="text-xs text-gray-500 mt-2">Jika petugas login melewati jam selesai, sistem akan otomatis mengeluarkan mereka (logout).</p>
+              <p className="text-xs text-gray-500 mt-2">Di luar jam mulai-selesai, petugas/agen/kolektor tidak bisa login dan sesi yang masih berjalan otomatis logout. Hanya Admin Utama yang dapat mengubah jam ini.</p>
             </div>
 
             <div className="mb-6">
               <h3 className="text-lg font-bold text-gray-900 mb-3 border-b pb-2">Fitur Auto-Logout</h3>
               <label className="flex items-center gap-3 cursor-pointer">
                 <input type="checkbox" checked={autoLogoutAktif} onChange={(e) => setAutoLogoutAktif(e.target.checked)} className="w-5 h-5 text-blue-600 rounded" />
-                <span className="text-sm text-gray-800 font-medium">Aktifkan auto-logout untuk semua petugas lapangan</span>
+                <span className="text-sm text-gray-800 font-medium">Aktifkan pembatasan jam operasional &amp; auto-logout untuk semua petugas lapangan</span>
               </label>
-              <p className="text-xs text-gray-500 mt-2 ml-8">Admin Utama tidak akan terkena auto-logout.</p>
+              <p className="text-xs text-gray-500 mt-2 ml-8">Kalau dimatikan, petugas bisa login di luar jam kerja. Admin Utama tidak akan terkena auto-logout.</p>
             </div>
 
             <div className="border-t pt-4 flex justify-end">

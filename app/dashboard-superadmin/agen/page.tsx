@@ -4,6 +4,8 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase, type Profile } from '@/lib/supabase'
 import { fieldPasswordBaru } from '@/lib/password'
+import { validasiNomorHpUnik, pesanGagalSimpanAkun } from '@/lib/validasiAkun'
+import { normalisasiNomorHp } from '@/lib/nomorHp'
 import { useLokasiOperasional, pilihanLokasi } from '@/lib/lokasi'
 
 type Agen = {
@@ -141,7 +143,15 @@ export default function ManajemenAgenPage() {
     }
 
     setModalLoading(true)
-    const v_email = inputHp + '@petugas.local'
+    const cekNomor = await validasiNomorHpUnik(inputHp)
+    if (!cekNomor.ok) {
+      setModalLoading(false)
+      setPesan({ tipe: 'err', teks: cekNomor.pesan })
+      return
+    }
+
+    const nomorHp = normalisasiNomorHp(inputHp)
+    const v_email = nomorHp + '@petugas.local'
     const v_user_id = crypto.randomUUID()
 
     const { error } = await supabase.from('profiles').insert({
@@ -152,14 +162,14 @@ export default function ManajemenAgenPage() {
       lokasi: inputLokasi, 
       aktif: true, 
       ...(await fieldPasswordBaru(inputPass)),
-      nomor_hp: inputHp,
+      nomor_hp: nomorHp,
       operator_id: inputTenant
     })
 
     setModalLoading(false)
 
     if (error) {
-      setPesan({ tipe: 'err', teks: 'Gagal tambah: ' + error.message })
+      setPesan({ tipe: 'err', teks: pesanGagalSimpanAkun(error) })
       return
     }
 
@@ -180,13 +190,21 @@ export default function ManajemenAgenPage() {
     }
 
     setModalLoading(true)
-    const v_email = inputHp + '@petugas.local'
+    const cekNomor = await validasiNomorHpUnik(inputHp, modalEdit.id)
+    if (!cekNomor.ok) {
+      setModalLoading(false)
+      setPesan({ tipe: 'err', teks: cekNomor.pesan })
+      return
+    }
+
+    const nomorHp = normalisasiNomorHp(inputHp)
+    const v_email = nomorHp + '@petugas.local'
 
     const updateData: Record<string, any> = {
       nama: inputNama,
       email: v_email,
       lokasi: inputLokasi,
-      nomor_hp: inputHp
+      nomor_hp: nomorHp
     }
 
     // Agen wajib terikat ke satu penyewa.
@@ -205,7 +223,7 @@ export default function ManajemenAgenPage() {
     setModalLoading(false)
 
     if (error) {
-      setPesan({ tipe: 'err', teks: 'Gagal edit: ' + error.message })
+      setPesan({ tipe: 'err', teks: pesanGagalSimpanAkun(error) })
       return
     }
 

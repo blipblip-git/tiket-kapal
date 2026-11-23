@@ -105,3 +105,60 @@ export async function wajibSuperadmin(request: Request): Promise<HasilAuth> {
 
   return { ok: true, admin, profile: profile as ProfilSuperadmin }
 }
+
+/**
+ * Wajib sesi Supabase Auth milik Admin Utama ATAU Superadmin.
+ * Dipakai untuk validasi data lintas penyewa (mis. nomor HP unik).
+ */
+export async function wajibAdmin(request: Request): Promise<HasilAuth> {
+  const admin = buatClientAdmin()
+  if (!admin) return { ok: false, response: pesanServiceKeyKosong() }
+
+  const header = request.headers.get('authorization') || ''
+  const token = header.toLowerCase().startsWith('bearer ') ? header.slice(7).trim() : ''
+
+  if (!token) {
+    return {
+      ok: false,
+      response: NextResponse.json({
+        error: 'Akses ditolak. Sesi Admin tidak ditemukan, silakan login ulang.'
+      }, { status: 401 })
+    }
+  }
+
+  const { data: userData, error: userError } = await admin.auth.getUser(token)
+  if (userError || !userData?.user) {
+    return {
+      ok: false,
+      response: NextResponse.json({
+        error: 'Akses ditolak. Sesi Admin tidak valid atau sudah kedaluwarsa.'
+      }, { status: 401 })
+    }
+  }
+
+  const { data: profile, error: profileError } = await admin
+    .from('profiles')
+    .select('id, nama, role, aktif')
+    .eq('id', userData.user.id)
+    .maybeSingle()
+
+  if (profileError) {
+    return {
+      ok: false,
+      response: NextResponse.json({ error: 'Gagal memeriksa profil: ' + profileError.message }, { status: 500 })
+    }
+  }
+
+  const role = (profile?.role || '').trim().toLowerCase()
+
+  if (!profile || (role !== 'admin_utama' && role !== 'superadmin') || profile.aktif === false) {
+    return {
+      ok: false,
+      response: NextResponse.json({
+        error: 'Akses ditolak. Hanya Admin Utama atau Superadmin aktif yang boleh melakukan aksi ini.'
+      }, { status: 403 })
+    }
+  }
+
+  return { ok: true, admin, profile: profile as ProfilSuperadmin }
+}

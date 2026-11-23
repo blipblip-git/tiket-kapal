@@ -4,6 +4,8 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase, getProfile, getOperatorSession, type Profile } from '@/lib/supabase'
 import { fieldPasswordBaru } from '@/lib/password'
+import { validasiNomorHpUnik, pesanGagalSimpanAkun } from '@/lib/validasiAkun'
+import { normalisasiNomorHp } from '@/lib/nomorHp'
 import { UNIT_KOLEKTOR, adalahKolektor } from '@/lib/kolektor'
 import { useLokasiOperasional, pilihanLokasi } from '@/lib/lokasi'
 
@@ -130,10 +132,17 @@ export default function AdminPetugasKolektorPage() {
     setModalLoading(true)
     setModalPesan(null)
 
+    const cekNomor = await validasiNomorHpUnik(inputHp)
+    if (!cekNomor.ok) {
+      setModalLoading(false)
+      setModalPesan(cekNomor.pesan)
+      return
+    }
+
     const dasar = {
       id: crypto.randomUUID(),
       email: null,
-      nomor_hp: inputHp.trim(),
+      nomor_hp: normalisasiNomorHp(inputHp),
       nama: inputNama.trim(),
       lokasi: inputLokasi,
       aktif: true,
@@ -160,7 +169,7 @@ export default function AdminPetugasKolektorPage() {
     if (error) {
       const teks = /check constraint|profiles_role_check/i.test(error.message)
         ? 'Database masih menolak akun baru (check constraint profiles.role). Jalankan SQL di supabase/role-kolektor.sql lalu coba lagi.'
-        : 'Gagal simpan: ' + error.message
+        : pesanGagalSimpanAkun(error)
       setModalPesan(teks)
       return
     }
@@ -192,9 +201,16 @@ export default function AdminPetugasKolektorPage() {
 
     setEditLoading(true)
 
+    const cekNomor = await validasiNomorHpUnik(editHp, id)
+    if (!cekNomor.ok) {
+      setEditLoading(false)
+      setPesan({ tipe: 'err', teks: cekNomor.pesan })
+      return
+    }
+
     const updateData: Record<string, any> = {
       nama: editNama.trim(),
-      nomor_hp: editHp.trim(),
+      nomor_hp: normalisasiNomorHp(editHp),
       email: null,
       lokasi: editLokasi
     }
@@ -207,7 +223,7 @@ export default function AdminPetugasKolektorPage() {
 
     setEditLoading(false)
     if (error) {
-      setPesan({ tipe: 'err', teks: 'Gagal update: ' + error.message })
+      setPesan({ tipe: 'err', teks: pesanGagalSimpanAkun(error) })
       return
     }
 

@@ -1,6 +1,7 @@
 // lib/supabase.ts
 import { createClient } from '@supabase/supabase-js'
 import { lepasKunciKursi } from './segmen'
+import { diLuarJamKerja, JAM_MULAI_DEFAULT, JAM_SELESAI_DEFAULT } from './jamKerja'
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
@@ -30,9 +31,6 @@ export type Profile = {
   sesi_aktif?: string | null
   api_token?: string | null
   auth_user_id?: string | null
-  // Waktu login (ISO) dari /login. Dipakai auto-logout: sesi hanya ditutup
-  // kalau benar-benar melewati jam selesai kerja, bukan saat login setelahnya.
-  login_at?: string
 }
 
 // ==================== NAMA PERUSAHAAN UNTUK HEADER DASHBOARD ====================
@@ -334,49 +332,33 @@ export async function ambilPengaturan(operatorId?: string | null) {
 }
 
 // ==================== CEK AUTO-LOGOUT ====================
+// Aturan ketat: jam operasional dari Admin Utama wajib dipatuhi.
+// Staf/agen/kolektor di luar jam mulai-selesai akan ditolak saat login dan
+// sesi yang masih berjalan otomatis diakhiri. Admin Utama tidak terkena.
 export async function cekAutoLogout(profile: Profile): Promise<boolean> {
-  if (!profile || profile.role === 'admin_utama') return false
-  if (profile.auto_logout === false) return false
+  if (!profile || profile.role === 'admin_utama' || profile.role === 'superadmin') return false
 
-  // Sesi lama (sebelum ada login_at) tidak boleh langsung ditendang: kalau
-  // dicek dengan jam dinding saja, login malam hari akan langsung logout.
-  const loginAt = profile.login_at ? new Date(profile.login_at) : null
-  if (!loginAt || Number.isNaN(loginAt.getTime())) return false
-
-  // Sesi dari /login tidak membawa auto_logout & jam override, ambil yang terbaru.
-  let data = profile
-  if (!data.operator_id || typeof data.auto_logout === 'undefined') {
+  // Sesi dari /login tidak membawa operator_id terbaru untuk akun lama.
+  let operatorId = profile.operator_id
+  if (!operatorId) {
     const { data: terbaru } = await supabase
       .from('profiles')
-      .select('operator_id, auto_logout, jam_selesai_kerja_override, aktif')
+      .select('operator_id')
       .eq('id', profile.id)
       .maybeSingle()
 
-    if (terbaru) data = { ...profile, ...terbaru } as Profile
+    operatorId = terbaru?.operator_id || null
   }
 
-  if (data.auto_logout === false) return false
-
-  const operatorId = data.operator_id || data.id
-  const pengaturan = await ambilPengaturan(operatorId)
+  const pengaturan = await ambilPengaturan(operatorId || profile.id)
   if (!pengaturan) return false
   if (pengaturan.auto_logout_aktif === false) return false
 
-  const jamSelesai = data.jam_selesai_kerja_override || pengaturan.jam_selesai_kerja
-  if (!jamSelesai) return false
-
-  const [jamH, jamM] = String(jamSelesai).split(':').map(Number)
-  if (!Number.isFinite(jamH) || !Number.isFinite(jamM)) return false
-
-  // Batas logout pertama SETELAH waktu login. Contoh: login 21:00 saat jam
-  // selesai 17:00 -> batasnya besok 17:00, jadi tidak langsung ditendang.
-  const targetSelesai = new Date(loginAt)
-  targetSelesai.setHours(jamH, jamM, 0, 0)
-  if (loginAt >= targetSelesai) {
-    targetSelesai.setDate(targetSelesai.getDate() + 1)
-  }
-
-  return Date.now() >= targetSelesai.getTime()
+  return diLuarJamKerja(
+    new Date(),
+    pengaturan.jam_mulai_kerja || JAM_MULAI_DEFAULT,
+    pengaturan.jam_selesai_kerja || JAM_SELESAI_DEFAULT
+  )
 }
 
 // ==================== FUNGSI PEMBERSIH PESANAN EXPIRED (10 MENIT) ====================

@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server'
 import { wajibSuperadmin } from '@/lib/serverAuth'
 import { hashPasswordServer, kolomPasswordHashBelumAda } from '@/lib/passwordServer'
+import { normalisasiNomorHp, nomorHpValid } from '@/lib/nomorHp'
+import { cariPemilikNomorHp, pesanNomorHpTerpakai } from '@/lib/validasiNomorHpServer'
 
 
 export async function POST(request: Request) {
@@ -26,6 +28,23 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Password minimal 6 karakter' }, { status: 400 })
     }
 
+    // Satu nomor HP = satu login, termasuk lintas penyewa.
+    const nomorHpBersih = nomor_hp ? normalisasiNomorHp(nomor_hp) : null
+    if (nomor_hp && !nomorHpValid(nomor_hp)) {
+      return NextResponse.json({
+        error: 'Nomor HP tidak valid. Gunakan format 08xxxxxxxxxx.'
+      }, { status: 400 })
+    }
+
+    if (nomorHpBersih) {
+      const pemilik = await cariPemilikNomorHp(admin, nomorHpBersih)
+      if (pemilik) {
+        return NextResponse.json({
+          error: pesanNomorHpTerpakai(nomorHpBersih, pemilik)
+        }, { status: 409 })
+      }
+    }
+
     const { data: authData, error: authError } = await admin.auth.admin.createUser({
       email: emailBersih,
       password: String(password),
@@ -41,7 +60,7 @@ export async function POST(request: Request) {
       email: emailBersih,
       nama: String(nama).trim(),
       nama_perusahaan: nama_perusahaan ? String(nama_perusahaan).trim() : null,
-      nomor_hp: nomor_hp ? String(nomor_hp).trim() : null,
+      nomor_hp: nomorHpBersih,
       role: 'admin_utama',
       aktif: true,
     }

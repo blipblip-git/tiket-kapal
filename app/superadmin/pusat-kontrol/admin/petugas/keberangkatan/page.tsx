@@ -4,6 +4,8 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase, getProfile, getOperatorSession, type Profile } from '@/lib/supabase'
 import { fieldPasswordBaru } from '@/lib/password'
+import { validasiNomorHpUnik, pesanGagalSimpanAkun } from '@/lib/validasiAkun'
+import { normalisasiNomorHp } from '@/lib/nomorHp'
 import { useLokasiOperasional, pilihanLokasi } from '@/lib/lokasi'
 
 type RoleType = 'terminal_keberangkatan'
@@ -132,13 +134,21 @@ export default function AdminPetugasPage() {
     }
 
     setModalLoading(true)
+    const cekNomor = await validasiNomorHpUnik(inputHp)
+    if (!cekNomor.ok) {
+      setModalLoading(false)
+      setPesan({ tipe: 'err', teks: cekNomor.pesan })
+      return
+    }
+
+    const nomorHp = normalisasiNomorHp(inputHp)
     const v_user_id = crypto.randomUUID()
 
     // PERBAIKAN: Tidak pakai email lagi, email diset null
     const { error } = await supabase.from('profiles').insert({
       id: v_user_id, 
       email: null, 
-      nomor_hp: inputHp,
+      nomor_hp: nomorHp,
       nama: inputNama, 
       role: inputRole, 
       lokasi: inputLokasiForm,
@@ -150,7 +160,7 @@ export default function AdminPetugasPage() {
 
     setModalLoading(false)
     if (error) {
-      setPesan({ tipe: 'err', teks: 'Gagal simpan: ' + error.message })
+      setPesan({ tipe: 'err', teks: pesanGagalSimpanAkun(error) })
       return
     }
 
@@ -182,9 +192,16 @@ export default function AdminPetugasPage() {
 
     setEditLoading(true)
 
+    const cekNomor = await validasiNomorHpUnik(editHp, id)
+    if (!cekNomor.ok) {
+      setEditLoading(false)
+      setPesan({ tipe: 'err', teks: cekNomor.pesan })
+      return
+    }
+
     const updateData: Record<string, unknown> = {
       nama: editNama,
-      nomor_hp: editHp,
+      nomor_hp: normalisasiNomorHp(editHp),
       email: null,
       lokasi: editLokasi,
       unit: editUnit
@@ -200,7 +217,7 @@ export default function AdminPetugasPage() {
 
     setEditLoading(false)
     if (error) {
-      setPesan({ tipe: 'err', teks: 'Gagal update: ' + error.message })
+      setPesan({ tipe: 'err', teks: pesanGagalSimpanAkun(error) })
       return
     }
 
