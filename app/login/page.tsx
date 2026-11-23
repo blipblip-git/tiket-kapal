@@ -16,6 +16,24 @@ function pesanDariQuery(kode: string | null): string {
   return ''
 }
 
+// Akun yang muncul kalau satu nomor HP/email dipakai beberapa profil.
+type PilihanAkun = {
+  id: string
+  nama: string | null
+  role: string | null
+  lokasi: string | null
+  unit: string | null
+}
+
+function labelRole(role: string | null): string {
+  if (role === 'agen') return 'Agen'
+  if (role === 'petugas_loket') return 'Petugas Loket'
+  if (role === 'terminal_keberangkatan') return 'Petugas Keberangkatan'
+  if (role === 'kolektor') return 'Kolektor'
+  if (role === 'admin_utama') return 'Admin Utama'
+  return role || 'Akun'
+}
+
 function LoginContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -27,11 +45,12 @@ function LoginContent() {
   const [pesan, setPesan] = useState(() => pesanDariQuery(searchParams.get('pesan')))
   const [loading, setLoading] = useState(false)
   const [showPassword, setShowPassword] = useState(false)
+  const [pilihanAkun, setPilihanAkun] = useState<PilihanAkun[] | null>(null)
 
-  async function handleLogin(e: React.FormEvent) {
-    e.preventDefault()
+  async function prosesLogin(profilId?: string) {
     setLoading(true)
-    setPesan('Memeriksa data...')
+    setPesan(profilId ? 'Memeriksa akun...' : 'Memeriksa data...')
+    setPilihanAkun(null)
 
     const inputLogin = noHp.trim()
     
@@ -40,13 +59,27 @@ function LoginContent() {
       const response = await fetch('/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ identifier: inputLogin, password })
+        body: JSON.stringify({
+          identifier: inputLogin,
+          password,
+          ...(profilId ? { profil_id: profilId } : {})
+        })
       })
 
       const hasil = await response.json()
 
       if (!response.ok) {
-        setPesan(hasil.error || 'Login gagal. Coba lagi.')
+        // Nomor HP/email dipakai beberapa akun: tampilkan pilihan, jangan
+        // langsung menolak login.
+        const daftar = Array.isArray(hasil.pilihan_akun)
+          ? hasil.pilihan_akun as PilihanAkun[]
+          : null
+        if (response.status === 409 && daftar && daftar.length > 0) {
+          setPilihanAkun(daftar)
+          setPesan(hasil.error || 'Pilih akun yang ingin dipakai.')
+        } else {
+          setPesan(hasil.error || 'Login gagal. Coba lagi.')
+        }
         setLoading(false)
         return
       }
@@ -111,24 +144,29 @@ function LoginContent() {
     }
   }
 
+  function handleLogin(e: React.FormEvent) {
+    e.preventDefault()
+    void prosesLogin()
+  }
+
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-100 p-4">
       <div className="w-full max-w-sm transition-all duration-300">
         
         <div className="bg-white rounded shadow-md overflow-hidden">
           <div className="flex border-b">
-            <button onClick={() => { setTab('operator'); setPesan('') }} className={`flex-1 py-3 text-sm font-medium transition ${tab === 'operator' ? 'bg-blue-50 text-blue-700 border-b-2 border-blue-600' : 'text-gray-500 hover:bg-gray-50'}`}>Login Petugas / Agen</button>
-            <button onClick={() => { setTab('syahbandar'); setPesan('') }} className={`flex-1 py-3 text-sm font-medium transition ${tab === 'syahbandar' ? 'bg-blue-800 text-white border-b-2 border-blue-900' : 'text-gray-500 hover:bg-gray-50'}`}>Portal Syahbandar</button>
+            <button onClick={() => { setTab('operator'); setPesan(''); setPilihanAkun(null) }} className={`flex-1 py-3 text-sm font-medium transition ${tab === 'operator' ? 'bg-blue-50 text-blue-700 border-b-2 border-blue-600' : 'text-gray-500 hover:bg-gray-50'}`}>Login Petugas / Agen</button>
+            <button onClick={() => { setTab('syahbandar'); setPesan(''); setPilihanAkun(null) }} className={`flex-1 py-3 text-sm font-medium transition ${tab === 'syahbandar' ? 'bg-blue-800 text-white border-b-2 border-blue-900' : 'text-gray-500 hover:bg-gray-50'}`}>Portal Syahbandar</button>
           </div>
 
           {tab === 'operator' && (
             <form onSubmit={handleLogin} className="p-6" autoComplete="off">
               <label className="block mb-2 text-sm font-medium text-gray-900">Nomor HP / Email</label>
-              <input type="text" name="operator_hp_no_autofill" value={noHp} onChange={(e) => setNoHp(e.target.value)} className="w-full border rounded px-3 py-2 mb-4 text-gray-900 focus:ring-blue-500 focus:border-blue-500" required autoComplete="off" />
+              <input type="text" name="operator_hp_no_autofill" value={noHp} onChange={(e) => { setNoHp(e.target.value); setPilihanAkun(null) }} className="w-full border rounded px-3 py-2 mb-4 text-gray-900 focus:ring-blue-500 focus:border-blue-500" required autoComplete="off" />
 
               <label className="block mb-2 text-sm font-medium text-gray-900">Password</label>
               <div className="relative mb-6">
-                <input type={showPassword ? 'text' : 'password'} name="admin_pass_no_autofill" value={password} onChange={(e) => setPassword(e.target.value)} className="w-full border rounded px-3 py-2 pr-10 text-gray-900 focus:ring-blue-500 focus:border-blue-500" required autoComplete="new-password" />
+                <input type={showPassword ? 'text' : 'password'} name="admin_pass_no_autofill" value={password} onChange={(e) => { setPassword(e.target.value); setPilihanAkun(null) }} className="w-full border rounded px-3 py-2 pr-10 text-gray-900 focus:ring-blue-500 focus:border-blue-500" required autoComplete="new-password" />
                 <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-2 top-1/2 transform -translate-y-1/2 text-gray-500 hover:text-gray-700 focus:outline-none">
                   {showPassword ? '🙈' : '👁️'}
                 </button>
@@ -139,7 +177,29 @@ function LoginContent() {
               </button>
 
               {pesan && (
-                <p className={`mt-4 text-sm text-center break-words font-medium ${pesan.includes('berhasil') ? 'text-green-600' : 'text-red-600'}`}>{pesan}</p>
+                <p className={`mt-4 text-sm text-center break-words font-medium ${pesan.includes('berhasil') ? 'text-green-600' : pilihanAkun ? 'text-blue-700' : 'text-red-600'}`}>{pesan}</p>
+              )}
+
+              {pilihanAkun && (
+                <div className="mt-4 rounded border border-blue-200 bg-blue-50 p-3">
+                  <p className="mb-2 text-xs font-semibold text-blue-900">Pilih akun yang ingin dipakai:</p>
+                  <div className="space-y-2">
+                    {pilihanAkun.map((akun) => (
+                      <button
+                        key={akun.id}
+                        type="button"
+                        onClick={() => prosesLogin(akun.id)}
+                        disabled={loading}
+                        className="w-full rounded border border-blue-200 bg-white px-3 py-2 text-left hover:bg-blue-100 disabled:opacity-50"
+                      >
+                        <span className="block text-sm font-semibold text-gray-900">{akun.nama || 'Tanpa nama'}</span>
+                        <span className="block text-xs text-gray-600">
+                          {`${labelRole(akun.role)} • ${akun.lokasi || '-'}${akun.unit ? ` • ${akun.unit}` : ''}`}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
               )}
             </form>
           )}

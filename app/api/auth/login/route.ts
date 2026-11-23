@@ -67,21 +67,24 @@ async function cariProfil(
   admin: SupabaseClient,
   kolom: 'email' | 'nomor_hp',
   nilai: string
-): Promise<{ profil: ProfilLogin | null; adaKolomHash: boolean; error: string | null }> {
+): Promise<{ profiles: ProfilLogin[]; adaKolomHash: boolean; error: string | null }> {
   // Urutan percobaan: kolom lengkap -> tanpa hash (DB lama) -> tanpa plaintext (setelah migrasi).
   const pilihanKolom = [KOLOM_LENGKAP, KOLOM_TANPA_HASH, KOLOM_TANPA_PLAIN, KOLOM_DASAR]
   let errorTerakhir: string | null = null
 
   for (const pilihan of pilihanKolom) {
+    // Jangan maybeSingle(): nomor HP bisa dipakai lebih dari satu akun
+    // (mis. satu agen dan satu petugas). Semua kandidat diambil, lalu
+    // password yang menentukan akun mana yang dipakai.
     const { data, error } = await admin
       .from('profiles')
       .select(pilihan)
       .eq(kolom, nilai)
-      .maybeSingle()
+      .limit(50)
 
     if (!error) {
       return {
-        profil: (data as ProfilLogin | null) ?? null,
+        profiles: (data as unknown as ProfilLogin[] | null) ?? [],
         adaKolomHash: pilihan.includes('password_hash'),
         error: null
       }
@@ -93,20 +96,20 @@ async function cariProfil(
       /does not exist/i.test(error.message || '')
 
     if (!masalahKolom) {
-      return { profil: null, adaKolomHash: false, error: error.message }
+      return { profiles: [], adaKolomHash: false, error: error.message }
     }
 
     errorTerakhir = error.message
   }
 
-  return { profil: null, adaKolomHash: false, error: errorTerakhir }
+  return { profiles: [], adaKolomHash: false, error: errorTerakhir }
 }
 
 export async function POST(request: Request) {
   const admin = buatClientAdmin()
   if (!admin) return pesanServiceKeyKosong()
 
-  let body: { identifier?: unknown; login?: unknown; password?: unknown }
+  let body: { identifier?: unknown; login?: unknown; password?: unknown; profil_id?: unknown }
   try {
     body = await request.json()
   } catch {
@@ -115,6 +118,9 @@ export async function POST(request: Request) {
 
   const identifier = String(body.identifier ?? body.login ?? '').trim()
   const password = String(body.password ?? '')
+  // Diisi hanya kalau pengguna memilih salah satu akun saat nomor HP/email
+  // dipakai beberapa profil. Tetap diverifikasi ulang dengan password.
+  const profilIdDipilih = String(body.profil_id ?? '').trim()
 
   if (!identifier || !password) {
     return NextResponse.json({ error: 'Nomor HP/Email dan password wajib diisi.' }, { status: 400 })
@@ -134,7 +140,7 @@ export async function POST(request: Request) {
   try {
     // Cari berdasarkan email dulu, lalu nomor HP (tanpa menyisipkan input ke filter PostgREST).
     let hasil = await cariProfil(admin, 'email', identifier)
-    if (!hasil.profil && !hasil.error) {
+    if (hasil.profiles.length === 0 && !hasil.error) {
       hasil = await cariProfil(admin, 'nomor_hp', identifier)
     }
 
@@ -142,22 +148,45 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Gagal memeriksa akun: ' + hasil.error }, { status: 500 })
     }
 
-    const profil = hasil.profil
+    // Nomor HP yang sama bisa dipakai beberapa akun. Cocokkan password ke semua
+    // kandidat; kalau hanya satu yang cocok, langsung masuk tanpa pilihan.
+    const cocokPassword = hasil.profiles.filter((p) => {
+      const hash = p.password_hash || null
+      return hash
+        ? verifyPassword(password, hash)
+        : verifyPassword(password, p.password_plain)
+    })
 
-    if (!profil) {
+    if (cocokPassword.length === 0) {
       catatGagal(kunci)
       return NextResponse.json({ error: 'Nomor HP/Email atau password salah.' }, { status: 401 })
     }
 
+    // Kalau pengguna sudah memilih akun, hanya akun itu yang boleh dipakai.
+    const kandidat = profilIdDipilih
+      ? cocokPassword.filter((p) => p.id === profilIdDipilih)
+      : cocokPassword
+
+    if (kandidat.length === 0) {
+      catatGagal(kunci)
+      return NextResponse.json({ error: 'Nomor HP/Email atau password salah.' }, { status: 401 })
+    }
+
+    if (kandidat.length > 1) {
+      return NextResponse.json({
+        error: 'Nomor HP/Email ini dipakai lebih dari satu akun. Pilih akun yang ingin dipakai.',
+        pilihan_akun: kandidat.map((p) => ({
+          id: p.id,
+          nama: p.nama,
+          role: adalahKolektor(p) ? ROLE_KOLEKTOR : p.role,
+          lokasi: p.lokasi,
+          unit: p.unit
+        }))
+      }, { status: 409 })
+    }
+
+    const profil = kandidat[0]
     const hash = profil.password_hash || null
-    const passwordCocok = hash
-      ? verifyPassword(password, hash)
-      : verifyPassword(password, profil.password_plain)
-
-    if (!passwordCocok) {
-      catatGagal(kunci)
-      return NextResponse.json({ error: 'Nomor HP/Email atau password salah.' }, { status: 401 })
-    }
 
     if (profil.aktif === false) {
       return NextResponse.json({
@@ -222,9 +251,10 @@ export async function POST(request: Request) {
       if (errorAuth && !/auth_user_id/i.test(errorAuth.message || '')) {
         peringatanSesi = 'Gagal membaca penghubung akun: ' + errorAuth.message
       } else {
+        const dataAuthTerpilih = dataAuth as { auth_user_id?: string | null } | null
         const hasilSesi = await pastikanSesiStaf(
           admin,
-          { id: profil.id, auth_user_id: (dataAuth as any)?.auth_user_id || null },
+          { id: profil.id, auth_user_id: dataAuthTerpilih?.auth_user_id || null },
           password
         )
         sesiAuth = hasilSesi.session
@@ -233,8 +263,8 @@ export async function POST(request: Request) {
           console.error('Sesi Auth staf gagal dibuat:', peringatanSesi)
         }
       }
-    } catch (err: any) {
-      peringatanSesi = err?.message || 'Sesi pengaman tidak tersedia.'
+    } catch (err) {
+      peringatanSesi = err instanceof Error ? err.message : 'Sesi pengaman tidak tersedia.'
       console.error('Sesi Auth staf error:', peringatanSesi)
     }
 
@@ -265,8 +295,10 @@ export async function POST(request: Request) {
       session: sesiAuth,
       peringatan: peringatanSesi
     })
-  } catch (error: any) {
+  } catch (error) {
     console.error('Error login:', error)
-    return NextResponse.json({ error: 'Server Error: ' + error.message }, { status: 500 })
+    return NextResponse.json({
+      error: 'Server Error: ' + (error instanceof Error ? error.message : 'Terjadi kesalahan')
+    }, { status: 500 })
   }
 }
