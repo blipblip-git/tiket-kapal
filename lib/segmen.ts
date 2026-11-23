@@ -7,9 +7,11 @@
 // 2 set kursi (40 + 40) padahal kursi fisiknya hanya 40 → bisa terjual 80.
 //
 // Model di sini:
-// 1. "Keberangkatan" = kapal + tanggal + jam berangkat (diturunkan, tanpa tabel
-//    baru). Semua jadwal dengan kunci sama = satu keberangkatan fisik.
-// 2. Urutan pelabuhan diturunkan dari pasangan rute pada keberangkatan itu.
+// 1. "Perjalanan fisik" = kapal + tanggal + rangkaian rute yang bersambung.
+//    Jadwal dengan jam sama selalu satu perjalanan; jadwal berikutnya ikut
+//    selama jedanya wajar dan pelabuhannya bersambung (mis. Tarakan 14:00 →
+//    Tg Batu 16:30 → Berau). Trip terpisah tetap punya kunci berbeda.
+// 2. Urutan pelabuhan diturunkan dari pasangan rute pada perjalanan itu.
 //    Contoh: Tarakan→Berau + Tarakan→Tg Batu + Tg Batu→Berau
 //    ⇒ Tarakan(0) < Tg Batu(1) < Berau(2).
 // 3. Kursi dikunci per INTERVAL (potongan jalan) di tabel `kursi_pakai`:
@@ -31,10 +33,126 @@ export type JadwalSegmen = {
   rute_tujuan: string
 }
 
+/** Hasil pengelompokan satu perjalanan fisik (bisa terdiri dari beberapa
+ *  jadwal/segmen dengan jam berbeda, mis. Tarakan 14:00 → Tg Batu 16:30 → Berau). */
+export type InfoPerjalanan = {
+  kunci: string
+  /** Kunci lama (per jam) untuk kompatibilitas data kursi_pakai sebelum fitur trip. */
+  kunciLama: string[]
+  urutan: Map<string, number> | null
+}
+
 /** Batas interval kalau urutan pelabuhan tidak bisa ditentukan (konservatif:
  *  satu tiket mengunci kursi untuk seluruh perjalanan → tidak mungkin oversold). */
 export const SEGMEN_PENUH_DARI = 0
 export const SEGMEN_PENUH_SAMPAI = 900
+
+/** Jeda maksimum antar jadwal yang masih dianggap satu perjalanan fisik.
+ *  150 menit cukup untuk transit Tarakan → Tg Batu → Berau pada data saat ini,
+ *  tetapi tidak menggabungkan trip pagi dan trip sore yang terpisah. */
+const JEDA_MAKS_MENIT = 150
+
+function menitDariJam(jam: string): number {
+  const cocok = /^(\d{1,2})[:.](\d{2})/.exec(String(jam || '').trim())
+  if (!cocok) return 0
+  return Number(cocok[1]) * 60 + Number(cocok[2])
+}
+
+function jamPendek(jam: string): string {
+  const cocok = /^(\d{1,2})[:.](\d{2})/.exec(String(jam || '').trim())
+  if (!cocok) return String(jam || '').slice(0, 5)
+  return `${cocok[1].padStart(2, '0')}:${cocok[2]}`
+}
+
+function berbagiPelabuhan(r: RuteMinimal, grup: RuteMinimal[]): boolean {
+  const pelabuhan = new Set<string>()
+  for (const g of grup) {
+    const asal = String(g.rute_asal || '').trim()
+    const tujuan = String(g.rute_tujuan || '').trim()
+    if (asal) pelabuhan.add(asal)
+    if (tujuan) pelabuhan.add(tujuan)
+  }
+  return (
+    pelabuhan.has(String(r.rute_asal || '').trim()) ||
+    pelabuhan.has(String(r.rute_tujuan || '').trim())
+  )
+}
+
+/**
+ * Kelompokkan jadwal satu kapal pada satu tanggal menjadi perjalanan fisik.
+ *
+ * Aturan:
+ * - Jadwal yang jamnya sama selalu masuk kelompok yang sama (satu keberangkatan).
+ * - Jadwal berikutnya ikut kelompok kalau jedanya <= 150 menit DAN pelabuhannya
+ *   bersambung dengan kelompok itu (mis. Tarakan→Tg Batu 14:00 lalu
+ *   Tg Batu→Berau 16:30).
+ * - Trip terpisah (mis. pagi dan sore) tetap menjadi kelompok berbeda.
+ *
+ * Kalau urutan pelabuhan dalam satu kelompok tidak tunggal (rute bercabang /
+ * putar balik), `hitungUrutanTitik` mengembalikan null dan kursi dikunci
+ * konservatif untuk seluruh perjalanan.
+ */
+export function kelompokkanPerjalanan(rutes: JadwalSegmen[]): JadwalSegmen[][] {
+  const urut = [...rutes].sort((a, b) => {
+    const selisih = menitDariJam(a.jam_berangkat) - menitDariJam(b.jam_berangkat)
+    if (selisih !== 0) return selisih
+    return `${a.rute_asal}|${a.rute_tujuan}`.localeCompare(`${b.rute_asal}|${b.rute_tujuan}`)
+  })
+
+  const awal: JadwalSegmen[][] = []
+
+  for (const r of urut) {
+    let cocok = false
+
+    // Cari kelompok terakhir yang masih bersambung dan jedanya wajar.
+    for (let i = awal.length - 1; i >= 0; i--) {
+      const grup = awal[i]
+      const terakhir = grup[grup.length - 1]
+      const selisih = menitDariJam(r.jam_berangkat) - menitDariJam(terakhir.jam_berangkat)
+      if (selisih < 0 || selisih > JEDA_MAKS_MENIT) continue
+
+      // Jam sama = satu keberangkatan fisik, walaupun tujuannya berbeda.
+      if (selisih === 0 || berbagiPelabuhan(r, grup)) {
+        grup.push(r)
+        cocok = true
+        break
+      }
+    }
+
+    if (!cocok) awal.push([r])
+  }
+
+  // Kalau satu kelompok lintas jam membentuk siklus/putar balik (mis. kapal
+  // berangkat lalu kembali ke pelabuhan asal), jangan dipaksa jadi satu trip.
+  // Pecah per jam supaya kursi trip pulang tidak ikut terkunci sepanjang hari.
+  const hasil: JadwalSegmen[][] = []
+  for (const grup of awal) {
+    const waktuUnik = new Set(grup.map((r) => jamPendek(r.jam_berangkat)))
+    if (waktuUnik.size > 1 && !hitungUrutanTitik(grup)) {
+      const perWaktu = new Map<string, JadwalSegmen[]>()
+      for (const r of grup) {
+        const jam = jamPendek(r.jam_berangkat)
+        if (!perWaktu.has(jam)) perWaktu.set(jam, [])
+        perWaktu.get(jam)!.push(r)
+      }
+      perWaktu.forEach((bagian) => hasil.push(bagian))
+    } else {
+      hasil.push(grup)
+    }
+  }
+
+  return hasil
+}
+
+function kunciKelompok(grup: JadwalSegmen[]): string {
+  const pertama = grup[0]
+  const jamAwal = grup
+    .map((r) => menitDariJam(r.jam_berangkat))
+    .reduce((min, n) => (n < min ? n : min), menitDariJam(pertama.jam_berangkat))
+
+  const jam = `${String(Math.floor(jamAwal / 60)).padStart(2, '0')}:${String(jamAwal % 60).padStart(2, '0')}`
+  return `${pertama.kapal_id}|${String(pertama.tanggal || '').slice(0, 10)}|${jam}`
+}
 
 export type PemakaianKursi = {
   nomor_kursi: string
@@ -43,7 +161,9 @@ export type PemakaianKursi = {
   pesanan_id?: string | null
 }
 
-/** Kunci satu keberangkatan fisik: `kapal|tanggal|jam`. */
+/** Kunci lama per jam (`kapal|tanggal|jam`). Masih dipakai untuk cache dan
+ *  kompatibilitas data `kursi_pakai` lama; kunci perjalanan baru berasal dari
+ *  `ambilInfoPerjalanan()` yang bisa menggabungkan beberapa jam. */
 export function kunciKeberangkatan(
   j: Pick<JadwalSegmen, 'kapal_id' | 'tanggal' | 'jam_berangkat'>
 ): string {
@@ -190,51 +310,98 @@ export function intervalSegmen(
 }
 
 
+/**
+ * Ambil informasi perjalanan fisik untuk satu jadwal.
+ *
+ * `kunci` dipakai sebagai `keberangkatan_key` di `kursi_pakai`, sehingga semua
+ * segmen dalam satu perjalanan (walau jamnya berbeda) berbagi kursi fisik yang
+ * sama. Kalau jadwal tidak bisa dikelompokkan dengan aman, interval kursi
+ * jatuh ke seluruh perjalanan (konservatif, tidak mungkin oversold).
+ */
+export async function ambilInfoPerjalanan(
+  sb: SupabaseClient,
+  j: JadwalSegmen
+): Promise<InfoPerjalanan> {
+  const { data, error } = await sb
+    .from('jadwal')
+    .select('kapal_id, tanggal, rute_asal, rute_tujuan, jam_berangkat')
+    .eq('kapal_id', j.kapal_id)
+    .eq('tanggal', String(j.tanggal || '').slice(0, 10))
+
+  const semua = (error || !data ? [] : (data as unknown as JadwalSegmen[]))
+
+  // Kalau jadwal belum ada di tabel (mis. baru dari template), tetap bisa
+  // dihitung dari rute yang sedang dibuka.
+  const rutes = semua.length > 0 ? semua : [{ ...j }]
+  const grup = kelompokkanPerjalanan(rutes)
+
+  const jamDicari = jamPendek(j.jam_berangkat)
+  const asalDicari = String(j.rute_asal || '').trim()
+  const tujuanDicari = String(j.rute_tujuan || '').trim()
+
+  const grupSaya =
+    grup.find((g) =>
+      g.some(
+        (r) =>
+          jamPendek(r.jam_berangkat) === jamDicari &&
+          String(r.rute_asal || '').trim() === asalDicari &&
+          String(r.rute_tujuan || '').trim() === tujuanDicari
+      )
+    ) ||
+    grup.find((g) =>
+      g.some(
+        (r) =>
+          String(r.rute_asal || '').trim() === asalDicari &&
+          String(r.rute_tujuan || '').trim() === tujuanDicari
+      )
+    ) ||
+    [{ ...j }]
+
+  const kunci = kunciKelompok(grupSaya)
+  const tanggal = String(j.tanggal || '').slice(0, 10)
+  const kunciLama = Array.from(
+    new Set(
+      grupSaya.map(
+        (r) => `${r.kapal_id}|${tanggal}|${jamPendek(r.jam_berangkat)}`
+      )
+    )
+  ).filter((k) => k !== kunci)
+
+  return {
+    kunci,
+    kunciLama,
+    urutan: hitungUrutanTitik(grupSaya),
+  }
+}
+
 /** Urutan pelabuhan untuk keberangkatan milik jadwal ini. */
 export async function ambilUrutanTitik(
   sb: SupabaseClient,
   j: JadwalSegmen
 ): Promise<Map<string, number> | null> {
-  // Ambil SEMUA rute kapal ini pada tanggal itu (semua jam): yang se-jam
-  // dipakai untuk urutan, jam lain dipakai sebagai petunjuk urutan.
-  const { data, error } = await sb
-    .from('jadwal')
-    .select('rute_asal, rute_tujuan, jam_berangkat')
-    .eq('kapal_id', j.kapal_id)
-    .eq('tanggal', String(j.tanggal || '').slice(0, 10))
-
-  const jam = String(j.jam_berangkat || '').slice(0, 5)
-  const semua = (error || !data ? [] : (data as any[]))
-  const seJam = semua.filter((r) => String(r.jam_berangkat || '').slice(0, 5) === jam)
-
-  // Kalau jadwalnya belum ada di tabel (mis. baru dari template), tetap bisa
-  // dihitung dari rute yang sedang dibuka.
-  const rutes = seJam.length > 0 ? seJam : [{ rute_asal: j.rute_asal, rute_tujuan: j.rute_tujuan }]
-
-  // Kelompokkan jam lain sebagai petunjuk (untuk memutus urutan yang ambigu).
-  const perJam = new Map<string, any[]>()
-  for (const r of semua) {
-    const k = String(r.jam_berangkat || '').slice(0, 5)
-    if (!k || k === jam) continue
-    if (!perJam.has(k)) perJam.set(k, [])
-    perJam.get(k)!.push(r)
-  }
-
-  return hitungUrutanTitik(rutes as any, Array.from(perJam.values()) as any)
+  const info = await ambilInfoPerjalanan(sb, j)
+  return info.urutan
 }
 
-function galatTabelHilang(err: any): boolean {
+type GalatSupabase = {
+  code?: string
+  message?: string
+  details?: string
+  hint?: string
+} | null
+
+function galatTabelHilang(err: GalatSupabase): boolean {
   const teks = `${err?.code || ''} ${err?.message || ''}`
   return /PGRST205|42P01|schema cache|does not exist|relation .*kursi_pakai/i.test(teks)
 }
 
-function galatBentrok(err: any): boolean {
+function galatBentrok(err: GalatSupabase): boolean {
   const teks = `${err?.code || ''} ${err?.message || ''} ${err?.details || ''} ${err?.hint || ''}`
   return /23P01|kursi_pakai_tanpa_bentrok|conflicting key|exclusion/i.test(teks)
 }
 
 /** Galat izin (RLS/grant): bukan soal kursi bentrok, tapi soal hak tulis. */
-function galatIzin(err: any): boolean {
+function galatIzin(err: GalatSupabase): boolean {
   const teks = `${err?.code || ''} ${err?.message || ''}`
   return /42501|permission denied|row-level security/i.test(teks)
 }
@@ -264,7 +431,10 @@ export async function ambilPemakaianKursi(
     return { aktif: false, data: [] }
   }
 
-  return { aktif: true, data: (data || []) as any }
+  return {
+    aktif: true,
+    data: (data || []) as unknown as (PemakaianKursi & { keberangkatan_key: string })[],
+  }
 }
 
 
@@ -277,14 +447,19 @@ export async function nomorKursiTerpakai(
   sb: SupabaseClient,
   j: JadwalSegmen
 ): Promise<{ aktif: boolean; nomor: Set<string>; dari: number; sampai: number }> {
-  const urutan = await ambilUrutanTitik(sb, j)
-  const { dari, sampai } = intervalSegmen(j, urutan)
-  const { aktif, data } = await ambilPemakaianKursi(sb, [kunciKeberangkatan(j)])
+  const info = await ambilInfoPerjalanan(sb, j)
+  const { dari, sampai } = intervalSegmen(j, info.urutan)
+  const { aktif, data } = await ambilPemakaianKursi(sb, [info.kunci, ...info.kunciLama])
 
   const nomor = new Set<string>()
   if (aktif) {
     for (const p of data) {
-      if (intervalBentrok(Number(p.segmen_dari), Number(p.segmen_sampai), dari, sampai)) {
+      // Kunci lama belum punya koordinat segmen global. Anggap seluruh
+      // perjalanan terkunci supaya tiket lama tidak bisa oversold.
+      const kunciBaru = String(p.keberangkatan_key || '') === info.kunci
+      const dariPakai = kunciBaru ? Number(p.segmen_dari) : SEGMEN_PENUH_DARI
+      const sampaiPakai = kunciBaru ? Number(p.segmen_sampai) : SEGMEN_PENUH_SAMPAI
+      if (intervalBentrok(dariPakai, sampaiPakai, dari, sampai)) {
         nomor.add(String(p.nomor_kursi))
       }
     }
@@ -315,9 +490,9 @@ export async function kunciKursi(
   const { jadwal, kanal, daftar } = params
   if (daftar.length === 0) return { ok: true, modus: 'legacy' }
 
-  const key = kunciKeberangkatan(jadwal)
-  const urutan = await ambilUrutanTitik(sb, jadwal)
-  const { dari, sampai } = intervalSegmen(jadwal, urutan)
+  const info = await ambilInfoPerjalanan(sb, jadwal)
+  const key = info.kunci
+  const { dari, sampai } = intervalSegmen(jadwal, info.urutan)
 
   // Idempoten: kalau pesanan ini sudah punya kunci (mis. retry / konfirmasi bayar
   // ulang), kunci lama dibuang dulu supaya tidak bentrok dengan dirinya sendiri.
@@ -328,7 +503,7 @@ export async function kunciKursi(
       .from('kursi_pakai')
       .select('pesanan_id')
       .in('pesanan_id', idPesanan)
-    for (const r of lama || []) sudahAda.add(String((r as any).pesanan_id))
+    for (const r of lama || []) sudahAda.add(String((r as { pesanan_id?: string | null }).pesanan_id))
     if (sudahAda.size > 0) {
       const { error: errHapus } = await sb.from('kursi_pakai').delete().in('pesanan_id', [...sudahAda])
       if (errHapus && !galatTabelHilang(errHapus)) {
@@ -338,13 +513,16 @@ export async function kunciKursi(
   }
 
   // Pra-cek: beri pesan yang jelas dulu sebelum menabrak constraint.
-  const { aktif, data } = await ambilPemakaianKursi(sb, [key])
+  const { aktif, data } = await ambilPemakaianKursi(sb, [key, ...info.kunciLama])
   if (aktif) {
     const terpakai = new Set<string>()
     for (const p of data) {
       // Abaikan kunci milik pesanan yang sama (sudah dibuang di atas / sedang diproses).
-      if (sudahAda.has(String((p as any).pesanan_id || ''))) continue
-      if (intervalBentrok(Number(p.segmen_dari), Number(p.segmen_sampai), dari, sampai)) {
+      if (sudahAda.has(String(p.pesanan_id || ''))) continue
+      const kunciBaru = String(p.keberangkatan_key || '') === key
+      const dariPakai = kunciBaru ? Number(p.segmen_dari) : SEGMEN_PENUH_DARI
+      const sampaiPakai = kunciBaru ? Number(p.segmen_sampai) : SEGMEN_PENUH_SAMPAI
+      if (intervalBentrok(dariPakai, sampaiPakai, dari, sampai)) {
         terpakai.add(String(p.nomor_kursi))
       }
     }
@@ -417,7 +595,7 @@ export async function lepasKunciKedaluwarsa(sb: SupabaseClient, batas = 300): Pr
 
   if (error || !data || data.length === 0) return 0
 
-  const ids = data.map((d: any) => String(d.id))
+  const ids = data.map((d) => String((d as { id?: string }).id))
   const { error: errHapus } = await sb.from('kursi_pakai').delete().in('pesanan_id', ids)
   if (errHapus && !galatTabelHilang(errHapus)) {
     console.warn('lepasKunciKedaluwarsa:', errHapus.message)

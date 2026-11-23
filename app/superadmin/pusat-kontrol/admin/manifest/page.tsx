@@ -4,7 +4,8 @@ import { useEffect, useState, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { supabase, getProfile, getOperatorSession, formatDaftarAbk, type Profile } from '@/lib/supabase'
 import { cocokOperator } from '@/lib/tenant'
-import { muatRutePemilik, urutkanRute, type RuteKapal } from '@/lib/rute'
+import { muatRutePemilik, urutkanRute, ujungRute, type RuteKapal } from '@/lib/rute'
+import { urutkanLokasi } from '@/lib/lokasi'
 
 type RincianPenumpang = {
   id: string
@@ -16,7 +17,8 @@ type RincianPenumpang = {
   grup_transaksi_id: string | null
 }
 
-type LaporanPerJam = {
+type LaporanPerKeberangkatan = {
+  kunci: string
   jam: string
   total_terjual: number
   rincian: RincianPenumpang[]
@@ -24,6 +26,34 @@ type LaporanPerJam = {
   nama_kapten: string
   nama_abk: string[]
   rute: string
+}
+
+type JadwalManifest = {
+  id?: string
+  jam_berangkat: string
+  rute_asal: string
+  rute_tujuan: string
+  kapal_id: string | null
+  operator_id?: string | null
+}
+
+type PesananManifest = {
+  id: string
+  nama_penumpang: string
+  status_boarding: string | null
+  waktu_boarding: string | null
+  is_balita: boolean | null
+  grup_transaksi_id: string | null
+  jadwal: JadwalManifest | null
+  kursi: { nomor_kursi: string | null } | null
+}
+
+type KapalManifest = {
+  id: string
+  nama: string | null
+  nama_kapten: string | null
+  nama_abk: string[] | null
+  operator_id: string | null
 }
 
 function ManifestSuperadminContent() {
@@ -37,7 +67,7 @@ function ManifestSuperadminContent() {
 
   const [profile, setProfile] = useState<Profile | null>(null)
   const [loading, setLoading] = useState(true)
-  const [laporan, setLaporan] = useState<LaporanPerJam[]>([])
+  const [laporan, setLaporan] = useState<LaporanPerKeberangkatan[]>([])
   const [ruteList, setRuteList] = useState<RuteKapal[]>([])
   const [ruteLoading, setRuteLoading] = useState(true)
   const [tanggal, setTanggal] = useState(() => {
@@ -45,7 +75,7 @@ function ManifestSuperadminContent() {
     const offset = today.getTimezoneOffset() * 60000
     return new Date(today.getTime() - offset).toISOString().split('T')[0]
   })
-  const [expandedJam, setExpandedJam] = useState<string | null>(null)
+  const [expandedKunci, setExpandedKunci] = useState<string | null>(null)
 
   useEffect(() => {
     async function init() {
@@ -89,75 +119,87 @@ function ManifestSuperadminContent() {
       // 1. Ambil Pesanan
       let queryPesanan = supabase.from('pesanan').select(`
           id, nama_penumpang, status_boarding, waktu_boarding, is_balita, grup_transaksi_id,
-          jadwal:jadwal_id (jam_berangkat, rute_asal, rute_tujuan, kapal_id, operator_id),
+          jadwal:jadwal_id!inner (jam_berangkat, rute_asal, rute_tujuan, kapal_id, operator_id),
           kursi:kursi_id (nomor_kursi)
         `).eq('status', 'paid').eq('jadwal.tanggal', tanggal).eq('jadwal.rute_asal', lokasi)
 
       if (tujuan) queryPesanan = queryPesanan.eq('jadwal.rute_tujuan', tujuan)
 
       const { data: pesananData } = await queryPesanan
-      
+
       // 2. Ambil Jadwal (buat cadangan kalau pesanan kosong)
       let queryJadwal = supabase.from('jadwal').select('id, jam_berangkat, rute_asal, rute_tujuan, kapal_id, operator_id').eq('tanggal', tanggal).eq('rute_asal', lokasi)
       if (tujuan) queryJadwal = queryJadwal.eq('rute_tujuan', tujuan)
       const { data: jadwalData } = await queryJadwal
 
+      const daftarPesanan = (pesananData || []) as unknown as PesananManifest[]
+      const daftarJadwal = (jadwalData || []) as unknown as JadwalManifest[]
+
       // 3. Ambil data kapal lebih dulu: nama/kapten + pemilik untuk data lama
       //    (jadwal.operator_id bisa NULL, jadi pemilik dilihat dari kapal).
       const semuaKapalIds = [...new Set([
-        ...(pesananData || []).map((item: any) => item.jadwal?.kapal_id),
-        ...(jadwalData || []).map((j: any) => j.kapal_id)
+        ...daftarPesanan.map((item) => item.jadwal?.kapal_id),
+        ...daftarJadwal.map((j) => j.kapal_id)
       ].filter(Boolean) as string[])]
-      const kapalMap = new Map()
+      const kapalMap = new Map<string, KapalManifest>()
       if (semuaKapalIds.length > 0) {
         const { data: kapalData } = await supabase.from('kapal').select('*').in('id', semuaKapalIds)
-        kapalData?.forEach((k: any) => kapalMap.set(k.id, k))
+        ;(kapalData || []).forEach((k: KapalManifest) => kapalMap.set(k.id, k))
       }
       const petaOperatorKapal = new Map<string, string | null>()
-      kapalMap.forEach((k: any, id: string) => petaOperatorKapal.set(id, k.operator_id || null))
+      kapalMap.forEach((k, id) => petaOperatorKapal.set(id, k.operator_id || null))
 
-      const filtered = (pesananData || []).filter((item: any) => {
+      const filtered = daftarPesanan.filter((item) => {
         if (!item.jadwal) return false
         return cocokOperator(item.jadwal, targetOperatorId, petaOperatorKapal)
       })
 
-      const jadwalFiltered = (jadwalData || []).filter((j: any) =>
+      const jadwalFiltered = daftarJadwal.filter((j) =>
         cocokOperator(j, targetOperatorId, petaOperatorKapal)
       )
 
-      const jamSet = new Set<string>()
-      // Ambil dari jadwal dulu
-      jadwalFiltered.forEach((j: any) => jamSet.add(j.jam_berangkat.substring(0, 5)))
-      // Kalau kosong, ambil dari pesanan
-      filtered.forEach((item: any) => jamSet.add(item.jadwal.jam_berangkat.substring(0, 5)))
+      // Satu manifest = satu kapal + satu rute + satu jam. Jangan digabung
+      // hanya karena jamnya sama: Tarakan 11:00 bisa punya beberapa kapal/tujuan.
+      const grouped: { [key: string]: LaporanPerKeberangkatan } = {}
 
-      const groupedByJam: { [key: string]: LaporanPerJam } = {}
-      
-      jamSet.forEach(jam => {
-        const jadwalCocok = jadwalFiltered.find((j: any) => j.jam_berangkat.substring(0, 5) === jam)
-        const dataKapal = jadwalCocok ? kapalMap.get(jadwalCocok.kapal_id) : null
-        groupedByJam[jam] = { 
-          jam, total_terjual: 0, rincian: [], 
-          nama_kapal: dataKapal?.nama || '-', 
-          nama_kapten: dataKapal?.nama_kapten || '-',
-          nama_abk: dataKapal?.nama_abk || [],
-          rute: jadwalCocok ? `${jadwalCocok.rute_asal} - ${jadwalCocok.rute_tujuan}` : `${lokasi} - ${tujuan || '-'}`
+      function kunciManifest(jadwal: JadwalManifest): string {
+        const jam = String(jadwal.jam_berangkat || '').substring(0, 5)
+        return `${jam}|${jadwal.kapal_id || '-'}|${jadwal.rute_asal || '-'}|${jadwal.rute_tujuan || '-'}`
+      }
+
+      function pastikanGrup(jadwal: JadwalManifest): LaporanPerKeberangkatan {
+        const kunci = kunciManifest(jadwal)
+        const dataKapal = jadwal.kapal_id ? kapalMap.get(jadwal.kapal_id) : null
+
+        if (!grouped[kunci]) {
+          grouped[kunci] = {
+            kunci,
+            jam: String(jadwal.jam_berangkat || '').substring(0, 5),
+            total_terjual: 0,
+            rincian: [],
+            nama_kapal: dataKapal?.nama || '-',
+            nama_kapten: dataKapal?.nama_kapten || '-',
+            nama_abk: dataKapal?.nama_abk || [],
+            rute: `${jadwal.rute_asal || '-'} - ${jadwal.rute_tujuan || '-'}`,
+          }
         }
+
+        return grouped[kunci]
+      }
+
+      // Jadwal tetap tampil walau belum ada penjualan.
+      jadwalFiltered.forEach((jadwal) => {
+        pastikanGrup(jadwal)
       })
 
-      filtered.forEach((item: any) => {
-        const jam = item.jadwal.jam_berangkat.substring(0, 5)
-        if (!groupedByJam[jam]) groupedByJam[jam] = {
-          jam, total_terjual: 0, rincian: [],
-          nama_kapal: '-', nama_kapten: '-', nama_abk: [],
-          rute: `${item.jadwal.rute_asal} - ${item.jadwal.rute_tujuan}`
-        }
-        const group = groupedByJam[jam]
+      filtered.forEach((item) => {
+        if (!item.jadwal) return
+        const group = pastikanGrup(item.jadwal)
         group.total_terjual += 1
         group.rincian.push({
-          id: item.id, 
-          nama: item.nama_penumpang, 
-          kursi: item.kursi?.nomor_kursi || '-', 
+          id: item.id,
+          nama: item.nama_penumpang,
+          kursi: item.kursi?.nomor_kursi || '-',
           status_boarding: item.status_boarding || 'belum',
           waktu_boarding: item.waktu_boarding || null,
           is_balita: item.is_balita || false,
@@ -165,14 +207,20 @@ function ManifestSuperadminContent() {
         })
       })
 
-      setLaporan(Object.values(groupedByJam).sort((a, b) => a.jam.localeCompare(b.jam)))
+      setLaporan(
+        Object.values(grouped).sort((a, b) =>
+          a.jam.localeCompare(b.jam) ||
+          a.nama_kapal.localeCompare(b.nama_kapal) ||
+          a.rute.localeCompare(b.rute)
+        )
+      )
       setLoading(false)
     }
     fetchData()
   }, [profile, tanggal, lokasi, tujuan, operatorIdParam])
 
   const handlePrint = () => { setTimeout(() => window.print(), 100) }
-  
+
   const urutkanBerdasarkanScan = (rincian: RincianPenumpang[]) => {
     const grupMap = new Map<string, RincianPenumpang[]>()
     rincian.forEach(p => {
@@ -207,12 +255,14 @@ function ManifestSuperadminContent() {
   if (loading) return <p className="p-6 text-center text-gray-600">Memuat...</p>
   if (!profile) return null
 
-  const urlManifest = (asal: string, tuj: string) =>
-    `/superadmin/pusat-kontrol/admin/manifest?lokasi=${encodeURIComponent(asal)}&tujuan=${encodeURIComponent(tuj)}${
-      operatorIdParam ? `&operator=${encodeURIComponent(operatorIdParam)}` : ''
-    }`
+  const urlManifest = (asal: string, tuj = '') =>
+    `/superadmin/pusat-kontrol/admin/manifest?lokasi=${encodeURIComponent(asal)}${
+      tuj ? `&tujuan=${encodeURIComponent(tuj)}` : ''
+    }${operatorIdParam ? `&operator=${encodeURIComponent(operatorIdParam)}` : ''}`
 
-  // Tanpa ?lokasi= -> tampilkan SEMUA rute milik penyewa (bukan default Tarakan).
+  const daftarDaerah = urutkanLokasi(ujungRute(ruteList))
+
+  // Tanpa ?lokasi= -> tampilkan SEMUA daerah milik penyewa (bukan default Tarakan).
   if (!lokasi) {
     return (
       <div className="min-h-screen bg-gray-50 p-4 md:p-6">
@@ -220,7 +270,7 @@ function ManifestSuperadminContent() {
           <div className="flex justify-between items-start gap-2 px-4 py-3 border-b border-gray-200">
             <div>
               <h1 className="text-xl font-bold text-gray-900">Manifest Kapal</h1>
-              <p className="text-sm text-gray-600">Pilih rute keberangkatan</p>
+              <p className="text-sm text-gray-600">Pilih daerah keberangkatan</p>
             </div>
             <button onClick={() => router.push('/laporan-penjualan-admin?menu=manifest')} className="text-xs text-blue-600 hover:underline bg-gray-50 px-2 py-1.5 rounded border border-gray-200">
               &larr; Kembali
@@ -229,19 +279,19 @@ function ManifestSuperadminContent() {
           <div className="p-4 space-y-2">
             {ruteLoading ? (
               <p className="p-4 text-center text-sm text-gray-500">Memuat rute...</p>
-            ) : ruteList.length === 0 ? (
+            ) : daftarDaerah.length === 0 ? (
               <p className="p-4 text-center text-xs text-gray-600">
                 Belum ada rute terdaftar. Input rute di Manajemen Jadwal atau Master Rute dulu.
               </p>
             ) : (
-              ruteList.map((r) => (
+              daftarDaerah.map((daerah) => (
                 <button
-                  key={`${r.rute_asal}|${r.rute_tujuan}`}
-                  onClick={() => router.push(urlManifest(r.rute_asal, r.rute_tujuan))}
+                  key={daerah}
+                  onClick={() => router.push(urlManifest(daerah))}
                   className="w-full text-left p-3 rounded-lg border-2 border-gray-200 hover:border-blue-400 hover:bg-blue-50 transition"
                 >
-                  <p className="text-sm font-bold text-gray-900">Manifest {r.rute_asal} → {r.rute_tujuan}</p>
-                  <p className="text-[11px] text-gray-600">Daftar penumpang & status boarding</p>
+                  <p className="text-sm font-bold text-gray-900">Manifest {daerah}</p>
+                  <p className="text-[11px] text-gray-600">Semua keberangkatan dari {daerah}</p>
                 </button>
               ))
             )}
@@ -251,17 +301,19 @@ function ManifestSuperadminContent() {
     )
   }
 
-  const ruteAktif = ruteList.find((r) => r.rute_asal === lokasi && (!tujuan || r.rute_tujuan === tujuan))
+  const ruteAktif = tujuan
+    ? ruteList.find((r) => r.rute_asal === lokasi && r.rute_tujuan === tujuan)
+    : null
   const kunciRuteAktif = ruteAktif ? `${ruteAktif.rute_asal}|${ruteAktif.rute_tujuan}` : ''
 
   const now = new Date()
   const hariIniStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
   const jamSekarang = String(now.getHours()).padStart(2, '0') + ':' + String(now.getMinutes()).padStart(2, '0')
-  
+
   const laporanBelumClosed = laporan.filter(l => tanggal === hariIniStr && l.jam > jamSekarang)
   const laporanSudahClosed = laporan.filter(l => tanggal !== hariIniStr || l.jam <= jamSekarang)
-  
-  const rincianAktif = expandedJam ? laporan.find(l => l.jam === expandedJam) : null
+
+  const rincianAktif = expandedKunci ? laporan.find(l => l.kunci === expandedKunci) : null
 
   const tanggalFormatHeader = new Date(tanggal).toLocaleDateString('id-ID', { day: '2-digit', month: 'long', year: 'numeric' })
 
@@ -271,7 +323,7 @@ function ManifestSuperadminContent() {
   const dataUrut = rincianAktif ? urutkanBerdasarkanScan(rincianAktif.rincian) : []
   const barisPerHalaman = 30
   const halamanData: RincianPenumpang[][] = []
-  
+
   for (let i = 0; i < dataUrut.length; i += barisPerHalaman) {
     halamanData.push(dataUrut.slice(i, i + barisPerHalaman))
   }
@@ -294,7 +346,7 @@ function ManifestSuperadminContent() {
       `}} />
 
       <div className="h-[100dvh] w-full bg-gray-50 flex flex-col overflow-hidden print:hidden">
-        {!expandedJam ? (
+        {!expandedKunci ? (
           <>
             <div className="flex-shrink-0 bg-white shadow-sm z-10 px-4 py-3 md:py-4">
               <div className="max-w-md mx-auto">
@@ -314,12 +366,17 @@ function ManifestSuperadminContent() {
                       <select
                         value={kunciRuteAktif}
                         onChange={(e) => {
-                          const [asal, tuj] = e.target.value.split('|')
+                          const nilai = e.target.value
+                          if (!nilai) {
+                            router.replace(urlManifest(lokasi))
+                            return
+                          }
+                          const [asal, tuj] = nilai.split('|')
                           if (asal && tuj) router.replace(urlManifest(asal, tuj))
                         }}
                         className="w-full border rounded-md px-3 py-2 text-sm text-gray-900 shadow-sm focus:ring-blue-500 focus:border-blue-500"
                       >
-                        {!kunciRuteAktif && <option value="">Pilih rute...</option>}
+                        <option value="">Semua tujuan dari {lokasi}</option>
                         {ruteList.map((r) => (
                           <option key={`${r.rute_asal}|${r.rute_tujuan}`} value={`${r.rute_asal}|${r.rute_tujuan}`}>
                             {r.rute_asal} → {r.rute_tujuan}
@@ -347,14 +404,15 @@ function ManifestSuperadminContent() {
                   ) : (
                     <div className="space-y-2">
                       {laporanBelumClosed.map((l) => (
-                        <div key={l.jam} className="bg-white rounded-lg border border-gray-200 overflow-hidden shadow-sm">
-                          <button 
-                            onClick={() => setExpandedJam(l.jam)}
+                        <div key={l.kunci} className="bg-white rounded-lg border border-gray-200 overflow-hidden shadow-sm">
+                          <button
+                            onClick={() => setExpandedKunci(l.kunci)}
                             className="w-full px-3 py-2 flex justify-between items-center hover:bg-gray-50 transition"
                           >
                             <div className="text-left">
                               <p className="font-bold text-xs text-gray-900">Jam {l.jam}</p>
                               <p className="text-[10px] text-gray-600">{l.nama_kapal}</p>
+                              <p className="text-[10px] text-gray-500">{l.rute}</p>
                             </div>
                             <div className="flex items-center gap-2">
                               <span className="text-[9px] bg-blue-100 text-blue-800 px-1.5 py-0.5 rounded font-bold">{l.total_terjual} Penumpang</span>
@@ -376,14 +434,15 @@ function ManifestSuperadminContent() {
                   ) : (
                     <div className="space-y-2">
                       {laporanSudahClosed.map((l) => (
-                        <div key={l.jam} className="bg-white rounded-lg border border-gray-200 shadow-sm">
-                          <button 
-                            onClick={() => setExpandedJam(l.jam)} 
+                        <div key={l.kunci} className="bg-white rounded-lg border border-gray-200 shadow-sm">
+                          <button
+                            onClick={() => setExpandedKunci(l.kunci)}
                             className="w-full px-3 py-2 flex justify-between items-center hover:bg-gray-50 transition"
                           >
                             <div className="text-left">
                               <p className="font-bold text-xs text-gray-900">Jam {l.jam}</p>
                               <p className="text-[10px] text-gray-600">{l.nama_kapal}</p>
+                              <p className="text-[10px] text-gray-500">{l.rute}</p>
                             </div>
                             <div className="flex items-center gap-2">
                               <span className="text-[9px] bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded font-bold">{l.total_terjual} Penumpang</span>
@@ -404,9 +463,9 @@ function ManifestSuperadminContent() {
               <div className="max-w-md mx-auto flex justify-between items-center">
                 <div>
                   <h1 className="text-xl font-bold text-gray-900 leading-tight">Detail Manifest</h1>
-                  <p className="text-sm text-gray-600 mt-0.5">Jam {expandedJam} - {tanggalFormatHeader}</p>
+                  <p className="text-sm text-gray-600 mt-0.5">Jam {rincianAktif?.jam || '-'} - {tanggalFormatHeader}</p>
                 </div>
-                <button onClick={() => setExpandedJam(null)} className="text-xs bg-red-50 text-red-600 hover:bg-red-100 px-3 py-1.5 rounded border border-red-200 font-bold">
+                <button onClick={() => setExpandedKunci(null)} className="text-xs bg-red-50 text-red-600 hover:bg-red-100 px-3 py-1.5 rounded border border-red-200 font-bold">
                   Tutup
                 </button>
               </div>
@@ -478,7 +537,7 @@ function ManifestSuperadminContent() {
             return (
               <div key={pageIdx} className="page-break">
                 <div className="text-center mb-4">
-                  <h1 className="text-xl font-bold text-gray-900">LAPORAN MANIFEST PENUMPANG JAM {expandedJam}</h1>
+                  <h1 className="text-xl font-bold text-gray-900">LAPORAN MANIFEST PENUMPANG JAM {rincianAktif?.jam || '-'}</h1>
                 </div>
                 <div className="mb-4 text-sm grid grid-cols-[160px_10px_1fr] gap-y-1">
                   <span>Tanggal</span><span>:</span><span>{tanggalFormatHeader}</span>
@@ -510,7 +569,7 @@ function ManifestSuperadminContent() {
                         </td>
                       </tr>
                     ))}
-                    
+
                     {isLastPage && (
                       <tr className="font-bold bg-gray-300 text-center text-gray-900">
                         <td colSpan={2} className="border border-gray-400 px-2 py-1 text-center">TOTAL PENUMPANG</td>

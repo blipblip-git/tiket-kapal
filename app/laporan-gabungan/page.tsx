@@ -1,310 +1,425 @@
 'use client'
 
-import { useEffect, useState } from 'react'
-import { useRouter } from 'next/navigation'
+import { Fragment, Suspense, useEffect, useState } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { supabase, getProfile, getOperatorSession, type Profile } from '@/lib/supabase'
 import { idOperator, cocokOperator } from '@/lib/tenant'
+import { muatRutePemilik, ujungRute, type RuteKapal } from '@/lib/rute'
+import { urutkanLokasi } from '@/lib/lokasi'
 
-type DataRute = {
+type SelDaerah = {
   dewasa: number
   balita: number
-  total_pendapatan: number
+  pendapatan: number
 }
 
-type GabunganPerJam = {
+type JadwalRingkas = {
+  id?: string
+  rute_asal: string | null
+  rute_tujuan: string | null
+  jam_berangkat: string | null
+  kapal_id: string | null
+  operator_id?: string | null
+  harga?: number | null
+}
+
+type PesananRingkas = {
+  id: string
+  is_balita: boolean | null
+  jadwal: JadwalRingkas | null
+}
+
+type KapalRingkas = {
+  id: string
+  nama: string | null
+  operator_id: string | null
+}
+
+type BarisKeberangkatan = {
+  kunci: string
   jam: string
-  nama_kapal: string
-  tarakan: DataRute
-  tanjungSelor: DataRute
+  kapal: string
+  rute: string
+  perDaerah: { [daerah: string]: SelDaerah }
+  total: number
 }
 
-export default function LaporanGabunganPage() {
+function tanggalWITA(): string {
+  const now = new Date()
+  return new Date(now.getTime() + 8 * 60 * 60 * 1000).toISOString().slice(0, 10)
+}
+
+function tanggalValid(tanggal: string | null): tanggal is string {
+  if (!tanggal || !/^\d{4}-\d{2}-\d{2}$/.test(tanggal)) return false
+  return !Number.isNaN(new Date(`${tanggal}T00:00:00Z`).getTime())
+}
+
+function labelTanggal(tanggal: string): string {
+  const cocok = /^(\d{4})-(\d{2})-(\d{2})$/.exec(tanggal)
+  if (!cocok) return tanggal
+  const tanggalUtc = new Date(Date.UTC(Number(cocok[1]), Number(cocok[2]) - 1, Number(cocok[3])))
+  return tanggalUtc.toLocaleDateString('id-ID', {
+    weekday: 'long', day: '2-digit', month: 'long', year: 'numeric', timeZone: 'UTC'
+  })
+}
+
+function selKosong(): SelDaerah {
+  return { dewasa: 0, balita: 0, pendapatan: 0 }
+}
+
+function formatRupiah(nilai: number): string {
+  return `Rp ${nilai.toLocaleString('id-ID')}`
+}
+
+function LaporanGabunganContent() {
   const router = useRouter()
+  const searchParams = useSearchParams()
+  const tanggalParam = searchParams.get('tanggal')
+
   const [profile, setProfile] = useState<Profile | null>(null)
+  const [ruteList, setRuteList] = useState<RuteKapal[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
-  const [laporan, setLaporan] = useState<GabunganPerJam[]>([])
-  
-  const [tanggal, setTanggal] = useState('')
-  const [tanggalFormatHeader, setTanggalFormatHeader] = useState('')
-  
-  const [singkatanAsal, setSingkatanAsal] = useState('TRK')
-  const [singkatanTujuan, setSingkatanTujuan] = useState('TJS')
+  const [tanggal, setTanggal] = useState(() => (tanggalValid(tanggalParam) ? tanggalParam : tanggalWITA()))
+  const [ringkasan, setRingkasan] = useState<{ [daerah: string]: SelDaerah }>({})
+  const [keberangkatan, setKeberangkatan] = useState<BarisKeberangkatan[]>([])
 
   useEffect(() => {
-    const today = new Date()
-    const offset = today.getTimezoneOffset() * 60000
-    const localDate = new Date(today.getTime() - offset).toISOString().split('T')[0]
-    setTanggal(localDate)
-    setTanggalFormatHeader(today.toLocaleDateString('id-ID', { day: '2-digit', month: 'long', year: 'numeric' }))
-
     async function init() {
       let currentProfile = getOperatorSession()
-      if (!currentProfile) {
-        const adminProfile = await getProfile()
-        if (adminProfile) currentProfile = adminProfile
-      }
+      if (!currentProfile) currentProfile = await getProfile()
       if (!currentProfile) { router.push('/login'); return }
       setProfile(currentProfile)
-      
-      const { data: kotaData } = await supabase.from('master_kota').select('nama_kota, singkatan')
-      if (kotaData) {
-        const trk = kotaData.find((k: any) => k.nama_kota === 'Tarakan')
-        const tjs = kotaData.find((k: any) => k.nama_kota === 'Tanjung Selor')
-        if (trk) setSingkatanAsal(trk.singkatan)
-        if (tjs) setSingkatanTujuan(tjs.singkatan)
-      }
-      
-      setLoading(false)
+
+      const daftarRute = await muatRutePemilik(currentProfile)
+      setRuteList(daftarRute)
     }
     init()
   }, [router])
 
   useEffect(() => {
+    let masihAktif = true
+
     async function fetchData() {
       if (!profile || !tanggal) return
       setLoading(true)
-      
+      setError('')
+
       const operatorId = idOperator(profile)
 
-      let queryPesanan = supabase
-        .from('pesanan')
-        .select(`
-          id, is_balita, jadwal:jadwal_id (rute_asal, rute_tujuan, harga, tanggal, jam_berangkat, kapal_id, operator_id)
-        `)
-        .eq('status', 'paid')
-        .eq('jadwal.tanggal', tanggal)
+      const [hasilPesanan, hasilJadwal] = await Promise.all([
+        supabase
+          .from('pesanan')
+          .select(`
+            id, is_balita,
+            jadwal:jadwal_id!inner (id, rute_asal, rute_tujuan, harga, tanggal, jam_berangkat, kapal_id, operator_id)
+          `)
+          .eq('status', 'paid')
+          .eq('jadwal.tanggal', tanggal),
+        supabase
+          .from('jadwal')
+          .select('id, rute_asal, rute_tujuan, jam_berangkat, kapal_id, operator_id')
+          .eq('tanggal', tanggal)
+      ])
 
-      const { data: pesananData, error } = await queryPesanan
+      if (hasilPesanan.error) {
+        if (!masihAktif) return
+        setError('Gagal memuat laporan: ' + hasilPesanan.error.message)
+        setRingkasan({})
+        setKeberangkatan([])
+        setLoading(false)
+        return
+      }
 
-      if (error) { setError('Gagal memuat laporan: ' + error.message); setLoading(false); return }
+      const pesananData = (hasilPesanan.data || []) as unknown as PesananRingkas[]
+      const jadwalData = (hasilJadwal.data || []) as unknown as JadwalRingkas[]
 
-      // Peta kapal dipakai dua-duanya: nama kapal + pemilik data lama (operator_id NULL).
-      const kapalIds = [...new Set((pesananData || []).map((p: any) => p.jadwal?.kapal_id).filter(Boolean) || [])]
-      const kapalMap = new Map()
+      const kapalIds = Array.from(new Set([
+        ...pesananData.map((p) => p.jadwal?.kapal_id),
+        ...jadwalData.map((j) => j.kapal_id),
+      ].filter(Boolean) as string[]))
+
+      const kapalMap = new Map<string, KapalRingkas>()
       const petaOperatorKapal = new Map<string, string | null>()
       if (kapalIds.length > 0) {
-        const { data: kapalData } = await supabase.from('kapal').select('id, nama, operator_id').in('id', kapalIds)
-        kapalData?.forEach((k: any) => {
-          kapalMap.set(k.id, k.nama)
+        const { data: kapalData } = await supabase
+          .from('kapal')
+          .select('id, nama, operator_id')
+          .in('id', kapalIds)
+        ;(kapalData || []).forEach((k: KapalRingkas) => {
+          kapalMap.set(k.id, k)
           petaOperatorKapal.set(k.id, k.operator_id || null)
         })
       }
 
-      const filteredPesanan = (pesananData || []).filter((item: any) => {
-        if (!item.jadwal) return false;
+      const pesananCocok = pesananData.filter((item) => {
+        if (!item.jadwal) return false
         return cocokOperator(item.jadwal, operatorId, petaOperatorKapal)
       })
+      const jadwalCocok = jadwalData.filter((j) =>
+        cocokOperator(j, operatorId, petaOperatorKapal)
+      )
 
+      const daerahAwal = urutkanLokasi(ujungRute(ruteList))
+      const mapRingkasan: { [daerah: string]: SelDaerah } = {}
+      daerahAwal.forEach((daerah) => { mapRingkasan[daerah] = selKosong() })
 
-      const jamSet = new Set<string>()
-      filteredPesanan.forEach((item: any) => jamSet.add(item.jadwal.jam_berangkat.substring(0, 5)))
+      const mapBaris: { [kunci: string]: BarisKeberangkatan } = {}
 
-      const grouped: { [key: string]: GabunganPerJam } = {}
-      
-      jamSet.forEach(jam => {
-        grouped[jam] = {
-          jam,
-          nama_kapal: '-',
-          tarakan: { dewasa: 0, balita: 0, total_pendapatan: 0 },
-          tanjungSelor: { dewasa: 0, balita: 0, total_pendapatan: 0 }
-        }
-      })
+      function pastikanBaris(jadwal: JadwalRingkas): BarisKeberangkatan {
+        const jam = String(jadwal.jam_berangkat || '').slice(0, 5)
+        const kapalId = String(jadwal.kapal_id || '-')
+        const kunci = `${jam}|${kapalId}`
 
-      filteredPesanan.forEach((item: any) => {
-        const jam = item.jadwal.jam_berangkat.substring(0, 5)
-        if (!grouped[jam]) {
-          grouped[jam] = {
+        if (!mapBaris[kunci]) {
+          mapBaris[kunci] = {
+            kunci,
             jam,
-            nama_kapal: '-',
-            tarakan: { dewasa: 0, balita: 0, total_pendapatan: 0 },
-            tanjungSelor: { dewasa: 0, balita: 0, total_pendapatan: 0 }
+            kapal: kapalMap.get(jadwal.kapal_id || '')?.nama || '-',
+            rute: '',
+            perDaerah: {},
+            total: 0,
           }
         }
 
-        if (item.jadwal.kapal_id && kapalMap.has(item.jadwal.kapal_id)) {
-          grouped[jam].nama_kapal = kapalMap.get(item.jadwal.kapal_id)
-        }
+        const baris = mapBaris[kunci]
+        const teksRute = `${jadwal.rute_asal || '-'} → ${jadwal.rute_tujuan || '-'}`
+        const ruteUnik = new Set(baris.rute.split(', ').filter(Boolean))
+        ruteUnik.add(teksRute)
+        baris.rute = Array.from(ruteUnik).join(', ')
+        return baris
+      }
 
-        if (item.jadwal.rute_asal === 'Tarakan') {
-          if (item.is_balita) {
-            grouped[jam].tarakan.balita += 1
-          } else {
-            grouped[jam].tarakan.dewasa += 1
-            grouped[jam].tarakan.total_pendapatan += (item.jadwal.harga || 0)
-          }
-        } else if (item.jadwal.rute_asal === 'Tanjung Selor') {
-          if (item.is_balita) {
-            grouped[jam].tanjungSelor.balita += 1
-          } else {
-            grouped[jam].tanjungSelor.dewasa += 1
-            grouped[jam].tanjungSelor.total_pendapatan += (item.jadwal.harga || 0)
-          }
+      // Jadwal tetap ditampilkan walau belum ada penjualan (0 penumpang).
+      jadwalCocok.forEach((jadwal) => pastikanBaris(jadwal))
+
+      pesananCocok.forEach((item) => {
+        const jadwal = item.jadwal
+        if (!jadwal) return
+        const baris = pastikanBaris(jadwal)
+        const daerah = String(jadwal.rute_asal || 'Lainnya').trim() || 'Lainnya'
+
+        if (!mapRingkasan[daerah]) mapRingkasan[daerah] = selKosong()
+        if (!baris.perDaerah[daerah]) baris.perDaerah[daerah] = selKosong()
+
+        const sel = mapRingkasan[daerah]
+        const selBaris = baris.perDaerah[daerah]
+
+        if (item.is_balita) {
+          sel.balita += 1
+          selBaris.balita += 1
+        } else {
+          const harga = Number(jadwal.harga || 0)
+          sel.dewasa += 1
+          sel.pendapatan += harga
+          selBaris.dewasa += 1
+          selBaris.pendapatan += harga
+          baris.total += harga
         }
       })
 
-      const laporanArray = Object.values(grouped).sort((a, b) => a.jam.localeCompare(b.jam))
-      setLaporan(laporanArray)
+      if (!masihAktif) return
+      setRingkasan(mapRingkasan)
+      setKeberangkatan(
+        Object.values(mapBaris).sort((a, b) =>
+          a.jam.localeCompare(b.jam) || a.kapal.localeCompare(b.kapal)
+        )
+      )
       setLoading(false)
     }
 
-    if (profile && tanggal) fetchData()
-  }, [profile, tanggal])
+    fetchData()
 
-  const handlePrint = () => {
-    setTimeout(() => window.print(), 100)
-  }
+    return () => {
+      masihAktif = false
+    }
+  }, [profile, tanggal, ruteList])
 
-  if (loading) return <p className="p-6 text-center text-gray-600">Memuat...</p>
-  if (error) return <p className="p-6 text-center text-red-600">{error}</p>
+  const handlePrint = () => setTimeout(() => window.print(), 100)
+
+  if (loading) return <p className="p-6 text-center text-gray-600 mt-10">Memuat...</p>
+  if (error) return <p className="p-6 text-center text-red-600 mt-10">{error}</p>
   if (!profile) return null
 
-  const totalDewasaTarakan = laporan.reduce((sum, item) => sum + item.tarakan.dewasa, 0)
-  const totalBalitaTarakan = laporan.reduce((sum, item) => sum + item.tarakan.balita, 0)
-  const totalPendapatanTarakan = laporan.reduce((sum, item) => sum + item.tarakan.total_pendapatan, 0)
-  
-  const totalDewasaTjSelor = laporan.reduce((sum, item) => sum + item.tanjungSelor.dewasa, 0)
-  const totalBalitaTjSelor = laporan.reduce((sum, item) => sum + item.tanjungSelor.balita, 0)
-  const totalPendapatanTjSelor = laporan.reduce((sum, item) => sum + item.tanjungSelor.total_pendapatan, 0)
-  
-  const grandTotalPendapatan = totalPendapatanTarakan + totalPendapatanTjSelor
+  const daerahList = urutkanLokasi(Array.from(new Set([
+    ...ujungRute(ruteList),
+    ...Object.keys(ringkasan),
+    ...keberangkatan.flatMap((b) => Object.keys(b.perDaerah)),
+  ])))
+
+  const totalKeseluruhan = daerahList.reduce((sum, daerah) => {
+    return sum + (ringkasan[daerah]?.pendapatan || 0)
+  }, 0)
+
+  const totalDewasa = daerahList.reduce((sum, daerah) => sum + (ringkasan[daerah]?.dewasa || 0), 0)
+  const totalBalita = daerahList.reduce((sum, daerah) => sum + (ringkasan[daerah]?.balita || 0), 0)
 
   return (
-    <div className="h-[100dvh] w-full bg-gray-100 p-3 md:p-6 print:p-0 print:bg-white flex flex-col overflow-hidden print:h-auto print:overflow-visible">
+    <div className="min-h-[100dvh] w-full bg-gray-100 p-3 md:p-6 print:p-0 print:bg-white">
       <style dangerouslySetInnerHTML={{__html: `
         @media print {
-          @page { size: A4; margin: 15mm; }
+          @page { size: A4 landscape; margin: 10mm; }
           body { background: white; margin: 0; }
           .print-hidden { display: none !important; }
-          html, body { height: auto !important; overflow: hidden !important; }
-          .no-print { display: none !important; }
+          .print-area { overflow: visible !important; }
           tr { page-break-inside: avoid; }
-          table { page-break-inside: auto; }
+          table { font-size: 9px; }
+          th, td { padding: 2px 4px !important; }
         }
       `}} />
 
-      <div className="max-w-4xl w-full mx-auto flex flex-col h-full print:h-auto">
-        
-        <div className="flex justify-between items-start mb-3 bg-white p-3 rounded shadow-sm border border-gray-200 print-hidden flex-shrink-0">
+      <div className="max-w-[1400px] mx-auto">
+        <div className="flex flex-wrap justify-between items-start gap-3 mb-4 bg-white p-3 md:p-4 rounded shadow-sm border border-gray-200 print-hidden">
           <div>
-            <h1 className="text-sm md:text-xl font-bold text-gray-900 leading-tight">Rekap Laporan Gabungan</h1>
-            <p className="text-[10px] md:text-sm font-bold text-blue-600 mt-0.5">{tanggalFormatHeader} (hari ini)</p>
+            <h1 className="text-lg md:text-2xl font-bold text-gray-900 leading-tight">Laporan Gabungan Harian</h1>
+            <p className="text-xs md:text-sm font-bold text-blue-700 mt-0.5">{labelTanggal(tanggal)}</p>
           </div>
-          <div className="flex gap-2 flex-shrink-0">
-            <button onClick={handlePrint} className="bg-blue-600 hover:bg-blue-700 text-white px-2 py-1.5 md:px-4 md:py-2 rounded text-[10px] md:text-sm font-bold transition shadow-sm">🖨️ Cetak</button>
-            <button onClick={() => router.push('/laporan-penjualan-admin')} className="bg-gray-100 hover:bg-gray-200 text-gray-700 px-2 py-1.5 md:px-4 md:py-2 rounded text-[10px] md:text-sm font-bold transition">Kembali</button>
+          <div className="flex items-center gap-2">
+            <button onClick={handlePrint} className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 rounded text-xs md:text-sm font-bold transition shadow-sm">🖨️ Cetak</button>
+            <button onClick={() => router.push('/dashboard')} className="bg-gray-100 hover:bg-gray-200 text-gray-700 px-3 py-2 rounded text-xs md:text-sm font-bold transition">Kembali</button>
           </div>
         </div>
 
-        <div className="bg-white p-2 md:p-3 rounded shadow mb-3 flex items-center gap-2 print-hidden flex-shrink-0">
-          <label className="text-[10px] md:text-sm font-medium text-gray-700">Pilih Tanggal:</label>
-          <input type="date" value={tanggal} onChange={(e) => setTanggal(e.target.value)} className="border rounded px-2 py-1 text-[10px] md:text-sm text-gray-900" />
+        <div className="bg-white p-3 md:p-4 rounded shadow mb-4 flex flex-wrap items-center gap-2 border border-gray-200 print-hidden">
+          <label className="text-xs md:text-sm font-medium text-gray-700">Pilih Tanggal:</label>
+          <input
+            type="date"
+            value={tanggal}
+            onChange={(e) => {
+              const nilai = e.target.value
+              if (!nilai) return
+              setTanggal(nilai)
+              router.replace(`/laporan-gabungan?tanggal=${nilai}`)
+            }}
+            className="border rounded px-2 py-1 text-xs md:text-sm text-gray-900"
+          />
+          <span className="text-xs text-gray-500 ml-auto">Total: <b className="text-gray-900">{formatRupiah(totalKeseluruhan)}</b> • {daerahList.length} daerah</span>
         </div>
 
-        <div className="bg-white rounded shadow border border-gray-200 overflow-hidden flex-1 flex flex-col min-h-0 print-hidden">
-          <div className="overflow-y-auto flex-1">
-            <table className="w-full table-fixed border-collapse text-gray-900">
-              <thead className="bg-gray-100 border-b sticky top-0 z-10">
+        <section className="bg-white rounded shadow border border-gray-200 mb-4 overflow-hidden">
+          <div className="px-3 md:px-4 py-3 border-b bg-gray-50">
+            <h2 className="text-sm md:text-base font-bold text-gray-900">Ringkasan per Daerah</h2>
+            <p className="text-[10px] md:text-xs text-gray-600">Pendapatan dihitung dari tiket dewasa yang sudah dibayar. Balita tetap dihitung sebagai penumpang.</p>
+          </div>
+          <div className="overflow-x-auto print-area">
+            <table className="w-full border-collapse text-gray-900">
+              <thead className="bg-gray-100 border-b">
                 <tr>
-                  <th className="border p-1 text-[9px] md:text-xs w-[8%] text-center" rowSpan={2}>Jam</th>
-                  <th className="border p-1 text-[9px] md:text-xs w-[16%] text-center" rowSpan={2}>Kapal</th>
-                  <th className="border p-1 text-[9px] md:text-xs text-center" colSpan={2}>{singkatanAsal} - {singkatanTujuan}</th>
-                  <th className="border p-1 text-[9px] md:text-xs text-center" colSpan={2}>{singkatanTujuan} - {singkatanAsal}</th>
-                  <th className="border p-1 text-[9px] md:text-xs w-[16%] text-center align-middle" rowSpan={2}>Total Penjualan</th>
-                </tr>
-                <tr className="bg-gray-100">
-                  <th className="border p-1 text-[8px] md:text-xs text-center leading-tight"><div>Kursi</div><div>Dewasa/Balita</div></th>
-                  <th className="border p-1 text-[8px] md:text-xs text-center">Pendapatan</th>
-                  <th className="border p-1 text-[8px] md:text-xs text-center leading-tight"><div>Kursi</div><div>Dewasa/Balita</div></th>
-                  <th className="border p-1 text-[8px] md:text-xs text-center">Pendapatan</th>
+                  <th className="border p-2 text-[10px] md:text-xs text-left">Daerah</th>
+                  <th className="border p-2 text-[10px] md:text-xs text-center">Dewasa</th>
+                  <th className="border p-2 text-[10px] md:text-xs text-center">Balita</th>
+                  <th className="border p-2 text-[10px] md:text-xs text-right">Pendapatan</th>
+                  <th className="border p-2 text-[10px] md:text-xs text-center print-hidden">Aksi</th>
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
-                {laporan.map((l) => {
-                  const totalBaris = l.tarakan.total_pendapatan + l.tanjungSelor.total_pendapatan;
+                {daerahList.length === 0 ? (
+                  <tr><td colSpan={5} className="p-4 text-center text-xs text-gray-500">Belum ada rute/penjualan pada tanggal ini.</td></tr>
+                ) : daerahList.map((daerah) => {
+                  const sel = ringkasan[daerah] || selKosong()
                   return (
-                    <tr key={l.jam} className="hover:bg-gray-50 text-center">
-                      <td className="border p-1 text-[9px] md:text-xs font-bold">{l.jam}</td>
-                      <td className="border p-1 text-[9px] md:text-xs font-medium break-words">{l.nama_kapal}</td>
-                      <td className="border p-1 text-[9px] md:text-xs font-bold text-blue-600">{l.tarakan.dewasa}/{l.tarakan.balita}</td>
-                      <td className="border p-1 text-[9px] md:text-xs">
-                        {l.tarakan.total_pendapatan > 0 ? `Rp ${l.tarakan.total_pendapatan.toLocaleString('id-ID')}` : '-'}
-                      </td>
-                      <td className="border p-1 text-[9px] md:text-xs font-bold text-blue-600">{l.tanjungSelor.dewasa}/{l.tanjungSelor.balita}</td>
-                      <td className="border p-1 text-[9px] md:text-xs">
-                        {l.tanjungSelor.total_pendapatan > 0 ? `Rp ${l.tanjungSelor.total_pendapatan.toLocaleString('id-ID')}` : '-'}
-                      </td>
-                      <td className="border p-1 text-[9px] md:text-xs font-bold text-blue-700">
-                        {totalBaris > 0 ? `Rp ${totalBaris.toLocaleString('id-ID')}` : '-'}
+                    <tr key={daerah} className="hover:bg-gray-50">
+                      <td className="border p-2 text-xs md:text-sm font-bold">{daerah}</td>
+                      <td className="border p-2 text-xs md:text-sm text-center">{sel.dewasa}</td>
+                      <td className="border p-2 text-xs md:text-sm text-center">{sel.balita}</td>
+                      <td className="border p-2 text-xs md:text-sm text-right font-bold">{formatRupiah(sel.pendapatan)}</td>
+                      <td className="border p-2 text-center print-hidden">
+                        <button
+                          onClick={() => router.push(`/laporan?view=penjualan&lokasi=${encodeURIComponent(daerah)}&tanggal=${tanggal}`)}
+                          className="bg-blue-600 hover:bg-blue-700 text-white px-2 py-1 rounded text-[10px] md:text-xs font-bold"
+                        >Rinci</button>
                       </td>
                     </tr>
                   )
                 })}
               </tbody>
-              <tfoot className="bg-blue-600 text-white font-bold text-center sticky bottom-0 z-10">
+              <tfoot className="bg-blue-600 text-white font-bold">
                 <tr>
-                  <td colSpan={2} className="p-1 border text-[9px] md:text-xs">TOTAL</td>
-                  <td className="p-1 border text-[9px] md:text-xs">{totalDewasaTarakan}/{totalBalitaTarakan}</td>
-                  <td className="p-1 border text-[9px] md:text-xs">Rp {totalPendapatanTarakan.toLocaleString('id-ID')}</td>
-                  <td className="p-1 border text-[9px] md:text-xs">{totalDewasaTjSelor}/{totalBalitaTjSelor}</td>
-                  <td className="p-1 border text-[9px] md:text-xs">Rp {totalPendapatanTjSelor.toLocaleString('id-ID')}</td>
-                  <td className="p-1 border text-[9px] md:text-xs">Rp {grandTotalPendapatan.toLocaleString('id-ID')}</td>
+                  <td className="border p-2 text-xs md:text-sm">TOTAL</td>
+                  <td className="border p-2 text-xs md:text-sm text-center">{totalDewasa}</td>
+                  <td className="border p-2 text-xs md:text-sm text-center">{totalBalita}</td>
+                  <td className="border p-2 text-xs md:text-sm text-right">{formatRupiah(totalKeseluruhan)}</td>
+                  <td className="border p-2 text-xs md:text-sm text-center print-hidden">-</td>
                 </tr>
               </tfoot>
             </table>
           </div>
-        </div>
+        </section>
 
-        <div className="hidden print:block mt-8">
-          <h1 className="text-xl font-bold text-center mb-6">REKAP LAPORAN GABUNGAN</h1>
-          <div className="mb-4 text-sm grid grid-cols-[100px_10px_1fr] gap-y-1">
-            <span>Tanggal</span><span>:</span><span>{tanggal}</span>
-            <span>Rute</span><span>:</span><span>{singkatanAsal} & {singkatanTujuan}</span>
+        <section className="bg-white rounded shadow border border-gray-200 overflow-hidden">
+          <div className="px-3 md:px-4 py-3 border-b bg-gray-50">
+            <h2 className="text-sm md:text-base font-bold text-gray-900">Rincian per Jam & Kapal</h2>
+            <p className="text-[10px] md:text-xs text-gray-600">Setiap kapal ditampilkan terpisah, walau jam berangkatnya sama.</p>
           </div>
-          <table className="w-full text-sm border-collapse border border-gray-400">
-            <thead>
-              <tr className="bg-gray-200 text-center text-gray-900">
-                <th className="border border-gray-400 px-2 py-1" rowSpan={2}>Jam</th>
-                <th className="border border-gray-400 px-2 py-1" rowSpan={2}>Kapal</th>
-                <th className="border border-gray-400 px-2 py-1" colSpan={2}>{singkatanAsal} - {singkatanTujuan}</th>
-                <th className="border border-gray-400 px-2 py-1" colSpan={2}>{singkatanTujuan} - {singkatanAsal}</th>
-                <th className="border border-gray-400 px-2 py-1" rowSpan={2}>Total Penjualan</th>
-              </tr>
-              <tr className="bg-gray-200 text-center text-gray-900">
-                <th className="border border-gray-400 px-2 py-1 leading-tight"><div>Kursi</div><div>Dewasa/Balita</div></th>
-                <th className="border border-gray-400 px-2 py-1">Pendapatan</th>
-                <th className="border border-gray-400 px-2 py-1 leading-tight"><div>Kursi</div><div>Dewasa/Balita</div></th>
-                <th className="border border-gray-400 px-2 py-1">Pendapatan</th>
-              </tr>
-            </thead>
-            <tbody>
-              {laporan.map((l) => {
-                const totalBaris = l.tarakan.total_pendapatan + l.tanjungSelor.total_pendapatan;
-                return (
-                  <tr key={l.jam} className="text-center text-gray-900">
-                    <td className="border border-gray-400 px-2 py-1 font-bold">{l.jam}</td>
-                    <td className="border border-gray-400 px-2 py-1">{l.nama_kapal}</td>
-                    <td className="border border-gray-400 px-2 py-1">{l.tarakan.dewasa}/{l.tarakan.balita}</td>
-                    <td className="border border-gray-400 px-2 py-1 text-right">Rp {l.tarakan.total_pendapatan.toLocaleString('id-ID')}</td>
-                    <td className="border border-gray-400 px-2 py-1">{l.tanjungSelor.dewasa}/{l.tanjungSelor.balita}</td>
-                    <td className="border border-gray-400 px-2 py-1 text-right">Rp {l.tanjungSelor.total_pendapatan.toLocaleString('id-ID')}</td>
-                    <td className="border border-gray-400 px-2 py-1 text-right font-bold">Rp {totalBaris.toLocaleString('id-ID')}</td>
+          <div className="overflow-x-auto print-area">
+            <table className="w-full min-w-[900px] border-collapse text-gray-900">
+              <thead className="bg-gray-100 border-b">
+                <tr>
+                  <th className="border p-1 text-[9px] md:text-xs text-center" rowSpan={2}>Jam</th>
+                  <th className="border p-1 text-[9px] md:text-xs text-center" rowSpan={2}>Kapal</th>
+                  <th className="border p-1 text-[9px] md:text-xs text-center" rowSpan={2}>Rute</th>
+                  {daerahList.map((daerah) => (
+                    <th key={daerah} colSpan={2} className="border p-1 text-[9px] md:text-xs text-center whitespace-nowrap">{daerah}</th>
+                  ))}
+                  <th className="border p-1 text-[9px] md:text-xs text-center" rowSpan={2}>Total</th>
+                </tr>
+                <tr className="bg-gray-100">
+                  {daerahList.map((daerah) => (
+                    <Fragment key={daerah}>
+                      <th className="border p-1 text-[8px] md:text-xs text-center">Dewasa/Balita</th>
+                      <th className="border p-1 text-[8px] md:text-xs text-center">Pendapatan</th>
+                    </Fragment>
+                  ))}
+                </tr>
+              </thead>
+              <tbody className="bg-white divide-y divide-gray-200">
+                {keberangkatan.length === 0 ? (
+                  <tr><td colSpan={4 + daerahList.length * 2} className="p-4 text-center text-xs text-gray-500">Belum ada jadwal/penjualan pada tanggal ini.</td></tr>
+                ) : keberangkatan.map((baris) => (
+                  <tr key={baris.kunci} className="hover:bg-gray-50 text-center">
+                    <td className="border p-1 text-[9px] md:text-xs font-bold whitespace-nowrap">{baris.jam}</td>
+                    <td className="border p-1 text-[9px] md:text-xs font-medium" style={{ minWidth: 120 }}>{baris.kapal}</td>
+                    <td className="border p-1 text-[9px] md:text-xs text-left" style={{ minWidth: 130 }}>{baris.rute || '-'}</td>
+                    {daerahList.map((daerah) => {
+                      const sel = baris.perDaerah[daerah] || selKosong()
+                      return (
+                        <Fragment key={daerah}>
+                          <td className={`border p-1 text-[9px] md:text-xs font-bold ${sel.dewasa > 0 || sel.balita > 0 ? 'text-blue-700' : 'text-gray-400'}`}>{sel.dewasa}/{sel.balita}</td>
+                          <td className={`border p-1 text-[9px] md:text-xs text-right whitespace-nowrap ${sel.pendapatan > 0 ? '' : 'text-gray-400'}`}>{formatRupiah(sel.pendapatan)}</td>
+                        </Fragment>
+                      )
+                    })}
+                    <td className={`border p-1 text-[9px] md:text-xs font-bold text-right whitespace-nowrap ${baris.total > 0 ? 'text-blue-700' : 'text-gray-400'}`}>{formatRupiah(baris.total)}</td>
                   </tr>
-                )
-              })}
-              <tr className="font-bold bg-gray-300 text-center text-gray-900">
-                <td colSpan={2} className="border border-gray-400 px-2 py-1">TOTAL</td>
-                <td className="border border-gray-400 px-2 py-1">{totalDewasaTarakan}/{totalBalitaTarakan}</td>
-                <td className="border border-gray-400 px-2 py-1 text-right">Rp {totalPendapatanTarakan.toLocaleString('id-ID')}</td>
-                <td className="border border-gray-400 px-2 py-1">{totalDewasaTjSelor}/{totalBalitaTjSelor}</td>
-                <td className="border border-gray-400 px-2 py-1 text-right">Rp {totalPendapatanTjSelor.toLocaleString('id-ID')}</td>
-                <td className="border border-gray-400 px-2 py-1 text-right">Rp {grandTotalPendapatan.toLocaleString('id-ID')}</td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-
+                ))}
+              </tbody>
+              <tfoot className="bg-blue-600 text-white font-bold text-center">
+                <tr>
+                  <td colSpan={3} className="border p-1 text-[9px] md:text-xs">TOTAL</td>
+                  {daerahList.map((daerah) => {
+                    const sel = ringkasan[daerah] || selKosong()
+                    return (
+                      <Fragment key={daerah}>
+                        <td className="border p-1 text-[9px] md:text-xs">{sel.dewasa}/{sel.balita}</td>
+                        <td className="border p-1 text-[9px] md:text-xs text-right whitespace-nowrap">{formatRupiah(sel.pendapatan)}</td>
+                      </Fragment>
+                    )
+                  })}
+                  <td className="border p-1 text-[9px] md:text-xs text-right whitespace-nowrap">{formatRupiah(totalKeseluruhan)}</td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+        </section>
       </div>
     </div>
+  )
+}
+
+export default function LaporanGabunganPage() {
+  return (
+    <Suspense fallback={<p className="p-6 text-center text-gray-600 mt-10">Memuat...</p>}>
+      <LaporanGabunganContent />
+    </Suspense>
   )
 }

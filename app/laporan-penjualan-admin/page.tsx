@@ -6,6 +6,7 @@ import { getProfile, getOperatorSession, type Profile } from '@/lib/supabase'
 import { bulanSekarang } from '@/lib/periode'
 import { muatLokasiAgen } from '@/lib/laporanFee'
 import { muatRutePemilik, urutkanRute, ujungRute, type RuteKapal } from '@/lib/rute'
+import { urutkanLokasi } from '@/lib/lokasi'
 
 type Kartu = {
   label: string
@@ -90,7 +91,7 @@ function LaporanPenjualanAdminContent() {
   // asal DAN tujuan. Jadi rute Tarakan → Nunukan langsung memunculkan
   // "Laporan Tarakan" + "Laporan Nunukan" sejak diinput di Manajemen Jadwal,
   // walau arah balik belum dibuat dan belum ada penjualan sama sekali.
-  const kotaList = ujungRute(ruteList)
+  const kotaList = urutkanLokasi(ujungRute(ruteList))
   const warnaKota = (idx: number) => WARNA_RUTE[idx % WARNA_RUTE.length]
 
   // Panel kanan untuk menu "Laporan Penjualan Daerah".
@@ -241,16 +242,18 @@ function LaporanPenjualanAdminContent() {
     }
   }
 
-  // Manifest = SEMUA rute milik kapal penyewa (bukan cuma 1 daerah).
+  // Manifest = SEMUA daerah milik kapal penyewa. Satu kartu per daerah,
+  // bukan per pasangan rute, supaya tidak muncul "Manifest Tarakan → Berau",
+  // "Manifest Tarakan → Bunyu", dst.
   if (ruteList.length > 0) {
     subMenu.manifest = {
       judul: 'Manifest Kapal',
-      deskripsi: 'Semua rute milik kapal Anda (termasuk rute tanpa penumpang)',
-      kartu: ruteList.map((r, idx) => ({
-        label: `Manifest ${r.rute_asal} → ${r.rute_tujuan}`,
-        deskripsi: `Daftar penumpang & status boarding rute ${r.rute_asal} → ${r.rute_tujuan}`,
+      deskripsi: 'Pilih daerah keberangkatan. Setiap kapal/tujuan tetap dipisah di dalam manifest.',
+      kartu: kotaList.map((kota, idx) => ({
+        label: `Manifest ${kota}`,
+        deskripsi: `Semua keberangkatan dari ${kota}`,
         color: warnaKota(idx),
-        link: `/superadmin/pusat-kontrol/admin/manifest?lokasi=${encodeURIComponent(r.rute_asal)}&tujuan=${encodeURIComponent(r.rute_tujuan)}`
+        link: `/superadmin/pusat-kontrol/admin/manifest?lokasi=${encodeURIComponent(kota)}`
       }))
     }
   }
@@ -267,7 +270,7 @@ function LaporanPenjualanAdminContent() {
       ? [{
           kunci: 'manifest',
           label: 'Manifest Kapal',
-          deskripsi: 'Manifest per rute kapal',
+          deskripsi: 'Manifest per daerah keberangkatan',
           link: '/laporan-penjualan-admin?menu=manifest'
         }]
       : []),

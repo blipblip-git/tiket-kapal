@@ -5,11 +5,13 @@ import { useRouter } from 'next/navigation'
 import { supabase, getProfile, getOperatorSession, type Profile } from '@/lib/supabase'
 import { beroperasiPada } from '@/lib/hari'
 import {
+  ambilInfoPerjalanan,
   ambilPemakaianKursi,
-  ambilUrutanTitik,
   intervalBentrok,
   intervalSegmen,
   kunciKeberangkatan,
+  SEGMEN_PENUH_DARI,
+  SEGMEN_PENUH_SAMPAI,
 } from '@/lib/segmen'
 
 type JadwalTampil = {
@@ -23,6 +25,28 @@ type JadwalTampil = {
   kursi_kosong: number
   total_kursi: number
   status_waktu: 'lewat' | 'sekarang'
+}
+
+type TemplateJadwalCari = {
+  kapal_id: string
+  rute_asal: string
+  rute_tujuan: string
+  jam_berangkat: string
+  harga: number | null
+  hari_operasi?: string[] | null
+  operator_id?: string | null
+  kapal?: { kapasitas?: number | null } | null
+}
+
+type PemakaianCache = {
+  aktif: boolean
+  data: Array<{
+    nomor_kursi: string
+    segmen_dari: number
+    segmen_sampai: number
+    pesanan_id?: string | null
+    keberangkatan_key: string
+  }>
 }
 
 function CariTiketContent() {
@@ -128,11 +152,12 @@ function CariTiketContent() {
       const { data: templates } = await templateQuery
 
       // Hanya template yang beroperasi pada hari dari tanggal yang dipilih.
-      const templatesOperasi = (templates || []).filter((t: any) => beroperasiPada(tgl, t.hari_operasi))
+      const templatesOperasi = ((templates || []) as unknown as TemplateJadwalCari[])
+        .filter((t) => beroperasiPada(tgl, t.hari_operasi))
 
       // Harga WAJIB ikut Manajemen Jadwal (template_jadwal). Tidak ada harga cadangan:
       // template tanpa harga dilewati supaya tiket tidak pernah terjual dengan harga karangan.
-      const templatesSiap = (templatesOperasi as any[]).filter((t) => Number(t.harga) > 0)
+      const templatesSiap = templatesOperasi.filter((t) => Number(t.harga) > 0)
 
       if (templatesOperasi.length > 0 && templatesSiap.length === 0) {
         console.warn('Harga jadwal belum diisi di Manajemen Jadwal untuk rute ini.')
@@ -159,9 +184,9 @@ function CariTiketContent() {
         if (!insertError && insertedJadwal) {
           jadwalData = insertedJadwal
           
-          const kursiPayload: any[] = []
+          const kursiPayload: { jadwal_id: string; nomor_kursi: string; status: string }[] = []
           for (const j of insertedJadwal) {
-            const t = templatesSiap.find((x: any) =>
+            const t = templatesSiap.find((x) =>
               x.kapal_id === j.kapal_id &&
               x.rute_asal === j.rute_asal &&
               x.rute_tujuan === j.rute_tujuan &&
@@ -201,34 +226,36 @@ function CariTiketContent() {
     if (jadwalData) {
       // Cache per keberangkatan (kapal|tanggal|jam) supaya tidak query berulang
       // untuk rute-rute yang berangkat bersamaan.
-      const cacheUrutan = new Map<string, Map<string, number> | null>()
-      const cachePakai = new Map<string, { aktif: boolean; data: any[] }>()
+      const cacheInfo = new Map<string, { kunci: string; kunciLama: string[]; urutan: Map<string, number> | null }>()
+      const cachePakai = new Map<string, PemakaianCache>()
 
       for (const j of jadwalData) {
         const kapal = kapalMap.get(j.kapal_id)
         if (!kapal) continue
         // Kapal yang sudah dinonaktifkan/dihapus tidak boleh muncul di pencarian,
         // walaupun masih ada baris jadwal lama yang tertinggal.
-        if (String((kapal as any).status || 'aktif') === 'nonaktif') continue
+        if (String((kapal as { status?: string }).status || 'aktif') === 'nonaktif') continue
 
         const infoSegmen = {
           kapal_id: j.kapal_id,
-          tanggal: String((j as any).tanggal || tgl),
+          tanggal: tgl,
           jam_berangkat: j.jam_berangkat,
           rute_asal: j.rute_asal,
           rute_tujuan: j.rute_tujuan,
         }
-        const kunci = kunciKeberangkatan(infoSegmen)
+        const kunciAwal = kunciKeberangkatan(infoSegmen)
 
-        let urutan = cacheUrutan.get(kunci)
-        if (urutan === undefined) {
-          urutan = await ambilUrutanTitik(supabase, infoSegmen)
-          cacheUrutan.set(kunci, urutan)
+        let info = cacheInfo.get(kunciAwal)
+        if (!info) {
+          info = await ambilInfoPerjalanan(supabase, infoSegmen)
+          cacheInfo.set(kunciAwal, info)
         }
+        const kunci = info.kunci
+        const urutan = info.urutan
 
         let pakai = cachePakai.get(kunci)
         if (!pakai) {
-          pakai = await ambilPemakaianKursi(supabase, [kunci])
+          pakai = await ambilPemakaianKursi(supabase, [kunci, ...info.kunciLama])
           cachePakai.set(kunci, pakai)
         }
 
@@ -238,10 +265,19 @@ function CariTiketContent() {
 
         if (pakai.aktif) {
           // Kursi terpakai = yang intervalnya beririsan dengan rute ini saja.
+          // Kunci lama (per jam) dianggap mengunci seluruh perjalanan agar tiket
+          // lama tidak bisa oversold setelah pengelompokan trip lintas jam.
           const { dari, sampai } = intervalSegmen(infoSegmen, urutan)
-          terisi = pakai.data.filter((p: any) =>
-            intervalBentrok(Number(p.segmen_dari), Number(p.segmen_sampai), dari, sampai)
-          ).length
+          const terpakai = new Set<string>()
+          pakai.data.forEach((p) => {
+            const kunciBaru = String(p.keberangkatan_key || '') === kunci
+            const dariPakai = kunciBaru ? Number(p.segmen_dari) : SEGMEN_PENUH_DARI
+            const sampaiPakai = kunciBaru ? Number(p.segmen_sampai) : SEGMEN_PENUH_SAMPAI
+            if (intervalBentrok(dariPakai, sampaiPakai, dari, sampai)) {
+              terpakai.add(String(p.pesanan_id || `${p.nomor_kursi}|${p.keberangkatan_key}`))
+            }
+          })
+          terisi = terpakai.size
         } else {
           const { data: kursiData } = await supabase.from('kursi').select('status').eq('jadwal_id', j.id)
           total = kursiData?.length || 0

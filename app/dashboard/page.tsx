@@ -1,28 +1,48 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { Suspense, useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase, getProfile, getOperatorSession, ambilNamaPerusahaan, hapusSesiAuthLokal, type Profile } from '@/lib/supabase'
 import { idOperator, ambilOperatorKapal, cocokOperator } from '@/lib/tenant'
 import DashboardHeader from '@/components/DashboardHeader'
 
-type StatistikRute = {
-  rute: string
-  dewasa: number
-  balita: number
-  pendapatan: number
+/** Tanggal hari ini menurut WITA (UTC+8), bukan zona waktu browser. */
+function tanggalWITA(): string {
+  const now = new Date()
+  return new Date(now.getTime() + 8 * 60 * 60 * 1000).toISOString().slice(0, 10)
 }
 
-export default function DashboardAdminPage() {
+/** "2026-11-23" -> "Senin, 23 November 2026" tanpa bergeser karena timezone. */
+function labelTanggal(tanggal: string): string {
+  const cocok = /^(\d{4})-(\d{2})-(\d{2})$/.exec(tanggal)
+  if (!cocok) return tanggal
+  const tanggalUtc = new Date(Date.UTC(Number(cocok[1]), Number(cocok[2]) - 1, Number(cocok[3])))
+  return tanggalUtc.toLocaleDateString('id-ID', {
+    weekday: 'long', day: '2-digit', month: 'long', year: 'numeric', timeZone: 'UTC'
+  })
+}
+
+type PesananDashboard = {
+  id: string
+  is_balita: boolean | null
+  jadwal: {
+    harga: number | null
+    kapal_id: string | null
+    operator_id?: string | null
+  } | null
+}
+
+function DashboardAdminContent() {
   const router = useRouter()
+  const inputTanggalRef = useRef<HTMLInputElement | null>(null)
   const [profile, setProfile] = useState<Profile | null>(null)
   const [namaPerusahaan, setNamaPerusahaan] = useState('')
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
   const [reloadKey, setReloadKey] = useState(0)
   const [error, setError] = useState('')
-  const [statPerRute, setStatPerRute] = useState<StatistikRute[]>([])
-  const [tanggalHariIni, setTanggalHariIni] = useState('')
+  const [totalPenjualan, setTotalPenjualan] = useState(0)
+  const [tanggal, setTanggal] = useState(() => tanggalWITA())
 
   const [teks, setTeks] = useState({
     judul_dashboard: 'Dashboard',
@@ -40,8 +60,8 @@ export default function DashboardAdminPage() {
   })
 
   useEffect(() => {
-    const today = new Date()
-    setTanggalHariIni(today.toLocaleDateString('id-ID', { weekday: 'long', day: '2-digit', month: 'long', year: 'numeric' }))
+    let masihAktif = true
+    if (!tanggal) return
 
     async function loadData() {
       if (reloadKey > 0) setRefreshing(true)
@@ -51,8 +71,8 @@ export default function DashboardAdminPage() {
         .select('data_teks')
         .eq('role', 'admin_utama')
         .single()
-      
-      if (textData && textData.data_teks) {
+
+      if (textData && textData.data_teks && masihAktif) {
         setTeks(textData.data_teks)
       }
 
@@ -70,57 +90,47 @@ export default function DashboardAdminPage() {
         setLoading(false)
         return
       }
+      if (!masihAktif) return
       setProfile(p)
       setNamaPerusahaan(await ambilNamaPerusahaan(p))
 
-      // Gunakan WITA (UTC+8) untuk tanggal hari ini
-      const now = new Date()
-      const witaTime = new Date(now.getTime() + (8 * 60 * 60 * 1000))
-      const hariIni = witaTime.toISOString().split('T')[0]
-      
-      const { data: pesananHariIni } = await supabase
+      const { data: pesananTanggal } = await supabase
         .from('pesanan')
         .select(`
           id, is_balita,
-          jadwal:jadwal_id ( tanggal, harga, rute_asal, rute_tujuan, kapal_id, operator_id )
+          jadwal:jadwal_id!inner ( tanggal, harga, rute_asal, rute_tujuan, kapal_id, operator_id )
         `)
         .eq('status', 'paid')
-        .eq('jadwal.tanggal', hariIni)
+        .eq('jadwal.tanggal', tanggal)
 
+      if (!masihAktif) return
+
+      const daftarPesanan = (pesananTanggal || []) as unknown as PesananDashboard[]
       const operatorId = idOperator(p)
       // Data lama bisa punya operator_id NULL — pemiliknya ditentukan dari kapal.
       const petaOperatorKapal = await ambilOperatorKapal(
-        (pesananHariIni || []).map((item: any) => item.jadwal?.kapal_id)
+        daftarPesanan.map((item) => item.jadwal?.kapal_id)
       )
 
-      const ruteMap: Record<string, StatistikRute> = {}
+      let total = 0
+      daftarPesanan.forEach((item) => {
+        if (!item.jadwal) return
+        if (!cocokOperator(item.jadwal, operatorId, petaOperatorKapal)) return
+        // Balita tidak menambah pendapatan; hanya tiket dewasa yang dihitung.
+        if (!item.is_balita) total += Number(item.jadwal.harga || 0)
+      })
 
-      if (pesananHariIni) {
-        pesananHariIni.forEach((item: any) => {
-          if (!item.jadwal) return;
-          if (!cocokOperator(item.jadwal, operatorId, petaOperatorKapal)) return;
-
-          const namaRute = `${item.jadwal.rute_asal} - ${item.jadwal.rute_tujuan}`
-          
-          if (!ruteMap[namaRute]) {
-            ruteMap[namaRute] = { rute: namaRute, dewasa: 0, balita: 0, pendapatan: 0 }
-          }
-
-          if (item.is_balita) {
-            ruteMap[namaRute].balita += 1
-          } else {
-            ruteMap[namaRute].dewasa += 1
-            ruteMap[namaRute].pendapatan += (item.jadwal.harga || 0)
-          }
-        })
-      }
-
-      setStatPerRute(Object.values(ruteMap).sort((a, b) => b.pendapatan - a.pendapatan))
+      setTotalPenjualan(total)
       setRefreshing(false)
       setLoading(false)
     }
+
     loadData()
-  }, [router, reloadKey])
+
+    return () => {
+      masihAktif = false
+    }
+  }, [router, reloadKey, tanggal])
 
   async function handleLogout() {
     if (profile) {
@@ -136,18 +146,35 @@ export default function DashboardAdminPage() {
     return new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 }).format(angka)
   }
 
+  const geserTanggal = (selisihHari: number) => {
+    const cocok = /^(\d{4})-(\d{2})-(\d{2})$/.exec(tanggal)
+    const dasar = cocok
+      ? new Date(Date.UTC(Number(cocok[1]), Number(cocok[2]) - 1, Number(cocok[3])))
+      : new Date()
+    dasar.setUTCDate(dasar.getUTCDate() + selisihHari)
+    setTanggal(dasar.toISOString().slice(0, 10))
+  }
+
+  const bukaKalender = () => {
+    const input = inputTanggalRef.current
+    if (!input) return
+    const denganPicker = input as HTMLInputElement & { showPicker?: () => void }
+    if (typeof denganPicker.showPicker === 'function') {
+      denganPicker.showPicker()
+    } else {
+      input.focus()
+      input.click()
+    }
+  }
+
   if (loading) return <p className="p-6 text-gray-900 font-bold">Memuat dashboard...</p>
   if (error) return <p className="p-6 text-red-600">Error: {error}</p>
   if (!profile) return null
 
-  const totalDewasa = statPerRute.reduce((sum, item) => sum + item.dewasa, 0)
-  const totalBalita = statPerRute.reduce((sum, item) => sum + item.balita, 0)
-  const totalPendapatanKeseluruhan = statPerRute.reduce((sum, item) => sum + item.pendapatan, 0)
-
   return (
     <div className="min-h-[100dvh] w-full bg-gray-100 p-3 md:p-6 flex flex-col">
       <div className="max-w-4xl w-full mx-auto flex flex-col">
-        
+
         {/* HEADER (Format Seragam: Nama Perusahaan / Judul / Nama) */}
         <DashboardHeader
           namaPerusahaan={namaPerusahaan || profile.nama_perusahaan || profile.nama}
@@ -167,42 +194,74 @@ export default function DashboardAdminPage() {
           }
         />
 
-        {/* KARTU PENJUALAN PER RUTE */}
+        {/* KARTU PENJUALAN */}
         <div className="bg-white rounded-xl shadow-md p-4 md:p-6 mb-4 md:mb-6 flex-shrink-0 border border-gray-200">
-          <p className="text-xs md:text-sm text-gray-500 mb-3 font-bold">Penjualan {tanggalHariIni}</p>
-          
-          {statPerRute.length === 0 ? (
-            <p className="text-gray-400 text-sm italic text-center py-4">Belum ada penjualan hari ini.</p>
-          ) : (
-            <div className="space-y-3">
-              {statPerRute.map((rute, idx) => (
-                <div key={idx} className="flex flex-col md:flex-row md:justify-between md:items-center border-b border-gray-100 pb-2 last:border-0 last:pb-0 gap-1 md:gap-0">
-                  <p className="font-bold text-gray-700 text-sm md:text-base w-full md:w-1/2">{rute.rute}</p>
-                  <div className="flex justify-between md:justify-end md:gap-8 w-full md:w-1/2">
-                    <p className="text-blue-600 font-bold text-sm md:text-base">Dewasa {rute.dewasa}, Balita {rute.balita}</p>
-                    <p className="text-gray-900 font-bold text-sm md:text-lg">{formatRupiah(rute.pendapatan)}</p>
-                  </div>
-                </div>
-              ))}
-              
-              {/* GARIS PEMISAH TOTAL */}
-              <div className="pt-2 mt-2 border-t-2 border-gray-300 border-dashed">
-                <div className="flex flex-col md:flex-row md:justify-between md:items-center gap-1 md:gap-0">
-                  <p className="font-extrabold text-gray-900 text-base md:text-lg w-full md:w-1/2">TOTAL</p>
-                  <div className="flex justify-between md:justify-end md:gap-8 w-full md:w-1/2">
-                    <p className="text-blue-700 font-extrabold text-base md:text-lg">Dewasa {totalDewasa}, Balita {totalBalita}</p>
-                    <p className="text-blue-700 font-extrabold text-base md:text-xl">{formatRupiah(totalPendapatanKeseluruhan)}</p>
-                  </div>
-                </div>
+          <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
+            <p className="text-xs md:text-sm text-gray-500 font-bold">
+              Penjualan {labelTanggal(tanggal)}
+            </p>
+
+            <div className="flex items-center gap-1">
+              <button
+                type="button"
+                onClick={() => geserTanggal(-1)}
+                aria-label="Hari sebelumnya"
+                className="h-8 w-8 rounded border border-gray-300 bg-white text-gray-700 font-bold hover:bg-gray-50"
+              >
+                ‹
+              </button>
+
+              <div className="relative h-8 w-9">
+                <input
+                  ref={inputTanggalRef}
+                  type="date"
+                  value={tanggal}
+                  onChange={(e) => {
+                    if (e.target.value) setTanggal(e.target.value)
+                  }}
+                  aria-label="Pilih tanggal penjualan"
+                  className="pointer-events-none absolute inset-0 h-full w-full opacity-0"
+                />
+                <button
+                  type="button"
+                  onClick={bukaKalender}
+                  aria-label="Buka kalender"
+                  className="h-8 w-9 rounded border border-gray-300 bg-white text-gray-700 hover:bg-gray-50"
+                >
+                  📅
+                </button>
               </div>
+
+              <button
+                type="button"
+                onClick={() => geserTanggal(1)}
+                aria-label="Hari berikutnya"
+                className="h-8 w-8 rounded border border-gray-300 bg-white text-gray-700 font-bold hover:bg-gray-50"
+              >
+                ›
+              </button>
             </div>
-          )}
+          </div>
+
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+            <p className="text-2xl md:text-3xl font-extrabold text-gray-900">
+              {formatRupiah(totalPenjualan)}
+            </p>
+            <button
+              type="button"
+              onClick={() => router.push(`/laporan-gabungan?tanggal=${tanggal}`)}
+              className="self-start sm:self-auto text-sm font-bold text-blue-700 hover:text-blue-900 hover:underline"
+            >
+              (Rincian)
+            </button>
+          </div>
         </div>
+
 
         {/* MENU GRID */}
         <div className="bg-white p-3 md:p-6 rounded shadow flex flex-col">
           <div className="grid grid-cols-2 md:grid-cols-3 gap-2 md:gap-3 content-start">
-            
+
             <button onClick={() => router.push('/kapal')} className="flex items-center justify-center h-16 md:h-24 p-2 border border-teal-200 bg-teal-50 rounded-lg hover:bg-teal-100 text-center transition shadow-sm">
               <p className="font-bold text-xs md:text-sm text-teal-800">{teks.menu_kapal}</p>
             </button>
@@ -239,5 +298,13 @@ export default function DashboardAdminPage() {
         </div>
       </div>
     </div>
+  )
+}
+
+export default function DashboardAdminPage() {
+  return (
+    <Suspense fallback={<p className="p-6 text-gray-900 font-bold">Memuat dashboard...</p>}>
+      <DashboardAdminContent />
+    </Suspense>
   )
 }

@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, Suspense } from 'react'
+import { useEffect, useRef, useState, Suspense } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase, getProfile, getOperatorSession, type Profile } from '@/lib/supabase'
 import { idOperator } from '@/lib/tenant'
@@ -46,6 +46,7 @@ function TemplateJadwalContent() {
   
   const [showForm, setShowForm] = useState(false)
   const [editId, setEditId] = useState<string | null>(null)
+  const formEditRef = useRef<HTMLDivElement>(null)
   
   // Form state (Tambah/Edit)
   const [kapalId, setKapalId] = useState('')
@@ -79,6 +80,16 @@ function TemplateJadwalContent() {
     }
     init()
   }, [router])
+
+  // Saat Edit diklik, form dirender di bawah rute yang bersangkutan.
+  // Scroll otomatis supaya pengguna tidak perlu mencari form ke atas.
+  useEffect(() => {
+    if (!editId) return
+    const timer = window.setTimeout(() => {
+      formEditRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+    }, 50)
+    return () => window.clearTimeout(timer)
+  }, [editId])
 
   async function fetchData(p: Profile) {
     setLoading(true)
@@ -127,6 +138,11 @@ function TemplateJadwalContent() {
     setError('')
   }
 
+  const tutupForm = () => {
+    setShowForm(false)
+    resetForm()
+  }
+
   const handleEdit = (t: TemplateJadwal) => {
     setEditId(t.id)
     setKapalId(t.kapal_id)
@@ -136,7 +152,9 @@ function TemplateJadwalContent() {
     setHarga(t.harga.toString())
     setAktif(t.aktif)
     setHariOperasi(hariOperasiAktif(t.hari_operasi))
-    setShowForm(true)
+    setError('')
+    // Form edit tidak lagi muncul di atas; dirender inline di bawah rute terkait.
+    setShowForm(false)
   }
 
   const toggleHari = (h: NamaHari) => {
@@ -236,11 +254,10 @@ function TemplateJadwalContent() {
         if (errIns) throw errIns
       }
 
-      setShowForm(false)
-      resetForm()
+      tutupForm()
       fetchData(profile)
-    } catch (err: any) {
-      setError(err.message)
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Gagal menyimpan jadwal')
     } finally {
       setProses(false)
     }
@@ -267,7 +284,7 @@ function TemplateJadwalContent() {
       .eq('jam_berangkat', jam)
       .gte('tanggal', hariIni)
 
-    const ids = (jadwalTerkait || []).map((j: any) => j.id)
+    const ids = (jadwalTerkait || []).map((j) => String(j.id))
     if (ids.length === 0) return
 
     const { data: sudahDijual } = await supabase
@@ -275,8 +292,8 @@ function TemplateJadwalContent() {
       .select('jadwal_id')
       .in('jadwal_id', ids)
 
-    const terjual = new Set((sudahDijual || []).map((p: any) => p.jadwal_id))
-    const bolehDiubah = ids.filter((id: string) => !terjual.has(id))
+    const terjual = new Set((sudahDijual || []).map((p) => String(p.jadwal_id)))
+    const bolehDiubah = ids.filter((id) => !terjual.has(id))
     if (bolehDiubah.length === 0) return
 
     await supabase.from('jadwal').update({ harga: hargaBaru }).in('id', bolehDiubah)
@@ -314,34 +331,26 @@ function TemplateJadwalContent() {
     }, {} as Record<string, KelompokKapal>)
   ).sort((a, b) => a.nama.localeCompare(b.nama))
 
-  return (
-    <div className="min-h-screen bg-gray-50 p-4 md:p-6">
-      <div className="max-w-4xl mx-auto">
-        
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-3 mb-6">
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900">Manajemen Jadwal</h1>
-            <p className="text-sm text-gray-600">Atur template jadwal keberangkatan kapal</p>
-          </div>
-          <div className="flex gap-2 w-full md:w-auto">
-            <button
-              onClick={() => { resetForm(); setShowForm(!showForm) }}
-              className="flex-1 md:flex-none bg-blue-600 text-white px-4 py-2 rounded-lg font-medium hover:bg-blue-700 transition-colors shadow-sm"
-            >
-              {showForm ? 'Tutup Form' : '+ Tambah Jadwal'}
-            </button>
-            <button 
-              onClick={() => router.push('/dashboard')} 
-              className="text-sm bg-white border border-gray-300 text-gray-700 px-3 py-2 rounded-lg hover:bg-gray-100 transition-colors shadow-sm font-medium"
-            >
-              &larr; Kembali
-            </button>
-          </div>
-        </div>
 
-        {showForm && (
-          <div className="bg-white p-5 rounded-xl shadow-sm border border-gray-200 mb-6">
-            <h2 className="text-lg font-bold text-gray-900 mb-4">{editId ? 'Edit Jadwal' : 'Tambah Jadwal Baru'}</h2>
+  const renderFormJadwal = (inline: boolean) => (
+    <div
+      ref={inline ? formEditRef : undefined}
+      className={
+        inline
+          ? 'bg-blue-50/50 px-4 py-5 md:px-5 border-t-4 border-blue-500'
+          : 'bg-white p-5 rounded-xl shadow-sm border border-gray-200 mb-6'
+      }
+    >
+      <div className="mb-4">
+        <h2 className="text-lg font-bold text-gray-900">
+          {inline ? 'Edit Jadwal' : 'Tambah Jadwal Baru'}
+        </h2>
+        {inline && (
+          <p className="text-sm text-gray-600 mt-1">
+            Rute: <span className="font-semibold text-gray-800">{ruteAsal} &rarr; {ruteTujuan}</span>
+          </p>
+        )}
+      </div>
             <form onSubmit={handleSubmit} className="space-y-4">
               
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -450,14 +459,41 @@ function TemplateJadwalContent() {
               {error && <p className="text-red-500 text-sm">{error}</p>}
 
               <div className="flex justify-end gap-2">
-                <button type="button" onClick={() => setShowForm(false)} className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-md">Batal</button>
+                <button type="button" onClick={tutupForm} className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-md">Batal</button>
                 <button type="submit" disabled={proses} className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 disabled:opacity-50">
                   {proses ? 'Menyimpan...' : 'Simpan'}
                 </button>
               </div>
             </form>
+    </div>
+  )
+
+  return (
+    <div className="min-h-screen bg-gray-50 p-4 md:p-6">
+      <div className="max-w-4xl mx-auto">
+
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-3 mb-6">
+          <div>
+            <h1 className="text-2xl font-bold text-gray-900">Manajemen Jadwal</h1>
+            <p className="text-sm text-gray-600">Atur template jadwal keberangkatan kapal</p>
           </div>
-        )}
+          <div className="flex gap-2 w-full md:w-auto">
+            <button
+              onClick={() => { resetForm(); setShowForm(!showForm) }}
+              className="flex-1 md:flex-none bg-blue-600 text-white px-4 py-2 rounded-lg font-medium hover:bg-blue-700 transition-colors shadow-sm"
+            >
+              {showForm ? 'Tutup Form' : '+ Tambah Jadwal'}
+            </button>
+            <button
+              onClick={() => router.push('/dashboard')}
+              className="text-sm bg-white border border-gray-300 text-gray-700 px-3 py-2 rounded-lg hover:bg-gray-100 transition-colors shadow-sm font-medium"
+            >
+              &larr; Kembali
+            </button>
+          </div>
+        </div>
+
+        {showForm && !editId && renderFormJadwal(false)}
 
         <div className="space-y-6">
           {perKapal.length === 0 && !loading && (
@@ -474,7 +510,8 @@ function TemplateJadwalContent() {
               return jamA.localeCompare(jamB) || a[0].localeCompare(b[0])
             })
 
-            return (
+
+  return (
               <div key={kapal.nama} className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
                 {/* Header kapal */}
                 <div className="bg-blue-50 px-4 py-3 border-b border-blue-100 flex flex-wrap justify-between items-center gap-2">
@@ -555,6 +592,9 @@ function TemplateJadwalContent() {
                           </div>
                         ))}
                       </div>
+
+                      {/* Form edit muncul tepat di bawah rute yang sedang diedit */}
+                      {editId && list.some(t => t.id === editId) && renderFormJadwal(true)}
                     </div>
                   ))}
                 </div>
