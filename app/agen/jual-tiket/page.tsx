@@ -3,7 +3,7 @@
 import { useEffect, useState, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { supabase, getOperatorSession, type Profile } from '@/lib/supabase'
-import { beroperasiPada } from '@/lib/hari'
+import { kunciRuteJadwal, sinkronJadwalHarian } from '@/lib/jadwalHarian'
 import { nomorKursiTerpakai } from '@/lib/segmen'
 
 type JadwalTampil = {
@@ -85,93 +85,20 @@ function JualTiketAgenContent() {
   async function loadJadwal(tgl: string, lokasiAgen: string) {
     setIsRefreshing(true)
     
-    const { data: templates } = await supabase
-      .from('template_jadwal')
-      .select(`*, kapal:kapal_id(kapasitas)`)
-      .eq('aktif', true)
-      .eq('rute_asal', lokasiAgen)
+    const { jadwal, templateTanpaJadwal } = await sinkronJadwalHarian(supabase, {
+      tanggal: tgl,
+      ruteAsal: lokasiAgen,
+      operatorFallback: profile?.operator_id || null,
+    })
 
-    let { data: jadwalData } = await supabase
-      .from('jadwal')
-      .select('id, rute_asal, rute_tujuan, jam_berangkat, harga, kapal_id, status_jadwal')
-      .eq('tanggal', tgl)
-      .eq('status', 'aktif')
-      .eq('rute_asal', lokasiAgen)
-
-    // Hanya template yang beroperasi pada hari dari tanggal yang dipilih.
-    // Contoh: kapal jalan Senin/Rabu/Jumat → Sabtu tidak dibuatkan jadwal.
-    const templatesOperasi = (templates || []).filter((t: any) => beroperasiPada(tgl, t.hari_operasi))
-
-    if (templatesOperasi.length > 0) {
-      const newJadwalPayload: any[] = []
-      
-      for (const t of templatesOperasi) {
-        const existing = jadwalData?.find((j: any) => 
-          j.kapal_id === t.kapal_id && 
-          j.rute_asal === t.rute_asal && 
-          j.jam_berangkat === t.jam_berangkat
-        );
-        
-        if (!existing) {
-          // Harga WAJIB dari Manajemen Jadwal. Template tanpa harga tidak dibuatkan jadwal.
-          const hargaTemplate = Number(t.harga)
-          if (!(hargaTemplate > 0)) continue
-
-          newJadwalPayload.push({
-            kapal_id: t.kapal_id,
-            rute_asal: t.rute_asal,
-            rute_tujuan: t.rute_tujuan,
-            tanggal: tgl,
-            jam_berangkat: t.jam_berangkat,
-            harga: hargaTemplate,
-            status: 'aktif',
-            status_jadwal: 'open',
-            operator_id: t.operator_id || null,
-          });
-        }
-      }
-
-      if (newJadwalPayload.length > 0) {
-        const { data: insertedJadwal, error: insertError } = await supabase
-          .from('jadwal')
-          .insert(newJadwalPayload)
-          .select('id, rute_asal, rute_tujuan, jam_berangkat, harga, kapal_id, status_jadwal')
-
-        if (!insertError && insertedJadwal) {
-          jadwalData = [...(jadwalData || []), ...insertedJadwal]
-          
-          const kursiPayload: any[] = []
-          for (const j of insertedJadwal) {
-            const { data: existingKursi } = await supabase
-              .from('kursi')
-              .select('id')
-              .eq('jadwal_id', j.id)
-              .limit(1)
-
-            if (!existingKursi || existingKursi.length === 0) {
-              const t = templatesOperasi.find((x: any) => 
-                x.kapal_id === j.kapal_id && 
-                x.rute_asal === j.rute_asal && 
-                x.jam_berangkat === j.jam_berangkat
-              )
-              const kapasitas = t?.kapal?.kapasitas || 0
-              if (kapasitas > 0) {
-                for (let i = 1; i <= kapasitas; i++) {
-                  kursiPayload.push({
-                    jadwal_id: j.id,
-                    nomor_kursi: i.toString(),
-                    status: 'kosong'
-                  })
-                }
-              }
-            }
-          }
-          if (kursiPayload.length > 0) {
-            await supabase.from('kursi').insert(kursiPayload)
-          }
-        }
-      }
+    if (templateTanpaJadwal.length > 0) {
+      console.warn(
+        'Sebagian template belum punya jadwal:',
+        templateTanpaJadwal.map((t) => `${t.rute_asal} → ${t.rute_tujuan} ${t.jam_berangkat}`)
+      )
     }
+
+    const jadwalData = jadwal
 
     const { data: kapalData } = await supabase.from('kapal').select('id, nama, kapasitas')
     const kapalMap = new Map(kapalData?.map((k) => [k.id, k]) || [])
@@ -185,7 +112,9 @@ function JualTiketAgenContent() {
     const menitSekarangWITA = witaTime.getUTCMinutes()
 
     if (jadwalData) {
-      const uniqueJadwal = Array.from(new Map(jadwalData.map((j: any) => [`${j.kapal_id}-${j.rute_asal}-${j.jam_berangkat}`, j])).values())
+      const uniqueJadwal = Array.from(
+        new Map(jadwalData.map((j) => [kunciRuteJadwal(j), j])).values()
+      )
 
       for (const j of uniqueJadwal) {
         const kapal = kapalMap.get(j.kapal_id)
@@ -194,7 +123,7 @@ function JualTiketAgenContent() {
         // Kursi terpakai dihitung per potongan jalan (segmen), bukan seluruh kursi jadwal.
         const infoSegmen = {
           kapal_id: j.kapal_id,
-          tanggal: String((j as any).tanggal || tgl),
+          tanggal: String(j.tanggal || tgl),
           jam_berangkat: j.jam_berangkat,
           rute_asal: j.rute_asal,
           rute_tujuan: j.rute_tujuan,

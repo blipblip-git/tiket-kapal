@@ -6,6 +6,7 @@
 import { NextResponse } from 'next/server'
 import { buatClientAdmin, pesanServiceKeyKosong } from '@/lib/serverAuth'
 import { beroperasiPada } from '@/lib/hari'
+import { kunciRuteJadwal } from '@/lib/jadwalHarian'
 import { catatPermintaan, kenaBatas, kunciIp } from '@/lib/rateLimit'
 import { asalDiizinkan } from '@/lib/publikGuard'
 
@@ -84,8 +85,9 @@ export async function POST(request: Request) {
       const hargaTemplate = Number(t.harga)
       if (!(hargaTemplate > 0)) continue
 
+      // Satu kapal + jam bisa punya beberapa tujuan, jadi kunci harus lengkap.
       const sudahAda = jadwalData.find(
-        (j) => j.kapal_id === t.kapal_id && j.jam_berangkat === t.jam_berangkat
+        (j) => kunciRuteJadwal(j) === kunciRuteJadwal(t)
       )
       if (!sudahAda) {
         baru.push({
@@ -103,7 +105,10 @@ export async function POST(request: Request) {
     }
 
     if (baru.length > 0) {
-      const { error: errInsert } = await admin.from('jadwal').insert(baru)
+      const { error: errInsert } = await admin.from('jadwal').upsert(baru, {
+        onConflict: 'kapal_id,tanggal,jam_berangkat,rute_asal,rute_tujuan',
+        ignoreDuplicates: true
+      })
       if (errInsert) throw new Error('Gagal membuat jadwal: ' + errInsert.message)
 
       const { data: refreshed } = await qJadwal
@@ -117,7 +122,7 @@ export async function POST(request: Request) {
       if (adaKursi && adaKursi.length > 0) continue
 
       const t = (templatesOperasi as any[]).find(
-        (x) => x.kapal_id === j.kapal_id && x.jam_berangkat === j.jam_berangkat
+        (x) => kunciRuteJadwal(x) === kunciRuteJadwal(j)
       )
       let kapasitas = Number(t?.kapal?.kapasitas || 0)
       if (!kapasitas) {

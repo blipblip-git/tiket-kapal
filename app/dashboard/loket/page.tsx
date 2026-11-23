@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase, logoutOperator, catatAudit, getOperatorSession, type Profile } from '@/lib/supabase'
 import { beroperasiPada } from '@/lib/hari'
+import { kunciRuteJadwal } from '@/lib/jadwalHarian'
 import { idOperator } from '@/lib/tenant'
 import { lepasKunciKursi, nomorKursiTerpakai } from '@/lib/segmen'
 import { formatJam } from '@/lib/periode'
@@ -128,7 +129,11 @@ export default function DashboardLoketPage() {
     const hariIniLokal = getHariIniLokal()
     const isHariIni = tgl === hariIniLokal
 
-    const jadwalMap = new Map(jadwalData?.map((j) => [j.jam_berangkat.slice(0,5) + '-' + j.kapal_id, j]) || [])
+    // Kunci lengkap (kapal + asal + tujuan + jam) supaya dua tujuan dengan
+    // kapal & jam yang sama tidak saling menimpa.
+    const jadwalMap = new Map(
+      jadwalData?.map((j) => [kunciRuteJadwal(j), j]) || []
+    )
 
     if (templates) {
       for (const t of templates) {
@@ -141,7 +146,7 @@ export default function DashboardLoketPage() {
         const jamStr = String(t.jam_berangkat).slice(0, 5)
         if (!jamStr.includes(':')) continue
 
-        const key = jamStr + '-' + t.kapal_id
+        const key = kunciRuteJadwal(t)
         const existingJadwal = jadwalMap.get(key)
 
         const [jam, menit] = jamStr.split(':').map(Number)

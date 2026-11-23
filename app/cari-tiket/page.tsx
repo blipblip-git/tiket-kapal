@@ -3,7 +3,7 @@
 import { useEffect, useState, Suspense } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase, getProfile, getOperatorSession, type Profile } from '@/lib/supabase'
-import { beroperasiPada } from '@/lib/hari'
+import { kunciRuteJadwal, sinkronJadwalHarian } from '@/lib/jadwalHarian'
 import {
   ambilInfoPerjalanan,
   ambilPemakaianKursi,
@@ -25,17 +25,6 @@ type JadwalTampil = {
   kursi_kosong: number
   total_kursi: number
   status_waktu: 'lewat' | 'sekarang'
-}
-
-type TemplateJadwalCari = {
-  kapal_id: string
-  rute_asal: string
-  rute_tujuan: string
-  jam_berangkat: string
-  harga: number | null
-  hari_operasi?: string[] | null
-  operator_id?: string | null
-  kapal?: { kapasitas?: number | null } | null
 }
 
 type PemakaianCache = {
@@ -125,91 +114,27 @@ function CariTiketContent() {
       if (kapalSaya) filterKapalIds = kapalSaya.map(k => k.id)
     }
 
-    let query = supabase
-      .from('jadwal')
-      .select('id, rute_asal, rute_tujuan, jam_berangkat, harga, kapal_id, status_jadwal')
-      .eq('tanggal', tgl)
-      .eq('status', 'aktif')
-      .eq('rute_asal', lokasi)
+    const { jadwal, templateTanpaJadwal } = await sinkronJadwalHarian(supabase, {
+      tanggal: tgl,
+      ruteAsal: lokasi,
+      kapalIds: filterKapalIds,
+      operatorFallback: profile?.operator_id || (profile?.role === 'admin_utama' ? profile.id : null),
+    })
 
-    if (filterKapalIds.length > 0) {
-      query = query.in('kapal_id', filterKapalIds)
+    if (templateTanpaJadwal.length > 0) {
+      // Biasanya terjadi kalau template belum punya harga, atau penulisan jadwal
+      // ditolak database. Rute lain tetap ditampilkan.
+      console.warn(
+        'Sebagian template belum punya jadwal:',
+        templateTanpaJadwal.map((t) => `${t.rute_asal} → ${t.rute_tujuan} ${t.jam_berangkat}`)
+      )
     }
 
-    let { data: jadwalData } = await query
-
-    if (!jadwalData || jadwalData.length === 0) {
-      let templateQuery = supabase
-        .from('template_jadwal')
-        .select(`*, kapal:kapal_id(kapasitas)`)
-        .eq('rute_asal', lokasi)
-        .eq('aktif', true)
-
-      if (filterKapalIds.length > 0) {
-        templateQuery = templateQuery.in('kapal_id', filterKapalIds)
-      }
-
-      const { data: templates } = await templateQuery
-
-      // Hanya template yang beroperasi pada hari dari tanggal yang dipilih.
-      const templatesOperasi = ((templates || []) as unknown as TemplateJadwalCari[])
-        .filter((t) => beroperasiPada(tgl, t.hari_operasi))
-
-      // Harga WAJIB ikut Manajemen Jadwal (template_jadwal). Tidak ada harga cadangan:
-      // template tanpa harga dilewati supaya tiket tidak pernah terjual dengan harga karangan.
-      const templatesSiap = templatesOperasi.filter((t) => Number(t.harga) > 0)
-
-      if (templatesOperasi.length > 0 && templatesSiap.length === 0) {
-        console.warn('Harga jadwal belum diisi di Manajemen Jadwal untuk rute ini.')
-      }
-
-      if (templatesSiap.length > 0) {
-        const newJadwalPayload = templatesSiap.map((t) => ({
-          kapal_id: t.kapal_id,
-          rute_asal: t.rute_asal,
-          rute_tujuan: t.rute_tujuan,
-          tanggal: tgl,
-          jam_berangkat: t.jam_berangkat,
-          harga: Number(t.harga),
-          status: 'aktif',
-          status_jadwal: 'open',
-          operator_id: t.operator_id || null,
-        }))
-
-        const { data: insertedJadwal, error: insertError } = await supabase
-          .from('jadwal')
-          .insert(newJadwalPayload)
-          .select('id, rute_asal, rute_tujuan, jam_berangkat, harga, kapal_id, status_jadwal')
-
-        if (!insertError && insertedJadwal) {
-          jadwalData = insertedJadwal
-          
-          const kursiPayload: { jadwal_id: string; nomor_kursi: string; status: string }[] = []
-          for (const j of insertedJadwal) {
-            const t = templatesSiap.find((x) =>
-              x.kapal_id === j.kapal_id &&
-              x.rute_asal === j.rute_asal &&
-              x.rute_tujuan === j.rute_tujuan &&
-              x.jam_berangkat === j.jam_berangkat
-            )
-            const kapasitas = t?.kapal?.kapasitas || 0
-            if (kapasitas > 0) {
-              for (let i = 1; i <= kapasitas; i++) {
-                kursiPayload.push({
-                  jadwal_id: j.id,
-                  nomor_kursi: i.toString(),
-                  status: 'kosong'
-                })
-              }
-            }
-          }
-
-          if (kursiPayload.length > 0) {
-            await supabase.from('kursi').insert(kursiPayload)
-          }
-        }
-      }
-    }
+    // Satu kapal + jam bisa punya beberapa tujuan. Deduplikasi wajib memakai
+    // kunci rute lengkap supaya tidak ada tujuan yang saling menimpa.
+    const jadwalData = Array.from(
+      new Map(jadwal.map((j) => [kunciRuteJadwal(j), j])).values()
+    )
 
     const { data: kapalData } = await supabase.from('kapal').select('id, nama, kapasitas, status')
     const kapalMap = new Map(kapalData?.map((k) => [k.id, k]) || [])
