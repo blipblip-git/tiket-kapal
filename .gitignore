@@ -41,5 +41,10 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# hasil backup database (berisi NIK/HP/hash password — JANGAN pernah di-commit)
+/backups/
+*.dump
+
 # Jangan commit file ini ke GitHub
 PROJECT-NOTES.md

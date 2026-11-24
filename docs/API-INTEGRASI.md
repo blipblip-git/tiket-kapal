@@ -60,7 +60,7 @@ Kalau nama tenant tidak ketemu, fungsi berhenti dengan `operator_id wajib diisi.
 Query opsional: `tanggal=YYYY-MM-DD`, `limit` (default 100, maks 200).
 
 ```bash
-curl -s "https://tiket-kapal.vercel.app/api/integrasi/jadwal?tanggal=2026-11-22" \
+curl -s "https://www.lintasair.com/api/integrasi/jadwal?tanggal=2026-11-22" \
   -H "x-api-key: la_live_xxx"
 ```
 
@@ -88,7 +88,7 @@ curl -s "https://tiket-kapal.vercel.app/api/integrasi/jadwal?tanggal=2026-11-22"
 ## GET /api/integrasi/kursi?jadwal_id=uuid
 
 ```bash
-curl -s "https://tiket-kapal.vercel.app/api/integrasi/kursi?jadwal_id=uuid-jadwal" \
+curl -s "https://www.lintasair.com/api/integrasi/kursi?jadwal_id=uuid-jadwal" \
   -H "x-api-key: la_live_xxx"
 ```
 
@@ -128,7 +128,7 @@ Body:
 - `sudah_dibayar: false` → `pending` + `waktu_expired` 15 menit, konfirmasi lewat `/bayar`.
 
 ```bash
-curl -s -X POST https://tiket-kapal.vercel.app/api/integrasi/pesan \
+curl -s -X POST https://www.lintasair.com/api/integrasi/pesan \
   -H "x-api-key: la_live_xxx" -H "Content-Type: application/json" \
   -d '{"jadwal_id":"uuid-jadwal","kursi_ids":["uuid-kursi-1"],"penumpang":[{"nama":"Budi Santoso","nik":"1234567890123456","balita":[]}],"nomor_hp":"081234567890","sudah_dibayar":true}'
 ```
@@ -154,7 +154,7 @@ Konfirmasi pelunasan untuk pesanan yang dibuat dengan `sudah_dibayar:false`.
 Semua `ids` harus dari **satu jadwal** milik tenant itu.
 
 ```bash
-curl -s -X POST https://tiket-kapal.vercel.app/api/integrasi/bayar \
+curl -s -X POST https://www.lintasair.com/api/integrasi/bayar \
   -H "x-api-key: la_live_xxx" -H "Content-Type: application/json" \
   -d '{"ids":["uuid-pesanan-1","uuid-pesanan-2"]}'
 ```
