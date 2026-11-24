@@ -8,7 +8,7 @@
 // selain ikon dibiarkan lewat ke jaringan apa adanya, jadi tidak ada risiko
 // penumpang melihat jadwal/harga lama gara-gara cache.
 
-const CACHE = 'lintasair-v1'
+const CACHE = 'lintasair-v2'
 
 const ASET_IKON = [
   '/images/icon-192.png',
