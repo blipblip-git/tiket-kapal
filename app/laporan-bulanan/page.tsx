@@ -21,6 +21,22 @@ type BarisBulanan = {
   tiket: number
 }
 
+/**
+ * Potong data menjadi beberapa halaman cetak.
+ * Pemotongan manual dipakai supaya tidak ada baris yang terbelah di batas
+ * halaman (aturan page-break CSS sering diabaikan saat cetak PDF).
+ */
+function bagiHalaman<T>(daftar: T[], perHalaman: number): T[][] {
+  if (daftar.length === 0) return [[]]
+  const hasil: T[][] = []
+  for (let i = 0; i < daftar.length; i += perHalaman) {
+    hasil.push(daftar.slice(i, i + perHalaman))
+  }
+  return hasil
+}
+
+const BARIS_CETAK_PER_HALAMAN = 22
+
 function LaporanBulananContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -157,6 +173,10 @@ function LaporanBulananContent() {
   const totalTiket = baris.reduce((sum, b) => sum + b.tiket, 0)
   const daftarTahun = [tahunAktif - 2, tahunAktif - 1, tahunAktif, tahunAktif + 1]
 
+  // Satu lembar cetak = satu halaman; nomor halaman ditulis manual di bawah.
+  const halamanCetak = bagiHalaman(baris, BARIS_CETAK_PER_HALAMAN)
+  const tanggalCetak = tanggalCetakSekarang()
+
   return (
     <div className="print-container h-[100dvh] w-full bg-gray-100 p-3 md:p-6 print:p-0 print:bg-white flex flex-col overflow-hidden">
       <style dangerouslySetInnerHTML={{__html: `
@@ -166,8 +186,12 @@ function LaporanBulananContent() {
           .print-hidden { display: none !important; }
           html, body { height: auto !important; overflow: visible !important; }
           .print-container { height: auto !important; overflow: visible !important; display: block !important; padding: 0 !important; background: #fff !important; }
-          tr { page-break-inside: avoid; }
-          table { page-break-inside: auto; }
+          .lembar { position: relative; page-break-after: always; break-after: page; box-sizing: border-box; }
+          .lembar:last-child { page-break-after: auto; break-after: auto; }
+          .lembar-bulanan { min-height: 267mm; }
+          .nomor-halaman { position: absolute; bottom: 0; left: 0; right: 0; text-align: center; font-size: 11px; font-weight: bold; color: #000; }
+          thead { display: table-header-group; }
+          tr, td, th { page-break-inside: avoid; break-inside: avoid; }
         }
       `}} />
 
@@ -240,39 +264,48 @@ function LaporanBulananContent() {
         </div>
 
         <div className="hidden print:block">
-          <h1 className="text-xl font-bold text-center mb-6">LAPORAN REKAPAN BULANAN</h1>
-          <div className="mb-4 text-sm grid grid-cols-[110px_10px_1fr] gap-y-1">
-            <span>Rute</span><span>:</span><span>{ruteLengkap}</span>
-            <span>Periode</span><span>:</span><span>{labelBulan(bulanAktif)}</span>
-            <span>Petugas</span><span>:</span><span>{profile.nama || profile.email}</span>
-            <span>Dicetak</span><span>:</span><span>{tanggalCetakSekarang()}</span>
-          </div>
-          <table className="w-full text-sm border-collapse border border-gray-400">
-            <thead>
-              <tr className="bg-gray-200 text-center text-gray-900">
-                <th className="border border-gray-400 px-2 py-1" rowSpan={2}>Tanggal</th>
-                <th className="border border-gray-400 px-2 py-1" colSpan={2}>Total Penjualan</th>
-              </tr>
-              <tr className="bg-gray-200 text-center text-gray-900">
-                <th className="border border-gray-400 px-2 py-1">Kursi</th>
-                <th className="border border-gray-400 px-2 py-1">Tiket</th>
-              </tr>
-            </thead>
-            <tbody>
-              {baris.map((b) => (
-                <tr key={b.tanggal} className="text-center text-gray-900">
-                  <td className="border border-gray-400 px-2 py-1">{formatTanggalPendek(b.tanggal)}</td>
-                  <td className="border border-gray-400 px-2 py-1">{b.kursi}</td>
-                  <td className="border border-gray-400 px-2 py-1 text-right">{formatRupiah(b.tiket)}</td>
-                </tr>
-              ))}
-              <tr className="font-bold bg-gray-300 text-center text-gray-900">
-                <td className="border border-gray-400 px-2 py-1">TOTAL</td>
-                <td className="border border-gray-400 px-2 py-1">{totalKursi}</td>
-                <td className="border border-gray-400 px-2 py-1 text-right">{formatRupiah(totalTiket)}</td>
-              </tr>
-            </tbody>
-          </table>
+          {halamanCetak.map((daftarCetak, idxHalaman) => {
+            const halamanTerakhir = idxHalaman === halamanCetak.length - 1
+            return (
+              <section key={`bulanan-${idxHalaman}`} className="lembar lembar-bulanan">
+                <h1 className="text-xl font-bold text-center mb-6">LAPORAN REKAPAN BULANAN</h1>
+                <div className="mb-4 text-sm grid grid-cols-[110px_10px_1fr] gap-y-1 text-gray-900">
+                  <span>Rute</span><span>:</span><span>{ruteLengkap}</span>
+                  <span>Periode</span><span>:</span><span>{labelBulan(bulanAktif)}</span>
+                  <span>Dicetak</span><span>:</span><span>{tanggalCetak}</span>
+                </div>
+                <table className="w-full text-sm border-collapse border border-gray-400">
+                  <thead>
+                    <tr className="bg-gray-200 text-center text-gray-900">
+                      <th className="border border-gray-400 px-2 py-1" rowSpan={2}>Tanggal</th>
+                      <th className="border border-gray-400 px-2 py-1" colSpan={2}>Total Penjualan</th>
+                    </tr>
+                    <tr className="bg-gray-200 text-center text-gray-900">
+                      <th className="border border-gray-400 px-2 py-1">Kursi</th>
+                      <th className="border border-gray-400 px-2 py-1">Tiket</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {daftarCetak.map((b) => (
+                      <tr key={b.tanggal} className="text-center text-gray-900">
+                        <td className="border border-gray-400 px-2 py-1">{formatTanggalPendek(b.tanggal)}</td>
+                        <td className="border border-gray-400 px-2 py-1">{b.kursi}</td>
+                        <td className="border border-gray-400 px-2 py-1 text-right">{formatRupiah(b.tiket)}</td>
+                      </tr>
+                    ))}
+                    {halamanTerakhir && (
+                      <tr className="font-bold bg-gray-300 text-center text-gray-900">
+                        <td className="border border-gray-400 px-2 py-1">TOTAL</td>
+                        <td className="border border-gray-400 px-2 py-1">{totalKursi}</td>
+                        <td className="border border-gray-400 px-2 py-1 text-right">{formatRupiah(totalTiket)}</td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+                <div className="nomor-halaman">Halaman {idxHalaman + 1} dari {halamanCetak.length}</div>
+              </section>
+            )
+          })}
         </div>
 
       </div>

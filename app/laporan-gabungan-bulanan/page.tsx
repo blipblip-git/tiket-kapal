@@ -34,6 +34,23 @@ function selKosong(): SelLokasi {
   return { kursi: 0, tiket: 0 }
 }
 
+/**
+ * Potong data menjadi beberapa halaman cetak.
+ * Pemotongan manual dipakai supaya tidak ada baris yang terbelah di batas
+ * halaman (aturan page-break CSS sering diabaikan saat cetak PDF).
+ */
+function bagiHalaman<T>(daftar: T[], perHalaman: number): T[][] {
+  if (daftar.length === 0) return [[]]
+  const hasil: T[][] = []
+  for (let i = 0; i < daftar.length; i += perHalaman) {
+    hasil.push(daftar.slice(i, i + perHalaman))
+  }
+  return hasil
+}
+
+// Maksimal baris tanggal per lembar A4 landscape + satu baris TOTAL.
+const BARIS_CETAK_PER_HALAMAN = 23
+
 function LaporanGabunganBulananContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -80,7 +97,7 @@ function LaporanGabunganBulananContent() {
       // KUNCI MULTI-TENANT: operator hanya melihat data miliknya sendiri
       const operatorId = idOperator(profile)
 
-      let queryJadwal = supabase
+      const queryJadwal = supabase
         .from('jadwal')
         .select('rute_asal, kapal_id, operator_id')
         .gte('tanggal', awal)
@@ -182,6 +199,10 @@ function LaporanGabunganBulananContent() {
   const grandTotal = lokasiList.reduce((sum, lokasi) => sum + totalPerLokasi[lokasi].tiket, 0)
   const daftarTahun = [tahunAktif - 2, tahunAktif - 1, tahunAktif, tahunAktif + 1]
 
+  // Satu lembar cetak = satu halaman; nomor halaman ditulis manual di bawah.
+  const halamanCetak = bagiHalaman(baris, BARIS_CETAK_PER_HALAMAN)
+  const tanggalCetak = tanggalCetakSekarang()
+
   return (
     <div className="print-container h-[100dvh] w-full bg-gray-100 p-3 md:p-6 print:p-0 print:bg-white flex flex-col overflow-hidden">
       <style dangerouslySetInnerHTML={{__html: `
@@ -191,9 +212,14 @@ function LaporanGabunganBulananContent() {
           .print-hidden { display: none !important; }
           html, body { height: auto !important; overflow: visible !important; }
           .print-container { height: auto !important; overflow: visible !important; display: block !important; padding: 0 !important; background: #fff !important; }
-          tr { page-break-inside: avoid; }
-          table { page-break-inside: auto; font-size: 10px; }
-          th, td { padding: 2px 4px !important; }
+          .lembar { position: relative; page-break-after: always; break-after: page; box-sizing: border-box; }
+          .lembar:last-child { page-break-after: auto; break-after: auto; }
+          .lembar-bulanan { min-height: 185mm; }
+          .nomor-halaman { position: absolute; bottom: 0; left: 0; right: 0; text-align: center; font-size: 11px; font-weight: bold; color: #000; }
+          thead { display: table-header-group; }
+          tr, td, th { page-break-inside: avoid; break-inside: avoid; }
+          table { border-collapse: collapse; font-size: 9px; }
+          .tabel-bulanan th, .tabel-bulanan td { padding: 1px 3px !important; }
         }
       `}} />
 
@@ -286,58 +312,67 @@ function LaporanGabunganBulananContent() {
         </div>
 
         <div className="hidden print:block">
-          <h1 className="text-xl font-bold text-center mb-4">LAPORAN GABUNGAN BULANAN</h1>
-          <div className="mb-3 text-sm grid grid-cols-[90px_10px_1fr] gap-y-1">
-            <span>Periode</span><span>:</span><span>{labelBulan(bulanAktif)}</span>
-            <span>Petugas</span><span>:</span><span>{profile.nama || profile.email}</span>
-            <span>Dicetak</span><span>:</span><span>{tanggalCetakSekarang()}</span>
-          </div>
-          <table className="w-full border-collapse border border-gray-400">
-            <thead>
-              <tr className="bg-gray-200 text-center text-gray-900">
-                <th className="border border-gray-400 px-1 py-1" rowSpan={2}>Tanggal</th>
-                {lokasiList.map((lokasi) => (
-                  <th key={lokasi} colSpan={2} className="border border-gray-400 px-1 py-1">{lokasi}</th>
-                ))}
-                <th className="border border-gray-400 px-1 py-1" rowSpan={2}>Total</th>
-              </tr>
-              <tr className="bg-gray-200 text-center text-gray-900">
-                {lokasiList.map((lokasi) => (
-                  <Fragment key={lokasi}>
-                    <th className="border border-gray-400 px-1 py-1">Kursi</th>
-                    <th className="border border-gray-400 px-1 py-1">Tiket</th>
-                  </Fragment>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {baris.map((b) => (
-                <tr key={b.tanggal} className="text-center text-gray-900">
-                  <td className="border border-gray-400 px-1 py-0.5 whitespace-nowrap">{formatTanggalPendek(b.tanggal)}</td>
-                  {lokasiList.map((lokasi) => {
-                    const sel = b.perLokasi[lokasi] || selKosong()
-                    return (
-                      <Fragment key={lokasi}>
-                        <td className="border border-gray-400 px-1 py-0.5">{sel.kursi}</td>
-                        <td className="border border-gray-400 px-1 py-0.5 text-right whitespace-nowrap">{formatRupiah(sel.tiket)}</td>
-                      </Fragment>
-                    )
-                  })}
-                  <td className="border border-gray-400 px-1 py-0.5 text-right font-bold whitespace-nowrap">{formatRupiah(totalBaris(b))}</td>
-                </tr>
-              ))}
-              <tr className="font-bold bg-gray-300 text-center text-gray-900">
-                <td className="border border-gray-400 px-1 py-1">TOTAL</td>
-                {lokasiList.map((lokasi) => (
-                  <Fragment key={lokasi}>
-                    <td className="border border-gray-400 px-1 py-1">{totalPerLokasi[lokasi].kursi}</td>
-                    <td className="border border-gray-400 px-1 py-1 text-right whitespace-nowrap">{formatRupiah(totalPerLokasi[lokasi].tiket)}</td>
-                  </Fragment>
-                ))}
-                <td className="border border-gray-400 px-1 py-1 text-right whitespace-nowrap">{formatRupiah(grandTotal)}</td>
-              </tr>
-            </tbody>
-          </table>
+          {halamanCetak.map((daftarCetak, idxHalaman) => {
+            const halamanTerakhir = idxHalaman === halamanCetak.length - 1
+            return (
+              <section key={`bulanan-${idxHalaman}`} className="lembar lembar-bulanan">
+                <h1 className="text-xl font-bold text-center mb-4">LAPORAN GABUNGAN BULANAN</h1>
+                <div className="mb-3 text-sm grid grid-cols-[90px_10px_1fr] gap-y-1 text-gray-900">
+                  <span>Periode</span><span>:</span><span>{labelBulan(bulanAktif)}</span>
+                  <span>Dicetak</span><span>:</span><span>{tanggalCetak}</span>
+                </div>
+                <table className="tabel-bulanan w-full border-collapse border border-gray-400">
+                  <thead>
+                    <tr className="bg-gray-200 text-center text-gray-900">
+                      <th className="border border-gray-400 px-1 py-1" rowSpan={2}>Tanggal</th>
+                      {lokasiList.map((lokasi) => (
+                        <th key={lokasi} colSpan={2} className="border border-gray-400 px-1 py-1">{lokasi}</th>
+                      ))}
+                      <th className="border border-gray-400 px-1 py-1" rowSpan={2}>Total</th>
+                    </tr>
+                    <tr className="bg-gray-200 text-center text-gray-900">
+                      {lokasiList.map((lokasi) => (
+                        <Fragment key={lokasi}>
+                          <th className="border border-gray-400 px-1 py-1">Kursi</th>
+                          <th className="border border-gray-400 px-1 py-1">Tiket</th>
+                        </Fragment>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {daftarCetak.map((b) => (
+                      <tr key={b.tanggal} className="text-center text-gray-900">
+                        <td className="border border-gray-400 px-1 py-0.5 whitespace-nowrap">{formatTanggalPendek(b.tanggal)}</td>
+                        {lokasiList.map((lokasi) => {
+                          const sel = b.perLokasi[lokasi] || selKosong()
+                          return (
+                            <Fragment key={lokasi}>
+                              <td className="border border-gray-400 px-1 py-0.5">{sel.kursi}</td>
+                              <td className="border border-gray-400 px-1 py-0.5 text-right whitespace-nowrap">{formatRupiah(sel.tiket)}</td>
+                            </Fragment>
+                          )
+                        })}
+                        <td className="border border-gray-400 px-1 py-0.5 text-right font-bold whitespace-nowrap">{formatRupiah(totalBaris(b))}</td>
+                      </tr>
+                    ))}
+                    {halamanTerakhir && (
+                      <tr className="font-bold bg-gray-300 text-center text-gray-900">
+                        <td className="border border-gray-400 px-1 py-1">TOTAL</td>
+                        {lokasiList.map((lokasi) => (
+                          <Fragment key={lokasi}>
+                            <td className="border border-gray-400 px-1 py-1">{totalPerLokasi[lokasi].kursi}</td>
+                            <td className="border border-gray-400 px-1 py-1 text-right whitespace-nowrap">{formatRupiah(totalPerLokasi[lokasi].tiket)}</td>
+                          </Fragment>
+                        ))}
+                        <td className="border border-gray-400 px-1 py-1 text-right whitespace-nowrap">{formatRupiah(grandTotal)}</td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+                <div className="nomor-halaman">Halaman {idxHalaman + 1} dari {halamanCetak.length}</div>
+              </section>
+            )
+          })}
         </div>
 
       </div>

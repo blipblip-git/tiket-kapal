@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef, Suspense } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
+import { KOORDINAT_KOTA, RADIUS_DETEKSI_KM, jarakKm } from '@/lib/geo'
 
 // Cadangan kalau tabel master_kota belum bisa dibaca.
 type KotaRute = { nama_kota: string; singkatan: string }
@@ -22,35 +23,8 @@ const DAFTAR_KOTA_CADANGAN: KotaRute[] = [
   { nama_kota: 'Tarakan', singkatan: 'TRK' }
 ]
 
-// Koordinat pusat kota (perkiraan) untuk deteksi otomatis kolom "Dari".
-// Kota yang tidak ada di sini hanya tidak ikut terdeteksi (tetap bisa dipilih manual).
-const KOORDINAT_KOTA: Record<string, { lat: number; lng: number }> = {
-  'Berau': { lat: 2.1531, lng: 117.4957 },
-  'Bunyu': { lat: 3.5200, lng: 117.8069 },
-  'Kabupaten Tanah Tidung': { lat: 3.5855, lng: 116.9078 },
-  'Malinau': { lat: 3.5892, lng: 116.6222 },
-  'Nunukan': { lat: 4.1404, lng: 117.6511 },
-  'Sebatik': { lat: 4.1333, lng: 117.7667 },
-  'Sembakung': { lat: 3.8569, lng: 117.0318 },
-  'Sungai Nyamuk': { lat: 4.1426, lng: 117.9117 },
-  'Tanah Kuning': { lat: 2.6027, lng: 117.8172 },
-  'Tanjung Batu': { lat: 2.2762, lng: 118.0876 },
-  'Tanjung Selor': { lat: 2.8430, lng: 117.3613 },
-  'Tarakan': { lat: 3.3000, lng: 117.6330 }
-}
-
-// Kalau lokasi pembeli lebih jauh dari radius ini dari semua kota, kolom "Dari" dibiarkan kosong.
-const RADIUS_DETEKSI_KM = 25
-
-function jarakKm(lat1: number, lng1: number, lat2: number, lng2: number) {
-  const R = 6371
-  const dLat = ((lat2 - lat1) * Math.PI) / 180
-  const dLng = ((lng2 - lng1) * Math.PI) / 180
-  const a =
-    Math.sin(dLat / 2) ** 2 +
-    Math.cos((lat1 * Math.PI) / 180) * Math.cos((lat2 * Math.PI) / 180) * Math.sin(dLng / 2) ** 2
-  return 2 * R * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
-}
+// Koordinat kota & deteksi lokasi otomatis dipusatkan di lib/geo.ts
+// (dipakai juga oleh portal Syahbandar).
 
 function BerandaContent() {
   const router = useRouter()

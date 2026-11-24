@@ -7,6 +7,7 @@ import { idOperator, cocokOperator } from '@/lib/tenant'
 import { muatRutePemilik, ujungRute, type RuteKapal } from '@/lib/rute'
 import { urutkanLokasi } from '@/lib/lokasi'
 import { kodeDaerah } from '@/lib/fee'
+import { tanggalCetakSekarang } from '@/lib/periode'
 
 type SelDaerah = {
   dewasa: number
@@ -72,6 +73,24 @@ function formatRupiah(nilai: number): string {
   return `Rp ${nilai.toLocaleString('id-ID')}`
 }
 
+/**
+ * Potong data menjadi beberapa halaman cetak.
+ * Pemotongan manual dipakai supaya tidak ada baris yang terbelah di batas
+ * halaman (aturan page-break CSS sering diabaikan saat cetak PDF).
+ */
+function bagiHalaman<T>(daftar: T[], perHalaman: number): T[][] {
+  if (daftar.length === 0) return [[]]
+  const hasil: T[][] = []
+  for (let i = 0; i < daftar.length; i += perHalaman) {
+    hasil.push(daftar.slice(i, i + perHalaman))
+  }
+  return hasil
+}
+
+// Jumlah baris per lembar cetak (A4): ringkasan portrait, rincian landscape.
+const BARIS_RINGKASAN_PER_HALAMAN = 30
+const BARIS_RINCIAN_PER_HALAMAN = 18
+
 function LaporanGabunganContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -87,6 +106,9 @@ function LaporanGabunganContent() {
   // Cetak ringkasan dan rincian dipisah supaya PDF ringkasan tidak ikut
   // membawa tabel rincian yang lebar, dan rincian bisa dicetak landscape.
   const [printMode, setPrintMode] = useState<'ringkasan' | 'rincian'>('ringkasan')
+  // printTick memicu window.print() SETELAH mode cetak benar-benar ter-render,
+  // supaya orientasi kertas dan isi lembar tidak tertinggal satu langkah.
+  const [printTick, setPrintTick] = useState(0)
 
   useEffect(() => {
     async function init() {
@@ -241,9 +263,15 @@ function LaporanGabunganContent() {
     }
   }, [profile, tanggal, ruteList])
 
+  useEffect(() => {
+    if (printTick === 0) return
+    const timer = window.setTimeout(() => window.print(), 200)
+    return () => window.clearTimeout(timer)
+  }, [printTick])
+
   const handlePrint = (mode: 'ringkasan' | 'rincian') => {
     setPrintMode(mode)
-    setTimeout(() => window.print(), 100)
+    setPrintTick((n) => n + 1)
   }
 
   if (loading) return <p className="p-6 text-center text-gray-600 mt-10">Memuat...</p>
@@ -263,18 +291,47 @@ function LaporanGabunganContent() {
   const totalDewasa = daerahList.reduce((sum, daerah) => sum + (ringkasan[daerah]?.dewasa || 0), 0)
   const totalBalita = daerahList.reduce((sum, daerah) => sum + (ringkasan[daerah]?.balita || 0), 0)
 
+  // Satu lembar cetak = satu halaman; nomor halaman ditulis manual di bawah.
+  const halamanRingkasan = bagiHalaman(daerahList, BARIS_RINGKASAN_PER_HALAMAN)
+  const halamanRincian = bagiHalaman(keberangkatan, BARIS_RINCIAN_PER_HALAMAN)
+  const tanggalCetak = tanggalCetakSekarang()
+
   return (
     <div className="min-h-[100dvh] w-full bg-gray-100 p-3 md:p-6 print:p-0 print:bg-white">
       <style dangerouslySetInnerHTML={{__html: `
         @media print {
-          @page { size: A4 ${printMode === 'ringkasan' ? 'portrait' : 'landscape'}; margin: 10mm; }
+          /* Ringkasan per Daerah WAJIB portrait, rincian tetap landscape.
+             Named page dipakai supaya orientasi tiap bagian berbeda. */
+          @page { size: A4 portrait; margin: 10mm; }
+          @page ringkasan { size: A4 portrait; margin: 10mm; }
+          @page rincian { size: A4 landscape; margin: 10mm; }
           body { background: white; margin: 0; }
           .print-hidden { display: none !important; }
-          .print-ringkasan { display: ${printMode === 'ringkasan' ? 'block' : 'none'} !important; }
-          .print-rincian { display: ${printMode === 'rincian' ? 'block' : 'none'} !important; }
-          .print-area { overflow: visible !important; }
-          tr { page-break-inside: avoid; }
-          table { font-size: 9px; }
+          .lembar {
+            position: relative;
+            page-break-after: always;
+            break-after: page;
+            box-sizing: border-box;
+          }
+          .lembar:last-child { page-break-after: auto; break-after: auto; }
+          .lembar-ringkasan { page: ringkasan; min-height: 272mm; }
+          .lembar-rincian { page: rincian; min-height: 185mm; }
+          .nomor-halaman {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            text-align: center;
+            font-size: 11px;
+            font-weight: bold;
+            color: #000;
+          }
+          table { border-collapse: collapse; }
+          thead { display: table-header-group; }
+          tr, td, th { page-break-inside: avoid; break-inside: avoid; }
+          .tabel-ringkasan { font-size: 11px; }
+          .tabel-rincian { font-size: 7.5px; }
+          .tabel-rincian th, .tabel-rincian td { padding: 1px 2px !important; }
           th, td { padding: 2px 4px !important; }
         }
       `}} />
@@ -306,7 +363,7 @@ function LaporanGabunganContent() {
           <span className="text-xs text-gray-500 ml-auto">Total: <b className="text-gray-900">{formatRupiah(totalKeseluruhan)}</b> • {daerahList.length} daerah</span>
         </div>
 
-        <section className="print-ringkasan bg-white rounded shadow border border-gray-200 mb-4 overflow-hidden">
+        <section className="print-hidden bg-white rounded shadow border border-gray-200 mb-4 overflow-hidden">
           <div className="px-3 md:px-4 py-3 border-b bg-gray-50 flex flex-wrap items-start justify-between gap-3">
             <div>
               <h2 className="text-sm md:text-base font-bold text-gray-900">Ringkasan per Daerah</h2>
@@ -359,7 +416,7 @@ function LaporanGabunganContent() {
           </div>
         </section>
 
-        <section className="print-rincian bg-white rounded shadow border border-gray-200 overflow-hidden">
+        <section className="print-hidden bg-white rounded shadow border border-gray-200 overflow-hidden">
           <div className="px-3 md:px-4 py-3 border-b bg-gray-50 flex flex-wrap items-start justify-between gap-3">
             <div>
               <h2 className="text-sm md:text-base font-bold text-gray-900">Rincian per Jam &amp; Kapal</h2>
@@ -394,8 +451,8 @@ function LaporanGabunganContent() {
                 ) : keberangkatan.map((baris) => (
                   <tr key={baris.kunci} className="hover:bg-gray-50 text-center">
                     <td className="border p-1 text-[9px] md:text-xs font-bold whitespace-nowrap">{baris.jam}</td>
-                    <td className="border p-1 text-[9px] md:text-xs font-medium" style={{ minWidth: 120 }}>{baris.kapal}</td>
-                    <td className="border p-1 text-[9px] md:text-xs text-left" style={{ minWidth: 130 }}>{baris.rute || '-'}</td>
+                    <td className="border p-1 text-[9px] md:text-xs font-medium text-left" style={{ minWidth: 120 }}>{baris.kapal}</td>
+                    <td className="border p-1 text-[9px] md:text-xs text-center" style={{ minWidth: 130 }}>{baris.rute || '-'}</td>
                     {daerahList.map((daerah) => {
                       const sel = baris.perDaerah[daerah] || selKosong()
                       return (
@@ -427,6 +484,141 @@ function LaporanGabunganContent() {
             </table>
           </div>
         </section>
+
+        {/* AREA CETAK: satu section = satu halaman, nomor halaman manual */}
+        {printMode === 'ringkasan' && (
+          <div className="hidden print:block">
+            {halamanRingkasan.map((daftarDaerah, idxHalaman) => {
+              const halamanTerakhir = idxHalaman === halamanRingkasan.length - 1
+              return (
+                <section key={`ringkasan-${idxHalaman}`} className="lembar lembar-ringkasan">
+                  <h1 className="text-xl font-bold text-center mb-4">LAPORAN RINGKASAN PER DAERAH</h1>
+                  <div className="mb-3 text-sm grid grid-cols-[110px_10px_1fr] gap-y-1 text-gray-900">
+                    <span>Tanggal</span><span>:</span><span>{labelTanggal(tanggal)}</span>
+                    <span>Dicetak</span><span>:</span><span>{tanggalCetak}</span>
+                  </div>
+                  <table className="tabel-ringkasan w-full border-collapse border border-gray-400">
+                    <thead>
+                      <tr className="bg-gray-200 text-center text-gray-900">
+                        <th className="border border-gray-400 px-2 py-1 text-left">DAERAH</th>
+                        <th className="border border-gray-400 px-2 py-1" style={{ width: '70px' }}>DEWASA</th>
+                        <th className="border border-gray-400 px-2 py-1" style={{ width: '70px' }}>BALITA</th>
+                        <th className="border border-gray-400 px-2 py-1" style={{ width: '150px' }}>PENDAPATAN</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {daftarDaerah.length === 0 ? (
+                        <tr>
+                          <td colSpan={4} className="border border-gray-400 px-2 py-3 text-center italic text-gray-700">
+                            Belum ada rute/penjualan pada tanggal ini.
+                          </td>
+                        </tr>
+                      ) : daftarDaerah.map((daerahCetak) => {
+                        const sel = ringkasan[daerahCetak] || selKosong()
+                        return (
+                          <tr key={daerahCetak} className="text-gray-900">
+                            <td className="border border-gray-400 px-2 py-1 font-bold text-left">{daerahCetak}</td>
+                            <td className="border border-gray-400 px-2 py-1 text-center">{sel.dewasa}</td>
+                            <td className="border border-gray-400 px-2 py-1 text-center">{sel.balita}</td>
+                            <td className="border border-gray-400 px-2 py-1 text-right whitespace-nowrap">{formatRupiah(sel.pendapatan)}</td>
+                          </tr>
+                        )
+                      })}
+                      {halamanTerakhir && (
+                        <tr className="bg-gray-300 font-bold text-center text-gray-900">
+                          <td className="border border-gray-400 px-2 py-1 text-left">TOTAL</td>
+                          <td className="border border-gray-400 px-2 py-1">{totalDewasa}</td>
+                          <td className="border border-gray-400 px-2 py-1">{totalBalita}</td>
+                          <td className="border border-gray-400 px-2 py-1 text-right whitespace-nowrap">{formatRupiah(totalKeseluruhan)}</td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                  <div className="nomor-halaman">Halaman {idxHalaman + 1} dari {halamanRingkasan.length}</div>
+                </section>
+              )
+            })}
+          </div>
+        )}
+
+        {printMode === 'rincian' && (
+          <div className="hidden print:block">
+            {halamanRincian.map((daftarBaris, idxHalaman) => {
+              const halamanTerakhir = idxHalaman === halamanRincian.length - 1
+              return (
+                <section key={`rincian-${idxHalaman}`} className="lembar lembar-rincian">
+                  <h1 className="text-lg font-bold text-center mb-3">LAPORAN RINCIAN PER JAM &amp; KAPAL</h1>
+                  <div className="mb-2 text-sm grid grid-cols-[110px_10px_1fr] gap-y-1 text-gray-900">
+                    <span>Tanggal</span><span>:</span><span>{labelTanggal(tanggal)}</span>
+                    <span>Dicetak</span><span>:</span><span>{tanggalCetak}</span>
+                  </div>
+                  <table className="tabel-rincian w-full border-collapse border border-gray-400">
+                    <thead>
+                      <tr className="bg-gray-200 text-center text-gray-900">
+                        <th className="border border-gray-400 px-1 py-1" rowSpan={2}>JAM</th>
+                        <th className="border border-gray-400 px-1 py-1 text-left" rowSpan={2}>KAPAL</th>
+                        <th className="border border-gray-400 px-1 py-1" rowSpan={2}>RUTE</th>
+                        {daerahList.map((daerah) => (
+                          <th key={daerah} colSpan={2} className="border border-gray-400 px-1 py-1 whitespace-nowrap">{daerah}</th>
+                        ))}
+                        <th className="border border-gray-400 px-1 py-1" rowSpan={2}>TOTAL</th>
+                      </tr>
+                      <tr className="bg-gray-200 text-center text-gray-900">
+                        {daerahList.map((daerah) => (
+                          <Fragment key={daerah}>
+                            <th className="border border-gray-400 px-1 py-1">D/B</th>
+                            <th className="border border-gray-400 px-1 py-1">PENDAPATAN</th>
+                          </Fragment>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {daftarBaris.length === 0 ? (
+                        <tr>
+                          <td colSpan={4 + daerahList.length * 2} className="border border-gray-400 px-2 py-3 text-center italic text-gray-700">
+                            Belum ada jadwal/penjualan pada tanggal ini.
+                          </td>
+                        </tr>
+                      ) : daftarBaris.map((baris) => (
+                        <tr key={baris.kunci} className="text-center text-gray-900">
+                          <td className="border border-gray-400 px-1 py-1 font-bold whitespace-nowrap">{baris.jam}</td>
+                          <td className="border border-gray-400 px-1 py-1 text-left">{baris.kapal}</td>
+                          <td className="border border-gray-400 px-1 py-1 text-center whitespace-nowrap">{baris.rute || '-'}</td>
+                          {daerahList.map((daerah) => {
+                            const sel = baris.perDaerah[daerah] || selKosong()
+                            return (
+                              <Fragment key={daerah}>
+                                <td className="border border-gray-400 px-1 py-1">{sel.dewasa}/{sel.balita}</td>
+                                <td className="border border-gray-400 px-1 py-1 text-right whitespace-nowrap">{formatRupiah(sel.pendapatan)}</td>
+                              </Fragment>
+                            )
+                          })}
+                          <td className="border border-gray-400 px-1 py-1 text-right font-bold whitespace-nowrap">{formatRupiah(baris.total)}</td>
+                        </tr>
+                      ))}
+                      {halamanTerakhir && (
+                        <tr className="bg-gray-300 font-bold text-center text-gray-900">
+                          <td colSpan={3} className="border border-gray-400 px-1 py-1 text-left">TOTAL</td>
+                          {daerahList.map((daerah) => {
+                            const sel = ringkasan[daerah] || selKosong()
+                            return (
+                              <Fragment key={daerah}>
+                                <td className="border border-gray-400 px-1 py-1">{sel.dewasa}/{sel.balita}</td>
+                                <td className="border border-gray-400 px-1 py-1 text-right whitespace-nowrap">{formatRupiah(sel.pendapatan)}</td>
+                              </Fragment>
+                            )
+                          })}
+                          <td className="border border-gray-400 px-1 py-1 text-right whitespace-nowrap">{formatRupiah(totalKeseluruhan)}</td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                  <div className="nomor-halaman">Halaman {idxHalaman + 1} dari {halamanRincian.length}</div>
+                </section>
+              )
+            })}
+          </div>
+        )}
       </div>
     </div>
   )

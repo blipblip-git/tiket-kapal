@@ -8,6 +8,14 @@ const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey)
 
+// Client publik TANPA sesi login (anon murni). Dipakai halaman portal publik
+// seperti manifest Syahbandar: kalau browser kebetulan masih menyimpan sesi
+// staf, query lewat client utama akan terkena RLS staf (bisa mengosongkan
+// manifest), sedangkan client ini selalu memakai policy baca publik.
+export const supabasePublik = createClient(supabaseUrl, supabaseAnonKey, {
+  auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
+})
+
 // ==================== TIPE PROFILE ====================
 export type Profile = {
   id: string
