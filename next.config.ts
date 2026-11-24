@@ -18,11 +18,11 @@ const nextConfig: NextConfig = {
     },
   },
   // apex -> www dengan status 308 (PERMANEN).
-  // Redirect bawaan dashboard Vercel ("Redirect to www.lintasair.com") keluar
-  // sebagai 307 sementara, jadi redirect-nya dipindah ke sini.
-  // PENTING: setting redirect pada domain lintasair.com di dashboard Vercel harus
-  // DIMATIKAN (domain di-connect ke Production, bukan "Redirect to"), kalau tidak
-  // redirect Vercel (307) jalan lebih dulu dan aturan ini tidak pernah dipakai.
+  // Redirect-nya kini ditangani langsung oleh Vercel (Domains -> lintasair.com ->
+  // "Redirect to Another Domain" -> 308 Permanent Redirect), jadi request ke apex
+  // tidak sampai ke aplikasi ini. Aturan di bawah dipertahankan sebagai jaring
+  // pengaman bila suatu saat redirect di dashboard dimatikan: tanpa ini apex akan
+  // menyajikan aplikasi apa adanya (duplikat konten) alih-alih 308 ke www.
   async redirects() {
     return [
       {
