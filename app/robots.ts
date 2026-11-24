@@ -1,15 +1,18 @@
 // app/robots.ts
-// Selama aplikasi masih diuji di tiket-kapal.vercel.app, seluruh situs ditutup
-// dari mesin pencari supaya alamat sementara itu tidak terindeks sebagai
-// "produk utama" (dan tidak bentrok dengan domain resmi nanti).
+// Domain resmi sekarang www.lintasair.com. Mesin pencari hanya boleh masuk
+// kalau NEXT_PUBLIC_INDEXABLE='true'; kalau tidak, seluruh situs ditutup.
 //
-// Setelah www.lintasair.com aktif:
+// Catatan: fallback di bawah SENGAJA memakai domain produksi (bukan
+// tiket-kapal.vercel.app) supaya direktif Host/Sitemap tidak pernah menunjuk
+// alamat sementara kalau env Vercel lupa diset. Samakan dengan app/layout.tsx.
+//
+// Env Vercel yang benar:
 //   NEXT_PUBLIC_SITE_URL=https://www.lintasair.com
 //   NEXT_PUBLIC_INDEXABLE=true
 // lalu REDEPLOY (env Vercel hanya terbaca saat build).
 import type { MetadataRoute } from 'next'
 
-const SITUS = (process.env.NEXT_PUBLIC_SITE_URL || 'https://tiket-kapal.vercel.app')
+const SITUS = (process.env.NEXT_PUBLIC_SITE_URL || 'https://www.lintasair.com')
   .trim()
   .replace(/\/+$/, '')
 
@@ -54,6 +57,7 @@ export default function robots(): MetadataRoute.Robots {
         disallow: HALAMAN_PRIVAT
       }
     ],
+    sitemap: `${SITUS}/sitemap.xml`,
     host: SITUS
   }
 }

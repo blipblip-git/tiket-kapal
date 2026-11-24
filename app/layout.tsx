@@ -35,6 +35,12 @@ function alamatSitus(): URL {
 export const metadata: Metadata = {
   metadataBase: alamatSitus(),
   applicationName: "LintasAir",
+  // Canonical = alamat resmi halaman. Nilai relatif di sini diartikan terhadap
+  // metadataBase (www.lintasair.com), jadi hasilnya selalu absolut. Halaman
+  // lain menimpanya lewat layout-nya sendiri (mis. /cek-tiket, /syahbandar).
+  alternates: {
+    canonical: "/",
+  },
   title: "LintasAir - Tiket Kapal Kaltara",
   description: "Sistem Penjualan Tiket Kapal Kalimantan Utara",
   // Manifest PWA: membuat situs bisa DIPASANG dan dibuka tanpa address bar.

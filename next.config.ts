@@ -31,6 +31,27 @@ const nextConfig: NextConfig = {
         destination: "https://www.lintasair.com/:path*",
         permanent: true,
       },
+      // Alamat bawaan Vercel -> domain resmi. Tanpa ini mesin pencari melihat
+      // dua situs kembar (www.lintasair.com dan tiket-kapal.vercel.app) dengan
+      // konten identik. Hanya host produksi ini yang dialihkan; deployment
+      // preview memakai host lain (tiket-kapal-<hash>-<tim>.vercel.app) dan
+      // sengaja TIDAK dialihkan supaya tetap bisa dipakai uji coba.
+      {
+        source: "/",
+        has: [{ type: "host", value: "tiket-kapal.vercel.app" }],
+        destination: "https://www.lintasair.com/",
+        permanent: true,
+      },
+      {
+        // /api dikecualikan: klien integrasi tenant mengirim POST + body, dan
+        // sebagian klien HTTP tidak meneruskan body saat mengikuti redirect.
+        // Endpoint API juga tidak pernah diindeks mesin pencari, jadi tidak
+        // ada kerugian SEO dengan membiarkannya di host lama.
+        source: "/:path((?!api(?:/|$)).+)",
+        has: [{ type: "host", value: "tiket-kapal.vercel.app" }],
+        destination: "https://www.lintasair.com/:path",
+        permanent: true,
+      },
     ];
   },
 };
