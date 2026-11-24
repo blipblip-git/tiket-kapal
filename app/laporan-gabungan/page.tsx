@@ -6,6 +6,7 @@ import { supabase, getProfile, getOperatorSession, type Profile } from '@/lib/su
 import { idOperator, cocokOperator } from '@/lib/tenant'
 import { muatRutePemilik, ujungRute, type RuteKapal } from '@/lib/rute'
 import { urutkanLokasi } from '@/lib/lokasi'
+import { kodeDaerah } from '@/lib/fee'
 
 type SelDaerah = {
   dewasa: number
@@ -83,6 +84,9 @@ function LaporanGabunganContent() {
   const [tanggal, setTanggal] = useState(() => (tanggalValid(tanggalParam) ? tanggalParam : tanggalWITA()))
   const [ringkasan, setRingkasan] = useState<{ [daerah: string]: SelDaerah }>({})
   const [keberangkatan, setKeberangkatan] = useState<BarisKeberangkatan[]>([])
+  // Cetak ringkasan dan rincian dipisah supaya PDF ringkasan tidak ikut
+  // membawa tabel rincian yang lebar, dan rincian bisa dicetak landscape.
+  const [printMode, setPrintMode] = useState<'ringkasan' | 'rincian'>('ringkasan')
 
   useEffect(() => {
     async function init() {
@@ -183,7 +187,9 @@ function LaporanGabunganContent() {
         }
 
         const baris = mapBaris[kunci]
-        const teksRute = `${jadwal.rute_asal || '-'} → ${jadwal.rute_tujuan || '-'}`
+        // Singkatan daerah dipakai di kolom rute agar tabel rincian tetap
+        // ringkas saat dicetak landscape (Tarakan - Sungai Nyamuk -> TRK - SNK).
+        const teksRute = `${kodeDaerah(jadwal.rute_asal || '-')} - ${kodeDaerah(jadwal.rute_tujuan || '-')}`
         const ruteUnik = new Set(baris.rute.split(', ').filter(Boolean))
         ruteUnik.add(teksRute)
         baris.rute = Array.from(ruteUnik).join(', ')
@@ -235,7 +241,10 @@ function LaporanGabunganContent() {
     }
   }, [profile, tanggal, ruteList])
 
-  const handlePrint = () => setTimeout(() => window.print(), 100)
+  const handlePrint = (mode: 'ringkasan' | 'rincian') => {
+    setPrintMode(mode)
+    setTimeout(() => window.print(), 100)
+  }
 
   if (loading) return <p className="p-6 text-center text-gray-600 mt-10">Memuat...</p>
   if (error) return <p className="p-6 text-center text-red-600 mt-10">{error}</p>
@@ -258,9 +267,11 @@ function LaporanGabunganContent() {
     <div className="min-h-[100dvh] w-full bg-gray-100 p-3 md:p-6 print:p-0 print:bg-white">
       <style dangerouslySetInnerHTML={{__html: `
         @media print {
-          @page { size: A4 landscape; margin: 10mm; }
+          @page { size: A4 ${printMode === 'ringkasan' ? 'portrait' : 'landscape'}; margin: 10mm; }
           body { background: white; margin: 0; }
           .print-hidden { display: none !important; }
+          .print-ringkasan { display: ${printMode === 'ringkasan' ? 'block' : 'none'} !important; }
+          .print-rincian { display: ${printMode === 'rincian' ? 'block' : 'none'} !important; }
           .print-area { overflow: visible !important; }
           tr { page-break-inside: avoid; }
           table { font-size: 9px; }
@@ -274,8 +285,9 @@ function LaporanGabunganContent() {
             <h1 className="text-lg md:text-2xl font-bold text-gray-900 leading-tight">Laporan Gabungan Harian</h1>
             <p className="text-xs md:text-sm font-bold text-blue-700 mt-0.5">{labelTanggal(tanggal)}</p>
           </div>
-          <div className="flex items-center gap-2">
-            <button onClick={handlePrint} className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 rounded text-xs md:text-sm font-bold transition shadow-sm">🖨️ Cetak</button>
+          <div className="flex flex-wrap items-center gap-2">
+            <button onClick={() => handlePrint('ringkasan')} className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 rounded text-xs md:text-sm font-bold transition shadow-sm">🖨️ Cetak Ringkasan</button>
+            <button onClick={() => handlePrint('rincian')} className="bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-2 rounded text-xs md:text-sm font-bold transition shadow-sm">🖨️ Cetak Rincian</button>
             <button onClick={() => router.push('/dashboard')} className="bg-gray-100 hover:bg-gray-200 text-gray-700 px-3 py-2 rounded text-xs md:text-sm font-bold transition">Kembali</button>
           </div>
         </div>
@@ -296,10 +308,9 @@ function LaporanGabunganContent() {
           <span className="text-xs text-gray-500 ml-auto">Total: <b className="text-gray-900">{formatRupiah(totalKeseluruhan)}</b> • {daerahList.length} daerah</span>
         </div>
 
-        <section className="bg-white rounded shadow border border-gray-200 mb-4 overflow-hidden">
+        <section className="print-ringkasan bg-white rounded shadow border border-gray-200 mb-4 overflow-hidden">
           <div className="px-3 md:px-4 py-3 border-b bg-gray-50">
             <h2 className="text-sm md:text-base font-bold text-gray-900">Ringkasan per Daerah</h2>
-            <p className="text-[10px] md:text-xs text-gray-600">Pendapatan dihitung dari tiket dewasa yang sudah dibayar. Balita tetap dihitung sebagai penumpang.</p>
           </div>
           <div className="overflow-x-auto print-area">
             <table className="w-full border-collapse text-gray-900">
@@ -344,12 +355,12 @@ function LaporanGabunganContent() {
               </tfoot>
             </table>
           </div>
+          <p className="px-3 md:px-4 py-2 text-[10px] md:text-xs text-gray-600 text-right">Tanggal : {labelTanggal(tanggal)}</p>
         </section>
 
-        <section className="bg-white rounded shadow border border-gray-200 overflow-hidden">
+        <section className="print-rincian bg-white rounded shadow border border-gray-200 overflow-hidden">
           <div className="px-3 md:px-4 py-3 border-b bg-gray-50">
             <h2 className="text-sm md:text-base font-bold text-gray-900">Rincian per Jam & Kapal</h2>
-            <p className="text-[10px] md:text-xs text-gray-600">Setiap kapal ditampilkan terpisah, walau jam berangkatnya sama.</p>
           </div>
           <div className="overflow-x-auto print-area">
             <table className="w-full min-w-[900px] border-collapse text-gray-900">
@@ -366,7 +377,7 @@ function LaporanGabunganContent() {
                 <tr className="bg-gray-100">
                   {daerahList.map((daerah) => (
                     <Fragment key={daerah}>
-                      <th className="border p-1 text-[8px] md:text-xs text-center">Dewasa/Balita</th>
+                      <th className="border p-1 text-[8px] md:text-xs text-center">D/B</th>
                       <th className="border p-1 text-[8px] md:text-xs text-center">Pendapatan</th>
                     </Fragment>
                   ))}
@@ -410,6 +421,7 @@ function LaporanGabunganContent() {
               </tfoot>
             </table>
           </div>
+          <p className="px-3 md:px-4 py-2 text-[10px] md:text-xs text-gray-600 text-right">Tanggal : {labelTanggal(tanggal)}</p>
         </section>
       </div>
     </div>

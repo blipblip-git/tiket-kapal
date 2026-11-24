@@ -356,6 +356,22 @@ function LaporanContent() {
   ))
   const ruteLengkap = ruteDariData.length > 0 ? ruteDariData.join(' / ') : (lokasiParam || profile.lokasi || '-')
 
+  // Nama kapal & rute untuk jam yang sedang dibuka. Satu jam bisa berisi lebih
+  // dari satu kapal, jadi semua nilai unik digabung agar tidak ada yang hilang.
+  const dataJamTerpilih = selectedJam ? laporan.find(l => l.jam === selectedJam) : null
+  const namaKapalJam = dataJamTerpilih
+    ? (Array.from(new Set(
+        dataJamTerpilih.rincian
+          .map(r => r.nama_kapal)
+          .filter((nama): nama is string => Boolean(nama) && nama !== '-')
+      )).join(' / ') || '-')
+    : '-'
+  const ruteJam = dataJamTerpilih
+    ? (Array.from(new Set(
+        dataJamTerpilih.rincian.map(r => r.rute).filter(Boolean)
+      )).join(' / ') || '-')
+    : '-'
+
   const now = new Date()
   const hariIniStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
   const jamSekarang = String(now.getHours()).padStart(2, '0') + ':' + String(now.getMinutes()).padStart(2, '0')
@@ -413,8 +429,8 @@ function LaporanContent() {
       <style dangerouslySetInnerHTML={{__html: `
         @media print {
           @page { 
-            size: A4; 
-            margin: 15mm; 
+            size: A4 portrait;
+            margin: 15mm;
           }
           body { 
             background: white; 
@@ -542,7 +558,11 @@ function LaporanContent() {
               {selectedJam && !selectedPetugas && (
                 <div className="bg-white rounded shadow border border-gray-200 overflow-hidden mb-6">
                   <div className="bg-blue-600 px-3 md:px-4 py-2 md:py-3 border-b flex justify-between items-center flex-wrap gap-2">
-                    <h2 className="text-white font-bold text-xs md:text-base">Rekap Petugas Jam {selectedJam}</h2>
+                    <div>
+                      <h2 className="text-white font-bold text-xs md:text-base">Rekap Petugas Jam {selectedJam}</h2>
+                      <p className="text-[10px] md:text-xs text-blue-100 font-medium mt-0.5">Nama Kapal : {namaKapalJam}</p>
+                      <p className="text-[10px] md:text-xs text-blue-100 font-medium">Rute : {ruteJam}</p>
+                    </div>
                     <div className="flex gap-2">
                       <button onClick={() => handlePrint('rekap-petugas')} className="bg-white text-blue-700 px-2 md:px-3 py-1 rounded text-[10px] md:text-sm font-bold hover:bg-gray-100">🖨️ Cetak</button>
                       <button onClick={() => setSelectedJam(null)} className="bg-blue-700 text-white px-2 md:px-3 py-1 rounded text-[10px] md:text-sm hover:bg-blue-800">&larr; Kembali</button>
@@ -906,9 +926,10 @@ function LaporanContent() {
         {selectedJam && (
           <div className="hidden print-rekap-petugas mt-8">
             <div className="text-center mb-6">
-              <h1 className="text-xl font-bold text-gray-900">Rekap Petugas Jam {selectedJam}</h1>
+              <h1 className="text-xl font-bold text-gray-900">Rekap Laporan Per Jam {selectedJam}</h1>
               <div className="text-sm text-left mt-4 grid grid-cols-[100px_10px_1fr] gap-y-1 print-info">
-                <span>Petugas</span><span>:</span><span>{profile.nama}</span>
+                <span>Nama Kapal</span><span>:</span><span>{namaKapalJam}</span>
+                <span>Rute</span><span>:</span><span>{ruteJam}</span>
                 <span>Tanggal</span><span>:</span><span>{tanggal}</span>
               </div>
             </div>
@@ -938,7 +959,7 @@ function LaporanContent() {
                 {getRekapPetugas(selectedJam).map((pt, idx) => (
                   <tr key={pt.nama} className="text-center text-gray-900">
                     <td className="border border-gray-400 px-2 py-1">{idx + 1}</td>
-                    <td className="border border-gray-400 px-2 py-1 font-bold text-center">{pt.nama}</td>
+                    <td className="border border-gray-400 px-2 py-1 font-bold text-left">{pt.nama}</td>
                     <td className="border border-gray-400 px-2 py-1">{pt.dewasa}/{pt.balita}</td>
                     <td className="border border-gray-400 px-2 py-1 text-right">Rp {pt.cash.toLocaleString('id-ID')}</td>
                     <td className="border border-gray-400 px-2 py-1 text-right">Rp {pt.qris.toLocaleString('id-ID')}</td>
