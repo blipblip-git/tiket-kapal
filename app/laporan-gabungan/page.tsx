@@ -286,8 +286,6 @@ function LaporanGabunganContent() {
             <p className="text-xs md:text-sm font-bold text-blue-700 mt-0.5">{labelTanggal(tanggal)}</p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            <button onClick={() => handlePrint('ringkasan')} className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 rounded text-xs md:text-sm font-bold transition shadow-sm">🖨️ Cetak Ringkasan</button>
-            <button onClick={() => handlePrint('rincian')} className="bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-2 rounded text-xs md:text-sm font-bold transition shadow-sm">🖨️ Cetak Rincian</button>
             <button onClick={() => router.push('/dashboard')} className="bg-gray-100 hover:bg-gray-200 text-gray-700 px-3 py-2 rounded text-xs md:text-sm font-bold transition">Kembali</button>
           </div>
         </div>
@@ -309,8 +307,12 @@ function LaporanGabunganContent() {
         </div>
 
         <section className="print-ringkasan bg-white rounded shadow border border-gray-200 mb-4 overflow-hidden">
-          <div className="px-3 md:px-4 py-3 border-b bg-gray-50">
-            <h2 className="text-sm md:text-base font-bold text-gray-900">Ringkasan per Daerah</h2>
+          <div className="px-3 md:px-4 py-3 border-b bg-gray-50 flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <h2 className="text-sm md:text-base font-bold text-gray-900">Ringkasan per Daerah</h2>
+              <p className="text-[10px] md:text-xs text-gray-600 mt-0.5">Tanggal : {labelTanggal(tanggal)}</p>
+            </div>
+            <button onClick={() => handlePrint('ringkasan')} className="print-hidden bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 rounded text-xs md:text-sm font-bold transition shadow-sm">🖨️ Cetak Ringkasan</button>
           </div>
           <div className="overflow-x-auto print-area">
             <table className="w-full border-collapse text-gray-900">
@@ -355,12 +357,15 @@ function LaporanGabunganContent() {
               </tfoot>
             </table>
           </div>
-          <p className="px-3 md:px-4 py-2 text-[10px] md:text-xs text-gray-600 text-right">Tanggal : {labelTanggal(tanggal)}</p>
         </section>
 
         <section className="print-rincian bg-white rounded shadow border border-gray-200 overflow-hidden">
-          <div className="px-3 md:px-4 py-3 border-b bg-gray-50">
-            <h2 className="text-sm md:text-base font-bold text-gray-900">Rincian per Jam & Kapal</h2>
+          <div className="px-3 md:px-4 py-3 border-b bg-gray-50 flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <h2 className="text-sm md:text-base font-bold text-gray-900">Rincian per Jam &amp; Kapal</h2>
+              <p className="text-[10px] md:text-xs text-gray-600 mt-0.5">Tanggal : {labelTanggal(tanggal)}</p>
+            </div>
+            <button onClick={() => handlePrint('rincian')} className="print-hidden bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-2 rounded text-xs md:text-sm font-bold transition shadow-sm">🖨️ Cetak Rincian</button>
           </div>
           <div className="overflow-x-auto print-area">
             <table className="w-full min-w-[900px] border-collapse text-gray-900">
@@ -421,7 +426,6 @@ function LaporanGabunganContent() {
               </tfoot>
             </table>
           </div>
-          <p className="px-3 md:px-4 py-2 text-[10px] md:text-xs text-gray-600 text-right">Tanggal : {labelTanggal(tanggal)}</p>
         </section>
       </div>
     </div>

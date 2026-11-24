@@ -55,6 +55,7 @@ function DashboardAdminContent() {
     menu_agen: 'Manajemen Agen',
     menu_pengaturan: 'Pengaturan Sistem',
     menu_laporan: 'Laporan Penjualan',
+    menu_analisa: 'Laporan Analisa Penjualan',
     menu_audit: 'Audit Log',
     menu_backup: 'Backup Data (Excel)',
   })
@@ -284,6 +285,10 @@ function DashboardAdminContent() {
 
             <button onClick={() => router.push('/laporan-penjualan-admin')} className="flex items-center justify-center h-16 md:h-24 p-2 border border-blue-200 bg-blue-50 rounded-lg hover:bg-blue-100 text-center transition shadow-sm">
               <p className="font-bold text-xs md:text-sm text-blue-800">{teks.menu_laporan}</p>
+            </button>
+
+            <button onClick={() => router.push('/laporan-analisa')} className="flex items-center justify-center h-16 md:h-24 p-2 border border-cyan-200 bg-cyan-50 rounded-lg hover:bg-cyan-100 text-center transition shadow-sm">
+              <p className="font-bold text-xs md:text-sm text-cyan-800">{teks.menu_analisa || 'Laporan Analisa Penjualan'}</p>
             </button>
 
             <button onClick={() => router.push('/audit')} className="flex items-center justify-center h-16 md:h-24 p-2 border border-yellow-200 bg-yellow-50 rounded-lg hover:bg-yellow-100 text-center transition shadow-sm">
