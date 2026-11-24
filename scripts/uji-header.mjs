@@ -47,7 +47,9 @@ await new Promise((r) => ws.addEventListener('open', r, { once: true }))
 
 let id = 0
 const nunggu = new Map()
+const urls = new Map()
 const gagal = []
+const dibatalkan = []
 const supabase = []
 const keamanan = []
 
@@ -58,8 +60,19 @@ ws.addEventListener('message', (ev) => {
     nunggu.delete(m.id)
     return
   }
+  if (m.method === 'Network.requestWillBeSent') {
+    urls.set(m.params.requestId, m.params.request.url)
+  }
   if (m.method === 'Network.loadingFailed') {
-    gagal.push(`${m.params.errorText} ${m.params.blockedReason || ''} ${m.params.type}`.trim())
+    const url = urls.get(m.params.requestId) || '(tidak diketahui)'
+    const teks = `${m.params.errorText} ${m.params.blockedReason || ''} ${m.params.type} ${url}`
+    // ERR_ABORTED = request dibatalkan (mis. redirect/pindah halaman di tengah
+    // jalan), bukan diblokir kebijakan. Tetap dilaporkan, tapi tidak menggagalkan.
+    if (m.params.errorText === 'net::ERR_ABORTED' && !m.params.blockedReason) {
+      dibatalkan.push(teks.replace(/\s+/g, ' ').trim())
+    } else {
+      gagal.push(teks.replace(/\s+/g, ' ').trim())
+    }
   }
   if (m.method === 'Network.responseReceived') {
     const u = m.params.response.url
@@ -106,6 +119,7 @@ const ringkas = {
   teks: teks.result?.result?.value,
   supabase: [...new Set(supabase)].slice(0, 5),
   requestGagal: [...new Set(gagal)],
+  requestDibatalkan: [...new Set(dibatalkan)].slice(0, 5),
   pelanggaranKeamanan: [...new Set(keamanan)],
 }
 console.log(JSON.stringify(ringkas, null, 2))
