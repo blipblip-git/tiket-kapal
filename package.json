@@ -7,7 +7,8 @@
     "build": "next build",
     "start": "next start",
     "backup": "node scripts/backup-data.mjs",
-    "lint": "eslint"
+    "lint": "eslint",
+    "uji:header": "node scripts/uji-header.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.117.3",

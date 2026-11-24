@@ -103,22 +103,57 @@ Bukti uji ulang setelah SQL dijalankan: upload anon ditolak
 Catatan: aplikasi saat ini **belum punya fitur upload foto kapal**; kalau nanti dibuat,
 upload harus lewat staf yang sudah login, dan ukuran/tipe file wajib dibatasi di server.
 
+## Tahap 3c (SUDAH DITERAPKAN 25 Nov 2026) — header keamanan + tutup `?preview=true`
+
+**a. Header keamanan** (`next.config.ts` → `headers()`, berlaku semua route):
+
+| Header | Nilai |
+|---|---|
+| `Content-Security-Policy` | `default-src 'self'`; `script-src` izinkan `'unsafe-inline'` (bootstrap Next.js) + `'wasm-unsafe-eval'` (tesseract OCR) + jsdelivr/unpkg; `connect-src` ke `*.supabase.co` & `wss:`; `worker-src blob:`; `frame-ancestors 'none'`; `object-src 'none'`; `base-uri 'self'`; `form-action 'self'` |
+| `X-Frame-Options` | `DENY` |
+| `X-Content-Type-Options` | `nosniff` |
+| `Referrer-Policy` | `strict-origin-when-cross-origin` |
+| `Permissions-Policy` | `camera=(self)` (scan KTP), `geolocation=(self)` (isi otomatis kota asal), sisanya `()` |
+| `Cross-Origin-Opener-Policy` | `same-origin` |
+
+HSTS tidak ditulis ulang karena Vercel sudah mengirim `max-age=63072000`.
+
+Bukti uji (Chrome headless via DevTools Protocol, 11 halaman: `/`, `/login`, `/cek-tiket`,
+`/etiket`, `/form`, `/scan`, `/syahbandar`, dan 4 URL pratinjau): **0 pelanggaran CSP**,
+**0 request gagal**, request `rest/v1/master_kota` tetap **200**, halaman tetap hidrasi.
+Kontrol A/B: hasil render halaman `/` di lokal identik dengan produksi.
+
+Uji ulang kapan saja setelah mengubah `headers()`:
+
+```bash
+npm run build && npx next start -p 3100
+node scripts/uji-header.mjs http://localhost:3100/     # exit 1 kalau ada yang diblokir
+```
+
+**b. `?preview=true` tidak lagi mematikan guard.** Sebelumnya `SessionGuard` langsung
+`return` bila parameter itu ada, jadi siapa pun bisa membuka halaman staf tanpa login
+(data tetap terlindungi RLS, tapi UI internal terbuka dan `agen/jual-tiket` memalsukan
+profil agen di browser). Sekarang ada `bolehModePratinjau()` di `lib/supabase.ts`:
+pratinjau hanya sah bila browser memegang sesi Supabase Auth milik profil
+`superadmin`/`admin_utama` yang aktif; selain itu dialihkan ke `/superadmin`.
+
+Bukti uji: `/dashboard?preview=true`, `/agen/jual-tiket?preview=true`,
+`/laporan?preview=true`, `/cetak-ulang?preview=true` tanpa sesi → konsol mencatat
+`Mode pratinjau ditolak: bukan sesi Superadmin.` dan halaman dialihkan.
+
 ## Masih terbuka (belum diperbaiki)
 
-1. **Header keamanan produksi hanya HSTS.** Belum ada `X-Frame-Options`/`frame-ancestors`
-   (halaman bisa dibingkai situs lain → clickjacking pada tombol konfirmasi/bayar),
-   `X-Content-Type-Options`, `Referrer-Policy`, `Permissions-Policy`, dan CSP.
-2. **`?preview=true` mematikan `SessionGuard` di semua halaman.** Data tetap aman karena RLS
-   menolak anon, tetapi guard sebaiknya hanya boleh dimatikan oleh superadmin yang login.
-3. **Rate limit disimpan di memori proses** — tiap instance Vercel menghitung sendiri dan
+1. **Rate limit disimpan di memori proses** — tiap instance Vercel menghitung sendiri dan
    ter-reset saat deploy.
-4. **Kursi bisa dikunci tanpa bayar** selama 15 menit lewat `/api/publik/pesan`; perlu batas
+2. **Kursi bisa dikunci tanpa bayar** selama 15 menit lewat `/api/publik/pesan`; perlu batas
    jumlah pesanan pending per nomor HP supaya kursi satu kapal tidak bisa "dihabiskan" orang iseng.
-5. **`typescript.ignoreBuildErrors: true`** di `next.config.ts` — error tipe tidak
+3. **`typescript.ignoreBuildErrors: true`** di `next.config.ts` — error tipe tidak
    menggagalkan build.
-6. **Kolom `password_plain` masih ada** (isinya 0 baris per 25 Nov 2026). Boleh di-drop
+4. **Kolom `password_plain` masih ada** (isinya 0 baris per 25 Nov 2026). Boleh di-drop
    setelah fallback plaintext di `lib/password.ts` dan `app/api/superadmin/tambah-penyewa`
    dibersihkan.
+5. **CSP masih mengizinkan `'unsafe-inline'` untuk skrip** — konsekuensi Next.js tanpa nonce.
+   Kalau nanti pindah ke nonce/hash, `script-src` bisa diperketat.
 
 ## Backup
 

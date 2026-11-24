@@ -134,6 +134,28 @@ export async function getProfile(opsi?: { utamakanAuth?: boolean }): Promise<Pro
   return profil
 }
 
+// ==================== MODE PRATINJAU (KHUSUS SUPERADMIN) ====================
+// Tautan dari Pusat Kontrol Superadmin memakai ?preview=true agar halaman agen
+// bisa dilihat tanpa sesi agen. Sebelumnya tanda itu dipercaya mentah-mentah:
+// siapa pun yang mengetik ?preview=true membuka halaman staf tanpa login sama
+// sekali. Sekarang pratinjau hanya sah bila browser benar-benar memegang sesi
+// Supabase Auth milik Superadmin / Admin Utama yang masih aktif.
+export async function bolehModePratinjau(): Promise<boolean> {
+  try {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser()
+    if (!user) return false
+
+    const profil = await getProfile({ utamakanAuth: true })
+    if (!profil || profil.aktif === false) return false
+
+    return profil.role === 'superadmin' || profil.role === 'admin_utama'
+  } catch {
+    return false
+  }
+}
+
 // ==================== GET OPERATOR SESSION (KHUSUS OPERATOR) ====================
 export function getOperatorSession(): Profile | null {
   if (typeof window === 'undefined') return null

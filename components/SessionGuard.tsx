@@ -3,6 +3,7 @@
 import { useEffect } from 'react'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import {
+  bolehModePratinjau,
   cekValidasiSesi,
   cekAutoLogout,
   cekStatusOperator,
@@ -18,9 +19,18 @@ export default function SessionGuard() {
 
   useEffect(() => {
     // 1. CEK MODE PREVIEW DARI SUPERADMIN
-    // Jika ada ?preview=true, jangan lakukan pengecekan sesi apapun.
+    // ?preview=true BUKAN tiket masuk gratis: harus ada sesi Supabase Auth
+    // milik Superadmin/Admin Utama (lihat bolehModePratinjau). Sebelumnya cek
+    // ini hanya `return`, sehingga siapa pun bisa membuka halaman staf tanpa
+    // login cukup dengan menambahkan ?preview=true di URL.
     const isPreview = searchParams.get('preview') === 'true'
     if (isPreview) {
+      bolehModePratinjau().then((boleh) => {
+        if (!boleh) {
+          console.log('Mode pratinjau ditolak: bukan sesi Superadmin.')
+          router.replace('/superadmin')
+        }
+      })
       return
     }
 

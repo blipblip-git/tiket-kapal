@@ -2,7 +2,7 @@
 
 import { useEffect, useState, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { supabase, getOperatorSession, type Profile } from '@/lib/supabase'
+import { supabase, getOperatorSession, bolehModePratinjau, type Profile } from '@/lib/supabase'
 import { kunciRuteJadwal, sinkronJadwalHarian } from '@/lib/jadwalHarian'
 import { nomorKursiTerpakai } from '@/lib/segmen'
 
@@ -46,20 +46,35 @@ function JualTiketAgenContent() {
   }, [])
 
   useEffect(() => {
+    const now = new Date()
+    const witaTime = new Date(now.getTime() + (8 * 60 * 60 * 1000))
+    const tanggalHariIni = witaTime.toISOString().split('T')[0]
+
     if (isPreview) {
-      setProfile({ 
-        id: 'preview', 
-        nama: 'Mode Pratinjau', 
-        role: 'agen', 
-        lokasi: 'Tarakan', 
-        email: 'preview@superadmin.com' 
-      } as Profile)
-      
-      const now = new Date()
-      const witaTime = new Date(now.getTime() + (8 * 60 * 60 * 1000))
-      setTanggal(witaTime.toISOString().split('T')[0])
-      setLoading(false)
-      return
+      // Pratinjau hanya untuk Superadmin yang benar-benar login. Tanpa cek ini,
+      // ?preview=true memalsukan profil agen di browser siapa pun sehingga
+      // halaman jual tiket terbuka tanpa sesi.
+      let dibatalkan = false
+      bolehModePratinjau().then((boleh) => {
+        if (dibatalkan) return
+        if (!boleh) {
+          router.replace('/superadmin')
+          return
+        }
+        setProfile({
+          id: 'preview',
+          nama: 'Mode Pratinjau',
+          role: 'agen',
+          lokasi: 'Tarakan',
+          email: 'preview@superadmin.com',
+        } as Profile)
+        setTanggal(tanggalHariIni)
+        setLoading(false)
+      })
+
+      return () => {
+        dibatalkan = true
+      }
     }
 
     const sesi = getOperatorSession()
@@ -68,11 +83,7 @@ function JualTiketAgenContent() {
       return
     }
     setProfile(sesi)
-
-    const now = new Date()
-    const witaTime = new Date(now.getTime() + (8 * 60 * 60 * 1000))
-    setTanggal(witaTime.toISOString().split('T')[0])
-    
+    setTanggal(tanggalHariIni)
     setLoading(false)
   }, [router, isPreview])
 
