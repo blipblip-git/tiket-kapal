@@ -429,6 +429,27 @@ function EtiketPublikContent() {
   return (
     <div className="h-[100dvh] w-full bg-gray-100 flex flex-col overflow-hidden">
       <style dangerouslySetInnerHTML={{__html: `
+        /* Denyut "jantung" untuk tulisan petunjuk biru di bawah: dua ketukan
+           kecil (lub-dub) lalu jeda - pola detak jantung - supaya mata pembeli
+           otomatis tertuju ke instruksi tanpa perlu tombol tambahan.
+           Hanya elemen teks petunjuk yang dianimasikan; gambar tiket tidak,
+           jadi gesture "tekan & tahan" pada gambarnya tetap aman. */
+        @keyframes denyut-jantung {
+          0%   { transform: scale(1);     box-shadow: 0 0 0 0 rgba(37, 99, 235, 0.55); }
+          12%  { transform: scale(1.035); box-shadow: 0 0 0 8px rgba(37, 99, 235, 0); }
+          24%  { transform: scale(1); }
+          34%  { transform: scale(1.022); box-shadow: 0 0 0 5px rgba(37, 99, 235, 0); }
+          48%  { transform: scale(1);     box-shadow: 0 0 0 0 rgba(37, 99, 235, 0); }
+          100% { transform: scale(1);     box-shadow: 0 0 0 0 rgba(37, 99, 235, 0); }
+        }
+        .animate-denyut-jantung {
+          animation: denyut-jantung 1.8s ease-in-out infinite;
+          will-change: transform;
+        }
+        @media (prefers-reduced-motion: reduce) {
+          .animate-denyut-jantung { animation: none; }
+        }
+
         @media print {
           @page { size: 58mm auto; margin: 0; }
           body { margin: 0; padding: 0; background: white; -webkit-print-color-adjust: exact; }
@@ -516,7 +537,7 @@ function EtiketPublikContent() {
               <img>, jadi tekan & tahan langsung memakai menu bawaan HP
               (Simpan gambar / Berbagi gambar / Pindai kode QR). Cara ini sama
               di HP, tablet, dan laptop - tidak bergantung pada Web Share. */}
-          <p className="bg-blue-600 text-white text-[11px] md:text-sm font-semibold text-center leading-snug rounded-md px-3 py-2">
+          <p className="animate-denyut-jantung bg-blue-600 text-white text-[11px] md:text-sm font-semibold text-center leading-snug rounded-md px-3 py-2">
             Tekan &amp; tahan gambar tiket di atas, lalu pilih
             Simpan gambar atau Berbagi gambar.
             {tiketList.length > 1 && ' Ulangi untuk tiket lainnya.'}
