@@ -32,3 +32,34 @@ export async function tangkapGambarTiket(node: HTMLElement): Promise<string> {
     style: { overflow: 'visible', margin: '0' }
   })
 }
+
+/**
+ * Ubah data URL (hasil tangkapGambarTiket) menjadi Blob TANPA fetch().
+ *
+ * Kenapa tidak `await (await fetch(dataUrl)).blob()`: fetch ke `data:` diatur
+ * oleh CSP `connect-src`. Di server ini `data:` sempat tidak diizinkan, jadi
+ * Chrome menolak dengan TypeError "Failed to fetch" walau gambarnya jelas ada -
+ * itulah pesan "Gagal menyimpan gambar: failed to fetch" di HP/tablet.
+ * Decode base64 langsung tidak menyentuh jaringan sama sekali, jadi aman
+ * berapa pun ketatnya CSP.
+ */
+export function dataUrlKeBlob(dataUrl: string): Blob {
+  const koma = dataUrl.indexOf(',')
+  if (koma === -1) throw new Error('Data gambar tidak valid.')
+
+  const kepala = dataUrl.slice(0, koma)
+  const isi = dataUrl.slice(koma + 1)
+  const tipe = /data:([^;]+)/.exec(kepala)?.[1] || 'image/png'
+
+  // Sebagian browser menghasilkan base64 dengan spasi/baris baru.
+  const biner = atob(isi.replace(/\s/g, ''))
+  const bytes = new Uint8Array(biner.length)
+  for (let i = 0; i < biner.length; i++) bytes[i] = biner.charCodeAt(i)
+
+  return new Blob([bytes], { type: tipe })
+}
+
+/** Bungkus data URL menjadi File supaya bisa dikirim lewat Web Share. */
+export function dataUrlKeFile(dataUrl: string, namaFile: string): File {
+  return new File([dataUrlKeBlob(dataUrl)], namaFile, { type: 'image/png' })
+}

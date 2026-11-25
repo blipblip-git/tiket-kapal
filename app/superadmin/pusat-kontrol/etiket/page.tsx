@@ -4,8 +4,8 @@ import { useEffect, useState, Suspense, useRef } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
 import { supabase, getProfile, getOperatorSession, type Profile } from '@/lib/supabase'
 import QRCode from 'qrcode'
-import { tangkapGambarTiket } from '@/lib/gambarTiket'
-import { jsPDF } from 'jspdf'
+import { dataUrlKeFile, tangkapGambarTiket } from '@/lib/gambarTiket'
+import { simpanTiketKePdf } from '@/lib/pdfTiket'
 import { cetakTiketThermal } from '@/lib/thermalPrinter'
 
 type Pesanan = {
@@ -77,7 +77,6 @@ function EtiketSuperadminContent() {
   const [showShareMenu, setShowShareMenu] = useState<string | null>(null)
   const [activeTiketIndex, setActiveTiketIndex] = useState(0)
 
-  const tiketRefs = useRef<{ [key: string]: HTMLDivElement | null }>({})
   const [renderData, setRenderData] = useState<TiketLengkap | null>(null)
   const renderRef = useRef<HTMLDivElement>(null)
 
@@ -285,20 +284,44 @@ function EtiketSuperadminContent() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [profile])
 
-  async function simpanPdfSatu(pesananId: string, namaPenumpang: string) {
-    const ref = tiketRefs.current[pesananId]
-    if (!ref) return
+  // Semua simpan/bagikan memakai wadah render 350px yang sama dengan halaman
+  // publik: hasilnya seragam di HP, tablet, dan laptop (tidak terpotong).
+  async function tangkapDariRender(t: TiketLengkap): Promise<string> {
+    setRenderData(t)
+
+    await new Promise((r) => setTimeout(r, 80))
+    await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)))
+    if (typeof document !== 'undefined' && document.fonts?.ready) await document.fonts.ready
+
+    const node = renderRef.current
+    if (!node) throw new Error('Area render tiket belum siap.')
+
+    await Promise.all(
+      Array.from(node.querySelectorAll('img')).map((img) =>
+        img.complete
+          ? Promise.resolve()
+          : new Promise<void>((selesai) => {
+              img.onload = () => selesai()
+              img.onerror = () => selesai()
+            })
+      )
+    )
+
     try {
-      const dataUrl = await tangkapGambarTiket(ref)
-      const namaDepan = namaPenumpang.split(' ')[0]
-      const img = new Image()
-      img.src = dataUrl
-      img.onload = () => {
-        const pdf = new jsPDF({ orientation: 'portrait', unit: 'px', format: [img.width, img.height] })
-        pdf.addImage(dataUrl, 'JPEG', 0, 0, img.width, img.height)
-        pdf.save(`${namaDepan}.pdf`)
-        setPesanShare('PDF berhasil diunduh. Silakan cek folder Unduhan/File di HP Anda.')
-      }
+      return await tangkapGambarTiket(node)
+    } finally {
+      setRenderData(null)
+    }
+  }
+
+  async function simpanPdfSatu(pesananId: string, namaPenumpang: string) {
+    const t = tiketList.find((x) => x.pesanan.id === pesananId)
+    if (!t) return
+    try {
+      const dataUrl = await tangkapDariRender(t)
+      const namaDepan = namaPenumpang.split(' ')[0] || 'Tiket'
+      await simpanTiketKePdf(dataUrl, `${namaDepan}.pdf`)
+      setPesanShare('PDF berhasil diunduh. Silakan cek folder Unduhan/File di HP Anda.')
     } catch (err) {
       console.error('Gagal generate gambar:', err)
     }
@@ -308,31 +331,18 @@ function EtiketSuperadminContent() {
     for (let i = 0; i < tiketList.length; i++) {
       const t = tiketList[i]
       setPesanShare(`Memproses tiket ${i + 1} dari ${tiketList.length}...`)
-      
-      setRenderData(t)
-      
-      await new Promise(r => setTimeout(r, 800))
 
-      if (renderRef.current) {
-        try {
-          const dataUrl = await tangkapGambarTiket(renderRef.current)
-          
-          const namaDepan = t.pesanan.nama_penumpang.split(' ')[0]
-          const img = new Image()
-          img.src = dataUrl
-          await new Promise((resolve) => { img.onload = resolve })
-
-          const pdf = new jsPDF({ orientation: 'portrait', unit: 'px', format: [img.width, img.height] })
-          pdf.addImage(dataUrl, 'JPEG', 0, 0, img.width, img.height)
-          pdf.save(`${namaDepan}.pdf`)
-        } catch (err) {
-          console.error(`Gagal memproses tiket ${i + 1}`, err)
-        }
+      try {
+        const dataUrl = await tangkapDariRender(t)
+        const namaDepan = t.pesanan.nama_penumpang.split(' ')[0] || 'Tiket'
+        await simpanTiketKePdf(dataUrl, `${namaDepan}.pdf`)
+      } catch (err) {
+        console.error(`Gagal memproses tiket ${i + 1}`, err)
       }
 
       await new Promise(r => setTimeout(r, 2000))
     }
-    
+
     setRenderData(null)
     setPesanShare('Semua PDF berhasil diunduh. Silakan cek folder Unduhan/File di HP Anda.')
   }
@@ -340,21 +350,21 @@ function EtiketSuperadminContent() {
   async function shareKe(pesananId: string, kodeTiket: string) {
     setShowShareMenu(null)
     setPesanShare('Menyiapkan gambar untuk dibagikan...')
-    
-    const ref = tiketRefs.current[pesananId]
-    if (!ref) return
+
+    const t = tiketList.find((x) => x.pesanan.id === pesananId)
+    if (!t) return
     let dataUrl: string
     try {
-      dataUrl = await tangkapGambarTiket(ref)
+      dataUrl = await tangkapDariRender(t)
     } catch {
       setPesanShare('Gagal membuat gambar tiket')
       return
     }
 
     try {
-      const res = await fetch(dataUrl)
-      const blob = await res.blob()
-      const file = new File([blob], `E-Tiket-${kodeTiket}.png`, { type: 'image/png' })
+      // Jangan pakai fetch(dataUrl): diblokir CSP connect-src dan muncul sebagai
+      // "Failed to fetch". dataUrlKeFile() men-decode base64 langsung.
+      const file = dataUrlKeFile(dataUrl, `E-Tiket-${kodeTiket}.png`)
 
       const teksPesan = `E-Tiket Kapal Anda (Kode: ${kodeTiket}). Perlihatkan gambar ini ke petugas saat boarding.`
 
@@ -570,12 +580,7 @@ function EtiketSuperadminContent() {
               Tiket #{activeTiketIndex + 1} dari {tiketList.length}
             </div>
 
-            <div
-              ref={(el) => {
-                tiketRefs.current[t.pesanan.id] = el
-              }}
-              className="bg-white"
-            >
+            <div className="bg-white">
               <TiketCard tiket={t} />
             </div>
           </div>

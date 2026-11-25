@@ -131,6 +131,21 @@ export async function cetakTiketThermal(tiket: any) {
         }
       }
 
+      // Raster QR (200x200 px) = ~5 KB, dikirim jauh lebih cepat daripada
+      // kecepatan cetak printer (9600 baud ~ 960 byte/detik). Tanpa jeda
+      // napas, buffer printer penuh dan byte paling belakang dibuang.
+      const kirimRaster = async (data: Uint8Array) => {
+        const CHUNK_SIZE = 100
+        for (let i = 0; i < data.length; i += CHUNK_SIZE) {
+          const chunk = data.slice(i, i + CHUNK_SIZE)
+          await writeCharacteristic.writeValue(chunk)
+          await new Promise(r => setTimeout(r, 10))
+          if (i > 0 && i % 1000 === 0) {
+            await new Promise(r => setTimeout(r, 80))
+          }
+        }
+      }
+
       await sendData(encoder.encode(textData))
       await sendData(encoder.encode('\x1B\x61\x01'))
 
@@ -138,21 +153,17 @@ export async function cetakTiketThermal(tiket: any) {
       for (let i = 0; i < rasterData.length; i++) {
         imageBytes[i] = rasterData.charCodeAt(i)
       }
-      await sendData(imageBytes)
-      
-      // === MOBILE: FEED + POTONG (setara desktop 72 dots) ===
-      // Printer Bluetooth murah punya buffer sendiri: kalau feed/cut dikirim
-      // beruntun, byte terakhir bisa hilang selagi printer masih mencetak raster
-      // QR -> kertas berhenti tepat di bawah barcode dan harus ditekan manual.
-      // Desktop (Web Serial 9600 baud) tidak kena karena data mengalir lambat.
-      // Jadi: beri jeda, lalu feed dua tahap + potong.
-      await new Promise((r) => setTimeout(r, 800))
-      await sendData(encoder.encode('\x1B\x64\x02')) // ESC d 2: 2 baris (~7,5 mm)
-      await new Promise((r) => setTimeout(r, 150))
-      await sendData(encoder.encode('\x1B\x4A\x18')) // ESC J 24 dots (~3 mm)
-      await new Promise((r) => setTimeout(r, 150))
-      await sendData(encoder.encode('\x1D\x56\x00')) // GS V 0: potong kertas
-      await new Promise((r) => setTimeout(r, 400)) // beri waktu potong selesai
+      await kirimRaster(imageBytes)
+
+      // === MOBILE: FEED 72 DOTS + POTONG (ANGKA FINAL, JANGAN DIUBAH) ===
+      // ESC J 72 (\x1B\x4A\x48) = 72 dot ~ 9 mm, hasil uji di printer fisik.
+      // Kalau dikirim beruntun tepat setelah raster, printer yang buffer-nya
+      // masih penuh akan membuang byte terakhir -> kertas berhenti menempel di
+      // barcode dan potongan tidak jalan. Jadi: tunggu printer selesai, lalu
+      // kirim ESC J 72 + GS V 0 dalam SATU tulisan pendek.
+      await new Promise((r) => setTimeout(r, 2500))
+      await sendData(encoder.encode('\x1B\x4A\x48\x1D\x56\x00'))
+      await new Promise((r) => setTimeout(r, 600)) // beri waktu potong selesai
 
       device.gatt.disconnect()
       

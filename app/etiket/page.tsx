@@ -5,8 +5,8 @@ import { useSearchParams, useRouter } from 'next/navigation'
 import { supabase, getOperatorSession } from '@/lib/supabase'
 import { ambilPesananPublik, type PesananPublik } from '@/lib/publikPesanan'
 import QRCode from 'qrcode'
-import { tangkapGambarTiket } from '@/lib/gambarTiket'
-import { jsPDF } from 'jspdf'
+import { dataUrlKeFile, tangkapGambarTiket } from '@/lib/gambarTiket'
+import { simpanTiketKePdf } from '@/lib/pdfTiket'
 
 type Detail = {
   rute_asal: string
@@ -151,9 +151,12 @@ function EtiketPublikContent() {
   const [error, setError] = useState('')
   const [pesanShare, setPesanShare] = useState('')
   const [showShareMenu, setShowShareMenu] = useState<string | null>(null)
+  // Ditampilkan kalau browser tidak punya Web Share (mis. browser bawaan
+  // Huawei): gambar diperlihatkan besar supaya bisa "tekan & tahan -> Simpan
+  // gambar", satu-satunya cara yang pasti masuk ke Galeri.
+  const [pratinjau, setPratinjau] = useState<{ dataUrl: string; kodeTiket: string } | null>(null)
   const [activeTiketIndex, setActiveTiketIndex] = useState(0)
 
-  const tiketRefs = useRef<{ [key: string]: HTMLDivElement | null }>({})
   const [renderData, setRenderData] = useState<TiketLengkap | null>(null)
   const renderRef = useRef<HTMLDivElement>(null)
 
@@ -277,22 +280,49 @@ function EtiketPublikContent() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  async function simpanPdfSatu(pesananId: string, namaPenumpang: string, kodeTiket: string) {
-    const ref = tiketRefs.current[pesananId]
-    if (!ref) return
+  // Semua tombol simpan/bagikan mengambil gambar dari SATU sumber: kartu
+  // tersembunyi selebar 350px (wadah yang sama dengan "Simpan Semua Tiket").
+  // Kartu yang tampil ikut aturan `md:` milik layar, sehingga di tablet hasil
+  // tangkapannya bisa lebih lebar dan terpotong; dengan lebar tetap, hasil di
+  // HP, tablet, dan laptop sama persis.
+  async function tangkapDariRender(t: TiketLengkap): Promise<string> {
+    setRenderData(t)
+
+    // Biarkan React memasang wadah + QR (data URL) ter-decode lebih dulu.
+    await new Promise((r) => setTimeout(r, 80))
+    await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)))
+    if (typeof document !== 'undefined' && document.fonts?.ready) await document.fonts.ready
+
+    const node = renderRef.current
+    if (!node) throw new Error('Area render tiket belum siap.')
+
+    await Promise.all(
+      Array.from(node.querySelectorAll('img')).map((img) =>
+        img.complete
+          ? Promise.resolve()
+          : new Promise<void>((selesai) => {
+              img.onload = () => selesai()
+              img.onerror = () => selesai()
+            })
+      )
+    )
+
     try {
-      const dataUrl = await tangkapGambarTiket(ref)
-      const namaDepan = namaPenumpang.split(' ')[0]
-      const img = new Image()
-      img.src = dataUrl
-      img.onload = () => {
-        const pdf = new jsPDF({ orientation: 'portrait', unit: 'px', format: [img.width, img.height] })
-        pdf.addImage(dataUrl, 'JPEG', 0, 0, img.width, img.height)
-        pdf.save(`${namaDepan}-${kodeTiket}.pdf`)
-        setPesanShare('PDF berhasil diunduh. Silakan cek folder Unduhan/File di HP Anda.')
-      }
+      return await tangkapGambarTiket(node)
+    } finally {
+      setRenderData(null)
+    }
+  }
+
+  async function simpanPdfSatu(t: TiketLengkap) {
+    setPesanShare('Menyiapkan PDF tiket...')
+    try {
+      const dataUrl = await tangkapDariRender(t)
+      const namaDepan = t.pesanan.nama_penumpang.split(' ')[0] || 'Tiket'
+      await simpanTiketKePdf(dataUrl, `${namaDepan}-${t.pesanan.kode_tiket}.pdf`)
+      setPesanShare('PDF berhasil diunduh. Silakan cek folder Unduhan/File di HP Anda.')
     } catch (err) {
-      console.error('Gagal generate gambar:', err)
+      console.error('Gagal membuat PDF:', err)
       setPesanShare('Gagal membuat PDF tiket.')
     }
   }
@@ -302,25 +332,12 @@ function EtiketPublikContent() {
       const t = tiketList[i]
       setPesanShare(`Memproses tiket ${i + 1} dari ${tiketList.length}...`)
 
-      setRenderData(t)
-
-      await new Promise((r) => setTimeout(r, 800))
-
-      if (renderRef.current) {
-        try {
-          const dataUrl = await tangkapGambarTiket(renderRef.current)
-
-          const namaDepan = t.pesanan.nama_penumpang.split(' ')[0]
-          const img = new Image()
-          img.src = dataUrl
-          await new Promise((resolve) => { img.onload = resolve })
-
-          const pdf = new jsPDF({ orientation: 'portrait', unit: 'px', format: [img.width, img.height] })
-          pdf.addImage(dataUrl, 'JPEG', 0, 0, img.width, img.height)
-          pdf.save(`${namaDepan}-${t.pesanan.kode_tiket}.pdf`)
-        } catch (err) {
-          console.error(`Gagal memproses tiket ${i + 1}`, err)
-        }
+      try {
+        const dataUrl = await tangkapDariRender(t)
+        const namaDepan = t.pesanan.nama_penumpang.split(' ')[0] || 'Tiket'
+        await simpanTiketKePdf(dataUrl, `${namaDepan}-${t.pesanan.kode_tiket}.pdf`)
+      } catch (err) {
+        console.error(`Gagal memproses tiket ${i + 1}`, err)
       }
 
       await new Promise((r) => setTimeout(r, 2000))
@@ -330,48 +347,44 @@ function EtiketPublikContent() {
     setPesanShare('Semua PDF berhasil diunduh. Silakan cek folder Unduhan/File di HP Anda.')
   }
 
-  async function shareKe(pesananId: string, kodeTiket: string) {
+  async function shareKe(t: TiketLengkap) {
     setShowShareMenu(null)
     setPesanShare('Menyiapkan gambar untuk dibagikan...')
 
-    const ref = tiketRefs.current[pesananId]
-    if (!ref) return
-
     let dataUrl: string
     try {
-      dataUrl = await tangkapGambarTiket(ref)
+      dataUrl = await tangkapDariRender(t)
     } catch {
-      setPesanShare('Gagal membuat gambar tiket')
+      setPesanShare('Gagal membuat gambar tiket.')
       return
     }
 
-    try {
-      const res = await fetch(dataUrl)
-      const blob = await res.blob()
-      const file = new File([blob], `E-Tiket-${kodeTiket}.png`, { type: 'image/png' })
+    const kodeTiket = t.pesanan.kode_tiket
 
+    try {
+      const file = dataUrlKeFile(dataUrl, `E-Tiket-${kodeTiket}.png`)
       const teksPesan = `E-Tiket Kapal Anda (Kode: ${kodeTiket}). Perlihatkan gambar ini ke petugas saat boarding.`
 
-      if (navigator.canShare && navigator.canShare({ files: [file] })) {
+      if (typeof navigator.canShare === 'function' && navigator.canShare({ files: [file] })) {
         await navigator.share({
           files: [file],
           title: 'E-Tiket Kapal',
           text: teksPesan
         })
         setPesanShare('Gambar tiket berhasil dibagikan. Cek di Galeri Foto atau WhatsApp.')
-      } else {
-        const link = document.createElement('a')
-        link.download = `E-Tiket-${kodeTiket}.png`
-        link.href = dataUrl
-        link.click()
-        setPesanShare('Gambar tiket berhasil diunduh. Cek di Galeri Foto HP Anda.')
+        return
       }
+
+      // Tanpa Web Share (mis. WebView WhatsApp / browser bawaan Huawei):
+      // tampilkan gambarnya supaya bisa "tekan & tahan -> Simpan gambar".
+      setPratinjau({ dataUrl, kodeTiket })
+      setPesanShare('')
     } catch (err) {
-      console.error(err)
       const e = err as { name?: string; message?: string }
-      if (e.name !== 'AbortError') {
-        setPesanShare('Gagal membagikan gambar: ' + (e.message || 'Kesalahan tidak diketahui'))
-      }
+      if (e.name === 'AbortError') return
+      console.error(err)
+      setPratinjau({ dataUrl, kodeTiket })
+      setPesanShare('')
     }
   }
 
@@ -380,26 +393,29 @@ function EtiketPublikContent() {
   // resmi adalah lembar berbagi (Share) lalu pilih "Simpan ke Foto"/Google
   // Photos. Tombol ini melakukan itu, dan tetap menyediakan unduhan biasa
   // sebagai cadangan kalau browser tidak mendukung berbagi berkas.
-  async function simpanKeGaleri(pesananId: string, kodeTiket: string) {
+  // Gambar TIDAK bisa langsung "masuk Galeri" lewat <a download>: atribut itu
+  // selalu mendarat di folder Unduhan/File. Jalan resminya adalah Web Share
+  // (lembar berbagi) -> "Simpan ke Foto"/Google Photos. Browser bawaan Huawei
+  // dan WebView WhatsApp tidak punya Web Share berkas, jadi sebagai cadangan
+  // gambar ditampilkan besar: "tekan & tahan -> Simpan gambar" berfungsi di
+  // semua Android dan hasilnya masuk Galeri.
+  async function simpanKeGaleri(t: TiketLengkap) {
     setPesanShare('Menyiapkan gambar tiket...')
-
-    const ref = tiketRefs.current[pesananId]
-    if (!ref) return
 
     let dataUrl: string
     try {
-      dataUrl = await tangkapGambarTiket(ref)
+      dataUrl = await tangkapDariRender(t)
     } catch {
       setPesanShare('Gagal membuat gambar tiket.')
       return
     }
 
-    try {
-      const blob = await (await fetch(dataUrl)).blob()
-      const file = new File([blob], `E-Tiket-${kodeTiket}.png`, { type: 'image/png' })
-      const bisaBagikanFile = typeof navigator.canShare === 'function' && navigator.canShare({ files: [file] })
+    const kodeTiket = t.pesanan.kode_tiket
 
-      if (bisaBagikanFile) {
+    try {
+      const file = dataUrlKeFile(dataUrl, `E-Tiket-${kodeTiket}.png`)
+
+      if (typeof navigator.canShare === 'function' && navigator.canShare({ files: [file] })) {
         await navigator.share({
           files: [file],
           title: 'E-Tiket Kapal',
@@ -409,11 +425,8 @@ function EtiketPublikContent() {
         return
       }
 
-      const link = document.createElement('a')
-      link.download = `E-Tiket-${kodeTiket}.png`
-      link.href = dataUrl
-      link.click()
-      setPesanShare('Browser ini belum bisa simpan langsung ke Galeri. Gambar ada di folder Unduhan/File - buka lewat aplikasi File lalu pilih "Pindahkan ke Galeri".')
+      setPratinjau({ dataUrl, kodeTiket })
+      setPesanShare('')
     } catch (err) {
       const e = err as { name?: string; message?: string }
       if (e.name === 'AbortError') {
@@ -421,7 +434,9 @@ function EtiketPublikContent() {
         return
       }
       console.error(err)
-      setPesanShare('Gagal menyimpan gambar: ' + (e.message || 'Kesalahan tidak diketahui'))
+      // Jangan berhenti di pesan error: beri jalan yang pasti bisa dipakai.
+      setPratinjau({ dataUrl, kodeTiket })
+      setPesanShare('')
     }
   }
 
@@ -537,12 +552,7 @@ function EtiketPublikContent() {
               Tiket #{activeTiketIndex + 1} dari {tiketList.length}
             </div>
 
-            <div
-              ref={(el) => {
-                tiketRefs.current[t.pesanan.id] = el
-              }}
-              className="bg-white"
-            >
+            <div className="bg-white">
               <TiketCard tiket={t} detail={detail} />
             </div>
           </div>
@@ -553,7 +563,7 @@ function EtiketPublikContent() {
         <div className="max-w-md mx-auto p-3 md:p-4 space-y-2">
           <div className="grid grid-cols-2 gap-2">
             <button
-              onClick={() => simpanKeGaleri(t.pesanan.id, t.pesanan.kode_tiket)}
+              onClick={() => simpanKeGaleri(t)}
               className={`bg-blue-600 text-white py-2 md:py-2.5 rounded-md hover:bg-blue-700 text-[11px] md:text-sm font-bold shadow-sm transition-colors ${
                 tiketList.length === 1 ? 'animate-heartbeat-blue' : ''
               }`}
@@ -562,7 +572,7 @@ function EtiketPublikContent() {
             </button>
 
             <button
-              onClick={() => simpanPdfSatu(t.pesanan.id, t.pesanan.nama_penumpang, t.pesanan.kode_tiket)}
+              onClick={() => simpanPdfSatu(t)}
               className="bg-white text-blue-700 border border-blue-600 py-2 md:py-2.5 rounded-md hover:bg-blue-50 text-[11px] md:text-sm font-bold shadow-sm transition-colors"
             >
               Simpan PDF
@@ -594,7 +604,7 @@ function EtiketPublikContent() {
             {showShareMenu === t.pesanan.id && (
               <div className="absolute bottom-12 left-0 right-0 bg-white border border-gray-200 rounded-lg shadow-xl p-2 z-50 flex justify-center">
                 <button
-                  onClick={() => shareKe(t.pesanan.id, t.pesanan.kode_tiket)}
+                  onClick={() => shareKe(t)}
                   className="flex flex-col items-center p-2 hover:bg-gray-50 rounded w-full"
                 >
                   <span className="text-[10px] md:text-xs font-medium text-gray-700">Bagikan Gambar (WA/TG)</span>
@@ -612,6 +622,47 @@ function EtiketPublikContent() {
           </div>
         )}
       </div>
+
+      {pratinjau && (
+        <div
+          className="fixed inset-0 z-50 bg-black/70 flex items-start justify-center p-3 overflow-y-auto print-hidden"
+          role="dialog"
+          aria-modal="true"
+        >
+          <div className="bg-white rounded-lg p-3 w-full max-w-md mt-6">
+            <p className="text-[12px] text-gray-900 font-medium text-center leading-snug">
+              Tekan &amp; tahan gambar di bawah, lalu pilih <b>Simpan gambar</b> supaya masuk Galeri.
+            </p>
+
+            <img
+              src={pratinjau.dataUrl}
+              alt={`E-Tiket ${pratinjau.kodeTiket}`}
+              className="w-full h-auto mt-2 border border-gray-200 rounded"
+            />
+
+            <div className="grid grid-cols-2 gap-2 mt-3">
+              <a
+                href={pratinjau.dataUrl}
+                download={`E-Tiket-${pratinjau.kodeTiket}.png`}
+                className="bg-blue-600 text-white text-center py-2 rounded-md text-xs font-bold"
+              >
+                Unduh Gambar
+              </a>
+              <button
+                onClick={() => setPratinjau(null)}
+                className="bg-gray-200 text-gray-800 py-2 rounded-md text-xs font-bold"
+              >
+                Tutup
+              </button>
+            </div>
+
+            <p className="text-[10px] text-gray-500 text-center mt-2 leading-snug">
+              Browser ini tidak punya lembar berbagi. Tekan &amp; tahan gambar = cara paling cepat
+              menyimpan ke Galeri; tombol Unduh Gambar menyimpan ke folder Unduhan/File.
+            </p>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

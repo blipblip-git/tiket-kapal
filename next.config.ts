@@ -41,7 +41,11 @@ const nextConfig: NextConfig = {
       "img-src 'self' data: blob: https://*.supabase.co",
       "font-src 'self' data:",
       // Supabase (REST + realtime/WSS) dan aset OCR (worker, wasm, data bahasa).
-      "connect-src 'self' https://*.supabase.co wss://*.supabase.co https://cdn.jsdelivr.net https://unpkg.com https://tessdata.projectnaptha.com",
+      // `data:` + `blob:` wajib ada: e-tiket mengubah kartu HTML menjadi PNG
+      // lewat html-to-image, lalu hasilnya (data URL) diolah lagi di browser
+      // (fetch/blob untuk Web Share). Tanpa dua skema ini fetch(dataURL) ditolak
+      // browser dengan "Failed to fetch" walau kode aplikasinya benar.
+      "connect-src 'self' data: blob: https://*.supabase.co wss://*.supabase.co https://cdn.jsdelivr.net https://unpkg.com https://tessdata.projectnaptha.com",
       "worker-src 'self' blob:",
       // Cetak memakai window.print(), tapi html2canvas/html-to-image membuat
       // iframe/blob sementara — 'self' + blob: cukup, tanpa membuka situs luar.

@@ -109,7 +109,7 @@ upload harus lewat staf yang sudah login, dan ukuran/tipe file wajib dibatasi di
 
 | Header | Nilai |
 |---|---|
-| `Content-Security-Policy` | `default-src 'self'`; `script-src` izinkan `'unsafe-inline'` (bootstrap Next.js) + `'wasm-unsafe-eval'` (tesseract OCR) + jsdelivr/unpkg; `connect-src` ke `*.supabase.co` & `wss:`; `worker-src blob:`; `frame-ancestors 'none'`; `object-src 'none'`; `base-uri 'self'`; `form-action 'self'` |
+| `Content-Security-Policy` | `default-src 'self'`; `script-src` izinkan `'unsafe-inline'` (bootstrap Next.js) + `'wasm-unsafe-eval'` (tesseract OCR) + jsdelivr/unpkg; `connect-src` ke `*.supabase.co`, `wss:`, `data:` & `blob:` (e-tiket mengolah PNG hasil html-to-image di browser); `worker-src blob:`; `frame-ancestors 'none'`; `object-src 'none'`; `base-uri 'self'`; `form-action 'self'` |
 | `X-Frame-Options` | `DENY` |
 | `X-Content-Type-Options` | `nosniff` |
 | `Referrer-Policy` | `strict-origin-when-cross-origin` |
@@ -161,6 +161,43 @@ HTTP 429 bila totalnya akan melewati batas.
 Sisa risiko: nomor HP belum diverifikasi OTP, jadi penyerang masih bisa memakai
 banyak nomor acak. Batas ini menaikkan biaya serangan (satu nomor = satu
 pesanan), bukan menutupnya; penutup penuh butuh OTP atau pembayaran di muka.
+
+## Tahap 3e (SUDAH DITERAPKAN 25 Nov 2026) — isian pembeli & berkas e-tiket
+
+Tiga keluhan produksi yang bukan soal kebocoran data, tapi tetap berdampak pada
+keamanan operasional (penjualan hilang) dan kebocoran informasi ke layar pembeli:
+
+- **Salah isi NIK tidak lagi melempar pembeli ke Beranda.** Di `/form`, satu state
+  `error` dipakai untuk dua hal sekaligus: gagal memuat jadwal/kursi (fatal) dan
+  isian kurang tepat. Akibatnya satu NIK 15 digit mengganti seluruh form dengan
+  layar "Kembali ke Beranda" dan semua isian hilang. Sekarang `error` hanya untuk
+  kegagalan muat, sedangkan `errorForm` menampilkan pesan di dekat tombol, form
+  tetap terpasang, dan fokus berpindah ke kolom yang salah.
+- **"Gagal menyimpan gambar: Failed to fetch" bukan bug jaringan.** `fetch()` ke
+  `data:` URL diatur CSP `connect-src`; karena skema `data:` belum diizinkan,
+  Chrome menolak sebelum aplikasi sempat memproses gambar. Sekarang blob dibuat
+  dengan decode base64 lokal (`dataUrlKeBlob()` di `lib/gambarTiket.ts`, tanpa
+  jaringan) **dan** `connect-src` mengizinkan `data:`/`blob:` untuk kebutuhan lain.
+  Untuk browser tanpa Web Share (mis. bawaan Huawei), gambar ditampilkan besar
+  agar bisa "tekan & tahan → Simpan gambar".
+- **PDF e-tiket terpotong di sisi kanan.** Bukan masalah tangkapan layar: jsPDF
+  dengan `orientation: 'portrait'` selalu menaruh sisi **terpendek** sebagai lebar
+  halaman. Tiket yang lebih lebar daripada tinggi (kartu pendek) diletakkan pada
+  halaman yang lebih sempit, sehingga gambar keluar halaman dan terlihat
+  terpotong (paling kentara di tablet). Sekarang `lib/pdfTiket.ts` memilih
+  orientasi sesuai bentuk gambar; halaman dan gambar jadi sama persis.
+- **Gambar & PDF diambil dari satu wadah tetap 350px** (`tangkapDariRender()`),
+  bukan dari kartu yang sedang tampil. Kartu tampil ikut aturan `md:` milik
+  layar, sehingga hasil tangkapan berbeda antara HP dan tablet.
+
+Bukti uji (Chrome headless, emulasi HP 390×844@3, tablet 1024×1366@2, laptop
+1440×900@1): gambar 704×668 (HP) dan 704×992 (tablet/laptop) dengan kolom paling
+kanan & kiri putih penuh (tidak terpotong); PDF `MediaBox 938,67×890,67 pt`
+untuk gambar 704×668 dan `938,67×1322,67 pt` untuk 704×992 — rasio halaman sama
+dengan gambar. Sebelum perbaikan, halaman 704×668 adalah `890,67×938,67 pt`
+(tertukar → sisi kanan terpotong 36 px). `/form`: NIK 5 digit → tetap di `/form`,
+NIK & nama & HP utuh, pesan "harus 16 digit"; ditolak server ("Nomor HP tidak
+valid") → form tetap utuh juga.
 
 ## Masih terbuka (belum diperbaiki)
 
