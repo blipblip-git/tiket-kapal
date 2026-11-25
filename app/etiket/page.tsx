@@ -429,25 +429,30 @@ function EtiketPublikContent() {
   return (
     <div className="h-[100dvh] w-full bg-gray-100 flex flex-col overflow-hidden">
       <style dangerouslySetInnerHTML={{__html: `
-        /* Denyut "jantung" untuk tulisan petunjuk biru di bawah: dua ketukan
-           kecil (lub-dub) lalu jeda - pola detak jantung - supaya mata pembeli
-           otomatis tertuju ke instruksi tanpa perlu tombol tambahan.
-           Hanya elemen teks petunjuk yang dianimasikan; gambar tiket tidak,
-           jadi gesture "tekan & tahan" pada gambarnya tetap aman. */
-        @keyframes denyut-jantung {
-          0%   { transform: scale(1);     box-shadow: 0 0 0 0 rgba(37, 99, 235, 0.55); }
-          12%  { transform: scale(1.035); box-shadow: 0 0 0 8px rgba(37, 99, 235, 0); }
-          24%  { transform: scale(1); }
-          34%  { transform: scale(1.022); box-shadow: 0 0 0 5px rgba(37, 99, 235, 0); }
-          48%  { transform: scale(1);     box-shadow: 0 0 0 0 rgba(37, 99, 235, 0); }
-          100% { transform: scale(1);     box-shadow: 0 0 0 0 rgba(37, 99, 235, 0); }
+        /* Lampu kedip untuk tulisan petunjuk merah di bawah: bar merah dengan
+           cahaya yang berkedip seperti lampu indikator. Tidak ada perubahan
+           ukuran (scale) sama sekali, jadi teks tidak bergoyang - hanya
+           cahayanya yang hidup-mati. Hanya elemen teks petunjuk yang
+           dianimasikan; gambar tiket tidak, jadi gesture "tekan & tahan"
+           pada gambarnya tetap aman. */
+        @keyframes lampu-kedip {
+          0%, 100% {
+            box-shadow: 0 0 8px 1px rgba(248, 113, 113, 0.30),
+                        inset 0 0 0 0 rgba(255, 255, 255, 0);
+          }
+          50% {
+            box-shadow: 0 0 22px 7px rgba(248, 113, 113, 0.85),
+                        inset 0 0 14px 0 rgba(255, 255, 255, 0.28);
+          }
         }
-        .animate-denyut-jantung {
-          animation: denyut-jantung 1.8s ease-in-out infinite;
-          will-change: transform;
+        .animate-lampu-kedip {
+          animation: lampu-kedip 1.3s ease-in-out infinite;
         }
         @media (prefers-reduced-motion: reduce) {
-          .animate-denyut-jantung { animation: none; }
+          .animate-lampu-kedip {
+            animation: none;
+            box-shadow: 0 0 8px 1px rgba(248, 113, 113, 0.30);
+          }
         }
 
         @media print {
@@ -537,10 +542,9 @@ function EtiketPublikContent() {
               <img>, jadi tekan & tahan langsung memakai menu bawaan HP
               (Simpan gambar / Berbagi gambar / Pindai kode QR). Cara ini sama
               di HP, tablet, dan laptop - tidak bergantung pada Web Share. */}
-          <p className="animate-denyut-jantung bg-blue-600 text-white text-[11px] md:text-sm font-semibold text-center leading-snug rounded-md px-3 py-2">
-            Tekan &amp; tahan gambar tiket di atas, lalu pilih
-            Simpan gambar atau Berbagi gambar.
-            {tiketList.length > 1 && ' Ulangi untuk tiket lainnya.'}
+          <p className="animate-lampu-kedip bg-red-600 text-white text-[11px] md:text-sm font-semibold text-center leading-snug rounded-md px-3 py-2 border border-red-400/70">
+            Tekan &amp; tahan e-tiket di atas untuk Simpan / Berbagi gambar
+            {tiketList.length > 1 && ' — ulangi untuk tiket lainnya.'}
           </p>
 
           {/* PDF disembunyikan di HP: hasilnya selalu mendarat di folder
