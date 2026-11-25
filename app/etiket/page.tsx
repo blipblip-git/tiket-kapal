@@ -5,7 +5,7 @@ import { useSearchParams, useRouter } from 'next/navigation'
 import { supabase, getOperatorSession } from '@/lib/supabase'
 import { ambilPesananPublik, type PesananPublik } from '@/lib/publikPesanan'
 import QRCode from 'qrcode'
-import { tangkapGambarTiket } from '@/lib/gambarTiket'
+import { dataUrlKeBlob, tangkapGambarTiket } from '@/lib/gambarTiket'
 import { simpanTiketKePdf } from '@/lib/pdfTiket'
 
 type Detail = {
@@ -156,6 +156,9 @@ function EtiketPublikContent() {
   // Dulu yang <img> cuma QR-nya, jadi nama/rute/harga tidak bisa disimpan.
   // Kuncinya kode_tiket supaya tiap tiket punya gambar sendiri.
   const [gambarTiket, setGambarTiket] = useState<Record<string, string>>({})
+  // Pesan hasil "ketuk bar biru" (salin ke clipboard) - ditampilkan tepat di
+  // bawah bar supaya terlihat tanpa perlu menggulir ke atas.
+  const [pesanSalin, setPesanSalin] = useState('')
   const [activeTiketIndex, setActiveTiketIndex] = useState(0)
 
   const [renderData, setRenderData] = useState<TiketLengkap | null>(null)
@@ -357,6 +360,40 @@ function EtiketPublikContent() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [detail, tiketList])
 
+  // Ketuk bar biru = salin gambar tiket ke clipboard. Ini satu-satunya aksi
+  // "sekali ketuk" yang benar-benar jalan di tablet (mis. Honor Pad X7) dan
+  // browser bawaan Huawei: lembar Web Share di sana bisa kosong karena tidak
+  // ada WhatsApp/Telegram, dan browser tidak boleh menulis langsung ke Galeri.
+  async function salinGambarTiket(kode: string) {
+    const dataUrl = gambarTiket[kode]
+
+    if (!dataUrl) {
+      setPesanSalin('Gambar tiket masih disiapkan, ketuk lagi sebentar.')
+      return
+    }
+
+    if (
+      typeof navigator === 'undefined' ||
+      !navigator.clipboard ||
+      typeof navigator.clipboard.write !== 'function' ||
+      typeof ClipboardItem === 'undefined'
+    ) {
+      setPesanSalin('Browser ini belum bisa menyalin gambar. Tekan & tahan gambar tiket, lalu pilih Simpan gambar.')
+      return
+    }
+
+    try {
+      await navigator.clipboard.write([new ClipboardItem({ 'image/png': dataUrlKeBlob(dataUrl) })])
+      setPesanSalin('Gambar tiket disalin. Buka WhatsApp/Telegram lalu tempel (paste).')
+      window.setTimeout(() => setPesanSalin(''), 6000)
+    } catch (err) {
+      // Butuh HTTPS + izin clipboard; kalau ditolak, arahkan ke jalan yang
+      // selalu tersedia: tekan & tahan gambarnya.
+      console.error('Gagal menyalin gambar tiket:', err)
+      setPesanSalin('Gagal menyalin. Tekan & tahan gambar tiket, lalu pilih Simpan gambar.')
+    }
+  }
+
   async function simpanPdfSatu(t: TiketLengkap) {
     setPesanShare('Menyiapkan PDF tiket...')
     try {
@@ -429,6 +466,22 @@ function EtiketPublikContent() {
   return (
     <div className="h-[100dvh] w-full bg-gray-100 flex flex-col overflow-hidden">
       <style dangerouslySetInnerHTML={{__html: `
+        /* Denyut "jantung" bar biru di bawah. Sengaja hanya opacity +
+           transform pada lapisan hiasan di BELAKANG bar (pointer-events:
+           none), bukan pada gambarnya: elemen yang ikut bergeser saat ditekan
+           lama bisa membatalkan gesture "Simpan gambar" bawaan sistem.
+           Berhenti sendiri setelah 5 denyut supaya tidak mengganggu saat
+           tiket sedang ditunjukkan ke petugas. */
+        @keyframes denyut-tiket {
+          0%   { transform: scale(1);    opacity: 0.85; }
+          60%  { transform: scale(1.05); opacity: 0;    }
+          100% { transform: scale(1);    opacity: 0;    }
+        }
+        .animate-denyut-tiket { animation: denyut-tiket 1.6s ease-out 5; }
+        @media (prefers-reduced-motion: reduce) {
+          .animate-denyut-tiket { animation: none; }
+        }
+
         @media print {
           @page { size: 58mm auto; margin: 0; }
           body { margin: 0; padding: 0; background: white; -webkit-print-color-adjust: exact; }
@@ -512,15 +565,58 @@ function EtiketPublikContent() {
 
       <div className="flex-shrink-0 bg-white border-t border-gray-200 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)] z-20 print-hidden relative">
         <div className="max-w-md mx-auto px-3 py-2 md:px-4 md:py-3 space-y-2">
-          {/* Tanpa tombol simpan/share: gambar tiket di atas sudah berupa
-              <img>, jadi tekan & tahan langsung memakai menu bawaan HP
-              (Simpan gambar / Berbagi gambar / Pindai kode QR). Cara ini sama
-              di HP, tablet, dan laptop - tidak bergantung pada Web Share. */}
-          <p className="bg-blue-600 text-white text-[11px] md:text-sm font-semibold text-center leading-snug rounded-md px-3 py-2">
-            Tekan &amp; tahan gambar tiket di atas, lalu pilih
-            Simpan gambar atau Berbagi gambar.
-            {tiketList.length > 1 && ' Ulangi untuk tiket lainnya.'}
-          </p>
+          {/* Bar biru = pengganti "tekan di body e-tiket", karena di dalamnya
+              ada <img> mini tiket. Ketuk = salin gambar ke clipboard (jalan di
+              tablet maupun HP Huawei), tekan & tahan = menu bawaan sistem
+              (Simpan gambar / Berbagi gambar / Pindai kode QR) untuk gambar
+              tiket resolusi penuh - bukan gambar mini ini. */}
+          <div className="relative">
+            <span
+              key={t.pesanan.kode_tiket}
+              aria-hidden="true"
+              className="pointer-events-none absolute inset-0 rounded-lg bg-blue-500/40 opacity-0 animate-denyut-tiket"
+            />
+
+            <div
+              onClick={() => salinGambarTiket(t.pesanan.kode_tiket)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault()
+                  salinGambarTiket(t.pesanan.kode_tiket)
+                }
+              }}
+              role="button"
+              tabIndex={0}
+              title="Ketuk: salin gambar. Tekan & tahan: Simpan / Berbagi gambar."
+              className="relative flex items-center gap-2.5 rounded-lg bg-blue-600 px-3 py-2 md:px-4 md:py-2.5 text-white cursor-pointer active:bg-blue-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-300"
+            >
+              {gambarTiket[t.pesanan.kode_tiket] ? (
+                <img
+                  src={gambarTiket[t.pesanan.kode_tiket]}
+                  alt={`E-Tiket ${t.pesanan.kode_tiket}`}
+                  className="h-14 md:h-16 w-auto flex-shrink-0 rounded border border-white/70 bg-white"
+                />
+              ) : (
+                <span className="h-14 w-10 md:h-16 md:w-11 flex-shrink-0 rounded border border-white/70 bg-white/20" />
+              )}
+
+              <div className="min-w-0">
+                <p className="text-[11px] md:text-sm font-bold leading-tight">
+                  Simpan / Bagikan E-Tiket
+                </p>
+                <p className="text-[10px] md:text-xs leading-snug mt-0.5 text-blue-50">
+                  Ketuk = salin gambar &middot; Tekan &amp; tahan = Simpan / Berbagi
+                  {tiketList.length > 1 && <span className="hidden md:inline"> &middot; Ulangi untuk tiket lain</span>}
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {pesanSalin && (
+            <p className="text-[10px] md:text-xs text-center leading-snug text-blue-900 bg-blue-50 border border-blue-200 rounded px-2 py-1">
+              {pesanSalin}
+            </p>
+          )}
 
           {/* PDF disembunyikan di HP: hasilnya selalu mendarat di folder
               Unduhan/File (bukan Galeri) dan susah dibuka pembeli. Di
