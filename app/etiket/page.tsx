@@ -29,37 +29,6 @@ type BarisTiket = {
   anak: PesananPublik[]
 }
 
-// Logo WhatsApp & Telegram digambar sendiri (SVG inline) supaya tidak perlu
-// menambah paket ikon - bundle tetap kecil. Warna aslinya dipertahankan agar
-// pembeli langsung tahu tombol mana menuju aplikasi mana.
-function IkonWhatsApp({ className = '' }: { className?: string }) {
-  return (
-    <svg viewBox="0 0 24 24" className={className} aria-hidden="true">
-      <circle cx="12" cy="12" r="12" fill="#25D366" />
-      <path
-        d="M12 4.7c-1.9 0-3.7.8-5 2.1a7.2 7.2 0 00-2.1 5.1c0 1.2.3 2.4.9 3.5L4.7 19l3.8-1a7.2 7.2 0 003.5.9c4 0 7.2-3.2 7.2-7.1 0-4-3.2-7.1-7.2-7.1z"
-        fill="#fff"
-      />
-      <path
-        d="M10.3 8.3c.2 0 .4.1.5.3l.4.9c.1.2.1.4-.1.5l-.4.4c-.1.1-.2.2-.1.4.3.5.7 1 1.2 1.4.5.4 1 .7 1.4.9.2.1.3 0 .4-.1l.4-.4c.1-.2.3-.2.5-.1l.9.4c.2.1.3.3.3.5v.6c0 .3-.1.6-.4.8-.3.2-.7.3-1.1.3-.8 0-2-.4-3.2-1.5-1.1-1.1-1.6-2.2-1.7-2.9-.1-.5 0-1 .3-1.4l.5-.6c.1-.1.2-.2.4-.2z"
-        fill="#25D366"
-      />
-    </svg>
-  )
-}
-
-function IkonTelegram({ className = '' }: { className?: string }) {
-  return (
-    <svg viewBox="0 0 24 24" className={className} aria-hidden="true">
-      <circle cx="12" cy="12" r="12" fill="#229ED9" />
-      <path
-        d="M18.4 7.1 5.9 11.9c-.9.3-.9.9-.1 1.1l3 .9 1.1 3.4c.1.4.3.5.6.5.3 0 .5-.1.7-.3l1.6-1.5 3 2.2c.5.3 1 .1 1.1-.5l1.9-9.1c.2-.7-.3-1-.9-.5z"
-        fill="#fff"
-      />
-    </svg>
-  )
-}
-
 function LayarMemuat({ teks }: { teks: string }) {
   return (
     <div className="min-h-[100dvh] bg-gray-50 flex flex-col items-center justify-center">
@@ -628,44 +597,27 @@ function EtiketPublikContent() {
 
       <div className="flex-shrink-0 bg-white border-t border-gray-200 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)] z-20 print-hidden relative">
         <div className="max-w-md mx-auto p-3 md:p-4 space-y-2">
-          {/* Simpan di kiri sebagai aksi utama: hasilnya langsung masuk Galeri
-              dan itu yang paling sering dipakai pembeli. Kirim/share di kanan,
-              lengkap dengan logo WhatsApp & Telegram supaya tujuan tombolnya
-              langsung terbaca (logo besar = tidak perlu baca tulisan). */}
-          <div className="flex gap-2 items-stretch">
+          <div className="grid grid-cols-2 gap-2">
             <button
-              onClick={() => simpanKeGaleri(t)}
-              className={`flex-1 bg-green-600 text-white py-2 md:py-2.5 rounded-md hover:bg-green-700 text-[11px] md:text-sm font-bold shadow-sm transition-colors ${
+              onClick={() => kirimSatu(t)}
+              className={`bg-green-600 text-white py-2 md:py-2.5 rounded-md hover:bg-green-700 text-[11px] md:text-sm font-bold shadow-sm transition-colors ${
                 tiketList.length === 1 ? 'animate-heartbeat-green' : ''
               }`}
             >
+              Kirim E-Tiket
+            </button>
+
+            <button
+              onClick={() => simpanKeGaleri(t)}
+              className="bg-white text-blue-700 border border-blue-600 py-2 md:py-2.5 rounded-md hover:bg-blue-50 text-[11px] md:text-sm font-bold shadow-sm transition-colors"
+            >
               Simpan ke Galeri
-            </button>
-
-            <button
-              onClick={() => kirimSatu(t)}
-              aria-label="Kirim e-tiket lewat WhatsApp"
-              title="Kirim e-tiket lewat WhatsApp"
-              className="flex flex-col items-center justify-center w-12 md:w-16 py-1 bg-white border border-gray-300 rounded-md hover:bg-gray-50 active:bg-gray-100 shadow-sm transition-colors"
-            >
-              <IkonWhatsApp className="h-[18px] w-[18px] md:h-5 md:w-5" />
-              <span className="text-[8px] md:text-[10px] font-bold text-gray-700 leading-none mt-0.5">WA</span>
-            </button>
-
-            <button
-              onClick={() => kirimSatu(t)}
-              aria-label="Kirim e-tiket lewat Telegram"
-              title="Kirim e-tiket lewat Telegram"
-              className="flex flex-col items-center justify-center w-[58px] md:w-20 py-1 bg-white border border-gray-300 rounded-md hover:bg-gray-50 active:bg-gray-100 shadow-sm transition-colors"
-            >
-              <IkonTelegram className="h-[18px] w-[18px] md:h-5 md:w-5" />
-              <span className="text-[8px] md:text-[10px] font-bold text-gray-700 leading-none mt-0.5">Telegram</span>
             </button>
           </div>
 
           <p className="text-[9px] md:text-[11px] text-gray-500 text-center leading-snug">
+            Kirim E-Tiket &rarr; pilih WhatsApp atau Telegram.
             Simpan ke Galeri &rarr; tekan &amp; tahan gambar, lalu pilih Simpan gambar.
-            Kirim &rarr; ketuk logo WhatsApp atau Telegram.
           </p>
 
           {tiketList.length > 1 && (
