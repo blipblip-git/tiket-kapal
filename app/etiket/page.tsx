@@ -150,15 +150,12 @@ function EtiketPublikContent() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [pesanShare, setPesanShare] = useState('')
-  // Ditampilkan kalau browser tidak punya Web Share (mis. browser bawaan
-  // Huawei): gambar diperlihatkan besar supaya bisa "tekan & tahan -> Simpan
-  // gambar", satu-satunya cara yang pasti masuk ke Galeri.
-  // `mode` menentukan teksnya: 'kirim' (tujuan WhatsApp/Telegram) atau
-  // 'simpan' (tujuan Galeri), supaya pembeli tidak salah paham.
+  // Cadangan kalau browser tidak punya Web Share (mis. WebView WhatsApp atau
+  // browser bawaan Huawei): gambar diperlihatkan besar supaya menu bawaan HP
+  // (tekan & tahan -> "Simpan gambar" / "Berbagi gambar") bisa dipakai.
   const [pratinjau, setPratinjau] = useState<{
     dataUrl: string
     kodeTiket: string
-    mode: 'kirim' | 'simpan'
   } | null>(null)
   const [activeTiketIndex, setActiveTiketIndex] = useState(0)
 
@@ -352,11 +349,15 @@ function EtiketPublikContent() {
     setPesanShare('Semua PDF berhasil diunduh. Silakan cek folder Unduhan/File di HP Anda.')
   }
 
-  // Kirim E-Tiket: lembar berbagi Android/iOS menampilkan WhatsApp, Telegram,
-  // dan aplikasi lain. Ini satu-satunya jalan mengirim GAMBAR dari browser -
-  // tautan wa.me hanya bisa membawa teks, bukan gambar.
-  async function kirimSatu(t: TiketLengkap) {
-    setPesanShare('Menyiapkan e-tiket untuk dikirim...')
+  // Satu pemicu untuk dua tujuan: Simpan atau Share. Urutannya:
+  // 1) Web Share (Chrome/Edge/Safari) -> lembar berbagi HP berisi berkas PNG,
+  //    jadi satu ketuk sudah bisa kirim ke WhatsApp/Telegram atau simpan foto.
+  // 2) Tanpa Web Share (WebView WhatsApp/Facebook, browser bawaan Huawei) ->
+  //    gambar ditampilkan besar; menu bawaan Android muncul saat ditekan lama
+  //    ("Simpan gambar" / "Berbagi gambar"). Ini satu-satunya jalur yang
+  //    benar-benar bisa menulis ke Galeri dari browser.
+  async function simpanAtauShare(t: TiketLengkap) {
+    setPesanShare('Menyiapkan gambar tiket...')
 
     let dataUrl: string
     try {
@@ -370,32 +371,27 @@ function EtiketPublikContent() {
 
     try {
       const file = dataUrlKeFile(dataUrl, `E-Tiket-${kodeTiket}.png`)
-      const teksPesan = `E-Tiket Kapal Anda (Kode: ${kodeTiket}). Perlihatkan gambar ini ke petugas saat boarding.`
 
       if (typeof navigator.canShare === 'function' && navigator.canShare({ files: [file] })) {
         await navigator.share({
           files: [file],
           title: 'E-Tiket Kapal',
-          text: teksPesan
+          text: `E-Tiket Kapal Anda (Kode: ${kodeTiket}). Perlihatkan gambar ini ke petugas saat boarding.`
         })
-        setPesanShare('E-Tiket sudah dikirim. Kalau belum, ulangi lalu pilih WhatsApp atau Telegram.')
+        setPesanShare('Pilih WhatsApp, Telegram, atau opsi simpan gambar di lembar berbagi.')
         return
       }
-
-      // Tanpa Web Share (WebView WhatsApp / browser bawaan Huawei): beri jalan
-      // yang pasti bisa dipakai - simpan gambar, lalu kirim dari WhatsApp.
-      setPratinjau({ dataUrl, kodeTiket, mode: 'kirim' })
-      setPesanShare('')
     } catch (err) {
-      const e = err as { name?: string; message?: string }
+      const e = err as { name?: string }
       if (e.name === 'AbortError') {
-        setPesanShare('Pengiriman dibatalkan.')
+        setPesanShare('Dibatalkan.')
         return
       }
       console.error(err)
-      setPratinjau({ dataUrl, kodeTiket, mode: 'kirim' })
-      setPesanShare('')
     }
+
+    setPratinjau({ dataUrl, kodeTiket })
+    setPesanShare('')
   }
 
   // Kirim beberapa tiket sekaligus: semua gambar dimasukkan ke SATU lembar
@@ -437,7 +433,7 @@ function EtiketPublikContent() {
         return
       }
 
-      setPratinjau({ dataUrl: dataUrlPertama, kodeTiket: kodePertama, mode: 'simpan' })
+      setPratinjau({ dataUrl: dataUrlPertama, kodeTiket: kodePertama })
       setPesanShare('')
     } catch (err) {
       const e = err as { name?: string }
@@ -446,26 +442,8 @@ function EtiketPublikContent() {
         return
       }
       console.error(err)
-      setPratinjau({ dataUrl: dataUrlPertama, kodeTiket: kodePertama, mode: 'simpan' })
+      setPratinjau({ dataUrl: dataUrlPertama, kodeTiket: kodePertama })
       setPesanShare('')
-    }
-  }
-
-  // Simpan ke Galeri. Kenapa BUKAN lembar berbagi: pembeli mengeluh tombol
-  // "Simpan" malah menyuruh memilih aplikasi medsos. Browser juga tidak bisa
-  // menulis ke Galeri tanpa lembar berbagi (`<a download>` selalu mendarat di
-  // folder Unduhan/File). Jadi tombol ini langsung membuka gambar ukuran
-  // penuh: satu "tekan & tahan -> Simpan gambar" dijamin masuk Galeri di
-  // semua Android/iPhone, termasuk browser bawaan Huawei.
-  async function simpanKeGaleri(t: TiketLengkap) {
-    setPesanShare('Menyiapkan gambar tiket...')
-
-    try {
-      const dataUrl = await tangkapDariRender(t)
-      setPratinjau({ dataUrl, kodeTiket: t.pesanan.kode_tiket, mode: 'simpan' })
-      setPesanShare('')
-    } catch {
-      setPesanShare('Gagal membuat gambar tiket.')
     }
   }
 
@@ -514,20 +492,6 @@ function EtiketPublikContent() {
           100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(236, 72, 153, 0); }
         }
         .animate-heartbeat-pink { animation: heartbeat-pink 1.5s infinite; }
-
-        @keyframes heartbeat-blue {
-          0% { transform: scale(1); box-shadow: 0 0 0 0 rgba(37, 99, 235, 0.7); }
-          50% { transform: scale(1.05); box-shadow: 0 0 0 10px rgba(37, 99, 235, 0); }
-          100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(37, 99, 235, 0); }
-        }
-        .animate-heartbeat-blue { animation: heartbeat-blue 1.5s infinite; }
-
-        @keyframes heartbeat-green {
-          0% { transform: scale(1); box-shadow: 0 0 0 0 rgba(22, 163, 74, 0.7); }
-          50% { transform: scale(1.05); box-shadow: 0 0 0 10px rgba(22, 163, 74, 0); }
-          100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(22, 163, 74, 0); }
-        }
-        .animate-heartbeat-green { animation: heartbeat-green 1.5s infinite; }
 
         @media print {
           @page { size: 58mm auto; margin: 0; }
@@ -596,28 +560,22 @@ function EtiketPublikContent() {
       </div>
 
       <div className="flex-shrink-0 bg-white border-t border-gray-200 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)] z-20 print-hidden relative">
-        <div className="max-w-md mx-auto p-3 md:p-4 space-y-2">
-          <div className="grid grid-cols-2 gap-2">
-            <button
-              onClick={() => kirimSatu(t)}
-              className={`bg-green-600 text-white py-2 md:py-2.5 rounded-md hover:bg-green-700 text-[11px] md:text-sm font-bold shadow-sm transition-colors ${
-                tiketList.length === 1 ? 'animate-heartbeat-green' : ''
-              }`}
-            >
-              Kirim E-Tiket
-            </button>
-
-            <button
-              onClick={() => simpanKeGaleri(t)}
-              className="bg-white text-blue-700 border border-blue-600 py-2 md:py-2.5 rounded-md hover:bg-blue-50 text-[11px] md:text-sm font-bold shadow-sm transition-colors"
-            >
-              Simpan ke Galeri
-            </button>
-          </div>
+        <div className="max-w-md mx-auto px-3 py-2 md:px-4 md:py-3 space-y-1.5">
+          {/* Satu pemicu saja untuk HP DAN tablet: teks "Simpan / Share".
+              Ketuk -> lembar berbagi berisi gambar tiket (Opsi B). Kalau
+              browser tidak punya Web Share, popup gambar terbuka supaya menu
+              bawaan HP dipakai (Opsi A: tekan & tahan -> Simpan gambar /
+              Berbagi gambar). */}
+          <button
+            onClick={() => simpanAtauShare(t)}
+            className="block w-full text-center text-blue-700 hover:text-blue-800 active:text-blue-900 text-base md:text-xl font-bold underline decoration-2 underline-offset-4 py-2 md:py-2.5 rounded-md hover:bg-blue-50 transition-colors"
+          >
+            Simpan / Share
+          </button>
 
           <p className="text-[9px] md:text-[11px] text-gray-500 text-center leading-snug">
-            Kirim E-Tiket &rarr; pilih WhatsApp atau Telegram.
-            Simpan ke Galeri &rarr; tekan &amp; tahan gambar, lalu pilih Simpan gambar.
+            Ketuk &quot;Simpan / Share&quot; &rarr; simpan ke Galeri atau kirim lewat
+            WhatsApp / Telegram.
           </p>
 
           {tiketList.length > 1 && (
@@ -670,39 +628,31 @@ function EtiketPublikContent() {
           role="dialog"
           aria-modal="true"
         >
-          <div className="bg-white rounded-lg p-3 w-full max-w-md mt-6">
-            <p className="text-[12px] text-gray-900 font-medium text-center leading-snug">
-              {pratinjau.mode === 'kirim'
-                ? 'Kirim lewat WhatsApp / Telegram: tekan & tahan gambar di bawah, pilih Simpan gambar, lalu kirim dari Galeri.'
-                : 'Tekan & tahan gambar di bawah, lalu pilih Simpan gambar supaya masuk Galeri.'}
+          <div className="bg-white rounded-lg p-3 md:p-4 w-full max-w-md md:max-w-lg mt-6">
+            <div className="flex items-center justify-between gap-2 mb-2">
+              <p className="text-[11px] md:text-sm font-bold text-gray-900">
+                E-Tiket {pratinjau.kodeTiket}
+              </p>
+              <button
+                onClick={() => setPratinjau(null)}
+                aria-label="Tutup"
+                title="Tutup"
+                className="h-8 w-8 flex-shrink-0 flex items-center justify-center rounded-full bg-gray-100 text-gray-600 hover:bg-gray-200 text-base font-bold leading-none"
+              >
+                ✕
+              </button>
+            </div>
+
+            <p className="bg-blue-600 text-white text-[12px] md:text-sm font-semibold text-center leading-snug rounded-md px-3 py-2">
+              Tekan &amp; tahan gambar E-Tiket di bawah, lalu pilih
+              Simpan gambar atau Berbagi gambar.
             </p>
 
             <img
               src={pratinjau.dataUrl}
               alt={`E-Tiket ${pratinjau.kodeTiket}`}
-              className="w-full h-auto mt-2 border border-gray-200 rounded"
+              className="mx-auto mt-2 max-h-[70vh] md:max-h-[65vh] w-auto max-w-full h-auto border border-gray-200 rounded"
             />
-
-            <div className="grid grid-cols-2 gap-2 mt-3">
-              <a
-                href={pratinjau.dataUrl}
-                download={`E-Tiket-${pratinjau.kodeTiket}.png`}
-                className="bg-blue-600 text-white text-center py-2 rounded-md text-xs font-bold"
-              >
-                Unduh Gambar
-              </a>
-              <button
-                onClick={() => setPratinjau(null)}
-                className="bg-gray-200 text-gray-800 py-2 rounded-md text-xs font-bold"
-              >
-                Tutup
-              </button>
-            </div>
-
-            <p className="text-[10px] text-gray-500 text-center mt-2 leading-snug">
-              Tekan &amp; tahan gambar = cara paling cepat menyimpan ke Galeri; tombol Unduh
-              Gambar menyimpan ke folder Unduhan/File.
-            </p>
           </div>
         </div>
       )}
