@@ -8,10 +8,18 @@ import { buatClientAdmin, pesanServiceKeyKosong } from '@/lib/serverAuth'
 import { catatPermintaan, kenaBatas, kunciIp } from '@/lib/rateLimit'
 import { asalDiizinkan } from '@/lib/publikGuard'
 import { kunciKursi, lepasKunciKursi, lepasKunciKedaluwarsa, nomorKursiTerpakai } from '@/lib/segmen'
+import { varianNomorHp } from '@/lib/nomorHp'
 
 const BATAS = 20
 const JENDELA = 10 * 60 * 1000
 const MAKS_PENUMPANG = 8
+
+// Batas tiket yang masih `pending` untuk satu nomor HP.
+// Kursi online langsung dikunci 15 menit walau belum dibayar; tanpa batas ini
+// satu orang bisa memesan berkali-kali dengan nama/NIK apa saja lalu menahan
+// hampir semua kursi sampai jadwal berangkat. Hitungan memakai database (bukan
+// memori proses) supaya tetap berlaku walau request jatuh ke instance lain.
+const BATAS_PENDING_PER_HP = Math.max(1, Number(process.env.BATAS_PENDING_PER_HP) || 10)
 
 type PenumpangMasuk = { nama?: unknown; nik?: unknown; balita?: unknown }
 
@@ -100,6 +108,32 @@ export async function POST(request: Request) {
   }
 
   try {
+    // Batas pesanan pending per nomor HP (anti penguncian kursi).
+    // Dicek SEBELUM menyentuh jadwal/kursi supaya permintaan yang melanggar
+    // tidak membebani query lain dan tidak pernah sampai mengunci kursi.
+    const jumlahTiketBaru = dataPenumpang.reduce((n, p) => n + 1 + p.balita.length, 0)
+    const { count: jumlahPending, error: errPending } = await admin
+      .from('pesanan')
+      .select('id', { count: 'exact', head: true })
+      .in('nomor_hp', varianNomorHp(nomorHp))
+      .eq('status', 'pending')
+      .gt('waktu_expired', new Date().toISOString())
+
+    if (errPending) throw new Error('Gagal memeriksa pesanan yang belum dibayar: ' + errPending.message)
+
+    const pendingSekarang = jumlahPending || 0
+    if (pendingSekarang + jumlahTiketBaru > BATAS_PENDING_PER_HP) {
+      return NextResponse.json(
+        {
+          error:
+            `Nomor HP ini masih punya ${pendingSekarang} tiket yang belum dibayar. ` +
+            `Selesaikan pembayaran atau tunggu 15 menit sampai pesanan kedaluwarsa ` +
+            `(maksimal ${BATAS_PENDING_PER_HP} tiket pending per nomor HP).`
+        },
+        { status: 429 }
+      )
+    }
+
     const { data: jadwal, error: errJadwal } = await admin
       .from('jadwal')
       .select('id, harga, tanggal, status, status_jadwal, kapal_id, jam_berangkat, rute_asal, rute_tujuan')

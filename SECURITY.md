@@ -141,19 +141,40 @@ Bukti uji: `/dashboard?preview=true`, `/agen/jual-tiket?preview=true`,
 `/laporan?preview=true`, `/cetak-ulang?preview=true` tanpa sesi → konsol mencatat
 `Mode pratinjau ditolak: bukan sesi Superadmin.` dan halaman dialihkan.
 
+## Tahap 3d (SUDAH DITERAPKAN 25 Nov 2026) — batas pesanan pending per nomor HP
+
+`POST /api/publik/pesan` menghitung lebih dulu tiket `status = 'pending'` yang
+`waktu_expired`-nya belum lewat untuk nomor HP yang sama, lalu menolak dengan
+HTTP 429 bila totalnya akan melewati batas.
+
+- Batas bawaan **10 tiket pending per nomor HP**; bisa diubah lewat env
+  `BATAS_PENDING_PER_HP` tanpa mengubah kode.
+- Hitungan memakai database, bukan memori proses → berlaku di semua instance
+  Vercel dan tidak ter-reset saat deploy.
+- Nomor dicocokkan dalam beberapa varian (`08…`, `628…`, digit mentah) lewat
+  `varianNomorHp()` di `lib/nomorHp.ts`, supaya format penulisan berbeda tidak
+  bisa dipakai untuk melewati batas.
+- Pengecekan dilakukan **sebelum** kursi dikunci, jadi permintaan yang ditolak
+  tidak pernah menahan kursi. Kursi tetap dilepas otomatis setelah 15 menit oleh
+  `lepasKunciKedaluwarsa()`.
+
+Sisa risiko: nomor HP belum diverifikasi OTP, jadi penyerang masih bisa memakai
+banyak nomor acak. Batas ini menaikkan biaya serangan (satu nomor = satu
+pesanan), bukan menutupnya; penutup penuh butuh OTP atau pembayaran di muka.
+
 ## Masih terbuka (belum diperbaiki)
 
 1. **Rate limit disimpan di memori proses** — tiap instance Vercel menghitung sendiri dan
    ter-reset saat deploy.
-2. **Kursi bisa dikunci tanpa bayar** selama 15 menit lewat `/api/publik/pesan`; perlu batas
-   jumlah pesanan pending per nomor HP supaya kursi satu kapal tidak bisa "dihabiskan" orang iseng.
-3. **`typescript.ignoreBuildErrors: true`** di `next.config.ts` — error tipe tidak
+2. **`typescript.ignoreBuildErrors: true`** di `next.config.ts` — error tipe tidak
    menggagalkan build.
-4. **Kolom `password_plain` masih ada** (isinya 0 baris per 25 Nov 2026). Boleh di-drop
+3. **Kolom `password_plain` masih ada** (isinya 0 baris per 25 Nov 2026). Boleh di-drop
    setelah fallback plaintext di `lib/password.ts` dan `app/api/superadmin/tambah-penyewa`
    dibersihkan.
-5. **CSP masih mengizinkan `'unsafe-inline'` untuk skrip** — konsekuensi Next.js tanpa nonce.
+4. **CSP masih mengizinkan `'unsafe-inline'` untuk skrip** — konsekuensi Next.js tanpa nonce.
    Kalau nanti pindah ke nonce/hash, `script-src` bisa diperketat.
+5. **Nomor HP pembeli belum diverifikasi OTP** — batas pending per nomor sudah ada
+   (Tahap 3d), tapi nomor palsu masih bisa dipakai berganti-ganti.
 
 ## Backup
 
