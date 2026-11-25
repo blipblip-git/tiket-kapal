@@ -293,11 +293,11 @@ function BerandaContent() {
                   <label className="block text-sm font-medium text-gray-700">Dari</label>
                   {deteksiLokasi && (
                     <span
-                      title="Terdeteksi otomatis dari lokasi Anda (bisa diubah)"
+                      title="Dari lokasi Anda saat ini (bisa diubah)"
                       className="text-[10px] font-medium text-green-700 flex items-center gap-1"
                     >
                       <span>📍</span>
-                      <span>Terdeteksi otomatis</span>
+                      <span>Lokasi anda</span>
                     </span>
                   )}
                 </div>
