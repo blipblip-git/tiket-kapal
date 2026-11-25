@@ -4,7 +4,11 @@ import { useEffect, useState, Suspense, useRef } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
 import { supabase, getProfile, getOperatorSession, type Profile } from '@/lib/supabase'
 import QRCode from 'qrcode'
-import { dataUrlKeFile, tangkapGambarTiket } from '@/lib/gambarTiket'
+import {
+  dataUrlKeFile,
+  tangkapGambarTiket,
+  unduhGambarDariDataUrl
+} from '@/lib/gambarTiket'
 import { simpanTiketKePdf } from '@/lib/pdfTiket'
 import { cetakTiketThermal } from '@/lib/thermalPrinter'
 
@@ -670,13 +674,17 @@ function EtiketSuperadminContent() {
             />
 
             <div className="grid grid-cols-2 gap-2 mt-3">
-              <a
-                href={pratinjau.dataUrl}
-                download={`E-Tiket-${pratinjau.kodeTiket}.png`}
+              <button
+                onClick={() =>
+                  unduhGambarDariDataUrl(
+                    pratinjau.dataUrl,
+                    `E-Tiket-${pratinjau.kodeTiket}.png`
+                  )
+                }
                 className="bg-blue-600 text-white text-center py-2 rounded-md text-xs font-bold"
               >
                 Unduh Gambar
-              </a>
+              </button>
               <button
                 onClick={() => setPratinjau(null)}
                 className="bg-gray-200 text-gray-800 py-2 rounded-md text-xs font-bold"
