@@ -29,6 +29,24 @@ type BarisTiket = {
   anak: PesananPublik[]
 }
 
+// Lembar berbagi Android hanya berisi aplikasi yang benar-benar terpasang.
+// Di tablet (mis. Honor Pad X7) daftarnya bisa kosong: tanpa WhatsApp atau
+// Telegram, dan TIDAK ADA opsi "Simpan ke Galeri" - jadi satu ketuk "Share"
+// malah jadi jalan buntu. Karena itu Web Share hanya dipakai di layar HP;
+// tablet/laptop langsung membuka popup gambar yang punya menu bawaan
+// "Simpan gambar" / "Berbagi gambar".
+const BATAS_LEBAR_HP = 768
+
+function bolehShareCepat(): boolean {
+  if (typeof window === 'undefined' || typeof navigator === 'undefined') return false
+  if (typeof navigator.canShare !== 'function') return false
+
+  const ua = navigator.userAgent
+  const uaHp = /Android.+Mobile|iPhone|iPod|Windows Phone|IEMobile|Opera Mini/i.test(ua)
+
+  return uaHp && window.innerWidth < BATAS_LEBAR_HP
+}
+
 function LayarMemuat({ teks }: { teks: string }) {
   return (
     <div className="min-h-[100dvh] bg-gray-50 flex flex-col items-center justify-center">
@@ -349,12 +367,12 @@ function EtiketPublikContent() {
     setPesanShare('Semua PDF berhasil diunduh. Silakan cek folder Unduhan/File di HP Anda.')
   }
 
-  // Satu pemicu untuk dua tujuan: Simpan atau Share. Urutannya:
-  // 1) Web Share (Chrome/Edge/Safari) -> lembar berbagi HP berisi berkas PNG,
-  //    jadi satu ketuk sudah bisa kirim ke WhatsApp/Telegram atau simpan foto.
-  // 2) Tanpa Web Share (WebView WhatsApp/Facebook, browser bawaan Huawei) ->
-  //    gambar ditampilkan besar; menu bawaan Android muncul saat ditekan lama
-  //    ("Simpan gambar" / "Berbagi gambar"). Ini satu-satunya jalur yang
+  // Satu pemicu untuk dua jalur, dipilih menurut perangkat:
+  // 1) HP (layar < 768px): Web Share -> lembar berbagi berisi berkas PNG, satu
+  //    ketuk bisa langsung kirim ke WhatsApp/Telegram.
+  // 2) Tablet/laptop, atau browser tanpa Web Share (WebView WhatsApp, browser
+  //    bawaan Huawei): gambar dibuka besar; menu bawaan muncul saat ditekan
+  //    lama ("Simpan gambar" / "Berbagi gambar"). Ini satu-satunya jalur yang
   //    benar-benar bisa menulis ke Galeri dari browser.
   async function simpanAtauShare(t: TiketLengkap) {
     setPesanShare('Menyiapkan gambar tiket...')
@@ -369,25 +387,27 @@ function EtiketPublikContent() {
 
     const kodeTiket = t.pesanan.kode_tiket
 
-    try {
-      const file = dataUrlKeFile(dataUrl, `E-Tiket-${kodeTiket}.png`)
+    if (bolehShareCepat()) {
+      try {
+        const file = dataUrlKeFile(dataUrl, `E-Tiket-${kodeTiket}.png`)
 
-      if (typeof navigator.canShare === 'function' && navigator.canShare({ files: [file] })) {
-        await navigator.share({
-          files: [file],
-          title: 'E-Tiket Kapal',
-          text: `E-Tiket Kapal Anda (Kode: ${kodeTiket}). Perlihatkan gambar ini ke petugas saat boarding.`
-        })
-        setPesanShare('Pilih WhatsApp, Telegram, atau opsi simpan gambar di lembar berbagi.')
-        return
+        if (navigator.canShare({ files: [file] })) {
+          await navigator.share({
+            files: [file],
+            title: 'E-Tiket Kapal',
+            text: `E-Tiket Kapal Anda (Kode: ${kodeTiket}). Perlihatkan gambar ini ke petugas saat boarding.`
+          })
+          setPesanShare('Pilih WhatsApp, Telegram, atau opsi simpan gambar di lembar berbagi.')
+          return
+        }
+      } catch (err) {
+        const e = err as { name?: string }
+        if (e.name === 'AbortError') {
+          setPesanShare('Dibatalkan.')
+          return
+        }
+        console.error(err)
       }
-    } catch (err) {
-      const e = err as { name?: string }
-      if (e.name === 'AbortError') {
-        setPesanShare('Dibatalkan.')
-        return
-      }
-      console.error(err)
     }
 
     setPratinjau({ dataUrl, kodeTiket })
@@ -423,7 +443,13 @@ function EtiketPublikContent() {
     const kodePertama = tiketList[0].pesanan.kode_tiket
 
     try {
-      if (typeof navigator.canShare === 'function' && navigator.canShare({ files })) {
+      if (!bolehShareCepat()) {
+        setPratinjau({ dataUrl: dataUrlPertama, kodeTiket: kodePertama })
+        setPesanShare('')
+        return
+      }
+
+      if (navigator.canShare({ files })) {
         await navigator.share({
           files,
           title: 'E-Tiket Kapal',
@@ -562,9 +588,9 @@ function EtiketPublikContent() {
       <div className="flex-shrink-0 bg-white border-t border-gray-200 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)] z-20 print-hidden relative">
         <div className="max-w-md mx-auto px-3 py-2 md:px-4 md:py-3 space-y-1.5">
           {/* Satu pemicu saja untuk HP DAN tablet: teks "Simpan / Share".
-              Ketuk -> lembar berbagi berisi gambar tiket (Opsi B). Kalau
-              browser tidak punya Web Share, popup gambar terbuka supaya menu
-              bawaan HP dipakai (Opsi A: tekan & tahan -> Simpan gambar /
+              Di HP: lembar berbagi berisi gambar tiket (Opsi B). Di tablet/
+              laptop atau browser tanpa Web Share: popup gambar terbuka supaya
+              menu bawaan dipakai (Opsi A: tekan & tahan -> Simpan gambar /
               Berbagi gambar). */}
           <button
             onClick={() => simpanAtauShare(t)}
@@ -574,8 +600,8 @@ function EtiketPublikContent() {
           </button>
 
           <p className="text-[9px] md:text-[11px] text-gray-500 text-center leading-snug">
-            Ketuk &quot;Simpan / Share&quot; &rarr; simpan ke Galeri atau kirim lewat
-            WhatsApp / Telegram.
+            Ketuk &quot;Simpan / Share&quot;, lalu ikuti petunjuk di layar: simpan ke
+            Galeri atau kirim lewat WhatsApp / Telegram.
           </p>
 
           {tiketList.length > 1 && (
