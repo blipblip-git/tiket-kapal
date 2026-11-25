@@ -63,32 +63,3 @@ export function dataUrlKeBlob(dataUrl: string): Blob {
 export function dataUrlKeFile(dataUrl: string, namaFile: string): File {
   return new File([dataUrlKeBlob(dataUrl)], namaFile, { type: 'image/png' })
 }
-
-/**
- * Unduh gambar sekali ketuk, TANPA membuka popup pratinjau.
- *
- * Kenapa tidak memasang `dataUrl` langsung di `<a download>`: Chrome modern
- * dan WebView memblokir navigasi ke `data:` URL, sehingga tombol "Unduh
- * Gambar" terasa tidak berfungsi (tidak ada reaksi apa pun). Objek URL dari
- * Blob dianggap file biasa, jadi atribut `download` dihormati dan hasilnya
- * masuk folder Unduhan/Galeri.
- */
-export function unduhGambarDariDataUrl(dataUrl: string, namaFile: string): void {
-  const blob = dataUrlKeBlob(dataUrl)
-  const objectUrl = URL.createObjectURL(blob)
-  const tautan = document.createElement('a')
-
-  tautan.href = objectUrl
-  tautan.download = namaFile
-  tautan.rel = 'noopener'
-  tautan.style.display = 'none'
-  document.body.appendChild(tautan)
-  tautan.click()
-
-  // Jangan lepas objek URL langsung: sebagian browser membatalkan unduhan
-  // kalau blob-nya dicabut sebelum file selesai ditulis.
-  setTimeout(() => {
-    tautan.remove()
-    URL.revokeObjectURL(objectUrl)
-  }, 30_000)
-}

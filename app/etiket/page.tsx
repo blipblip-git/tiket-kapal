@@ -5,11 +5,7 @@ import { useSearchParams, useRouter } from 'next/navigation'
 import { supabase, getOperatorSession } from '@/lib/supabase'
 import { ambilPesananPublik, type PesananPublik } from '@/lib/publikPesanan'
 import QRCode from 'qrcode'
-import {
-  dataUrlKeFile,
-  tangkapGambarTiket,
-  unduhGambarDariDataUrl
-} from '@/lib/gambarTiket'
+import { dataUrlKeFile, tangkapGambarTiket } from '@/lib/gambarTiket'
 import { simpanTiketKePdf } from '@/lib/pdfTiket'
 
 type Detail = {
@@ -31,6 +27,37 @@ type TiketLengkap = {
 type BarisTiket = {
   induk: PesananPublik
   anak: PesananPublik[]
+}
+
+// Logo WhatsApp & Telegram digambar sendiri (SVG inline) supaya tidak perlu
+// menambah paket ikon - bundle tetap kecil. Warna aslinya dipertahankan agar
+// pembeli langsung tahu tombol mana menuju aplikasi mana.
+function IkonWhatsApp({ className = '' }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" className={className} aria-hidden="true">
+      <circle cx="12" cy="12" r="12" fill="#25D366" />
+      <path
+        d="M12 4.7c-1.9 0-3.7.8-5 2.1a7.2 7.2 0 00-2.1 5.1c0 1.2.3 2.4.9 3.5L4.7 19l3.8-1a7.2 7.2 0 003.5.9c4 0 7.2-3.2 7.2-7.1 0-4-3.2-7.1-7.2-7.1z"
+        fill="#fff"
+      />
+      <path
+        d="M10.3 8.3c.2 0 .4.1.5.3l.4.9c.1.2.1.4-.1.5l-.4.4c-.1.1-.2.2-.1.4.3.5.7 1 1.2 1.4.5.4 1 .7 1.4.9.2.1.3 0 .4-.1l.4-.4c.1-.2.3-.2.5-.1l.9.4c.2.1.3.3.3.5v.6c0 .3-.1.6-.4.8-.3.2-.7.3-1.1.3-.8 0-2-.4-3.2-1.5-1.1-1.1-1.6-2.2-1.7-2.9-.1-.5 0-1 .3-1.4l.5-.6c.1-.1.2-.2.4-.2z"
+        fill="#25D366"
+      />
+    </svg>
+  )
+}
+
+function IkonTelegram({ className = '' }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" className={className} aria-hidden="true">
+      <circle cx="12" cy="12" r="12" fill="#229ED9" />
+      <path
+        d="M18.4 7.1 5.9 11.9c-.9.3-.9.9-.1 1.1l3 .9 1.1 3.4c.1.4.3.5.6.5.3 0 .5-.1.7-.3l1.6-1.5 3 2.2c.5.3 1 .1 1.1-.5l1.9-9.1c.2-.7-.3-1-.9-.5z"
+        fill="#fff"
+      />
+    </svg>
+  )
 }
 
 function LayarMemuat({ teks }: { teks: string }) {
@@ -441,7 +468,7 @@ function EtiketPublikContent() {
         return
       }
 
-      setPratinjau({ dataUrl: dataUrlPertama, kodeTiket: kodePertama, mode: 'kirim' })
+      setPratinjau({ dataUrl: dataUrlPertama, kodeTiket: kodePertama, mode: 'simpan' })
       setPesanShare('')
     } catch (err) {
       const e = err as { name?: string }
@@ -450,71 +477,26 @@ function EtiketPublikContent() {
         return
       }
       console.error(err)
-      setPratinjau({ dataUrl: dataUrlPertama, kodeTiket: kodePertama, mode: 'kirim' })
+      setPratinjau({ dataUrl: dataUrlPertama, kodeTiket: kodePertama, mode: 'simpan' })
       setPesanShare('')
     }
   }
 
-  // Browser di dalam aplikasi lain (WhatsApp/Instagram/browser bawaan Huawei,
-  // ditandai `wv` pada User-Agent) membuang atribut `<a download>` dan
-  // memblokir `data:` URL, jadi unduhan biasa tidak menghasilkan apa pun.
-  // Hanya di sana pratinjau "tekan & tahan -> Simpan gambar" dipakai.
-  function perluTekanTahan(): boolean {
-    if (typeof navigator === 'undefined') return false
-    return /\bwv\b|WhatsApp|FBAN|FBAV|Instagram|Line\//i.test(navigator.userAgent)
-  }
-
-  function perangkatIOS(): boolean {
-    if (typeof navigator === 'undefined') return false
-    return /iPad|iPhone|iPod/.test(navigator.userAgent)
-  }
-
-  // Simpan ke Galeri: satu ketuk, tanpa popup. Gambar diunduh lewat Blob
-  // (`unduhGambarDariDataUrl`), BUKAN `href={dataUrl}` - Chrome/WebView
-  // memblokir navigasi ke `data:` URL sehingga tombol unduh lama diam saja.
-  // Di iPhone/iPad unduhan mendarat di app File, jadi lembar berbagi dipakai
-  // supaya ada pilihan "Simpan Gambar" yang benar-benar masuk Galeri Foto.
+  // Simpan ke Galeri. Kenapa BUKAN lembar berbagi: pembeli mengeluh tombol
+  // "Simpan" malah menyuruh memilih aplikasi medsos. Browser juga tidak bisa
+  // menulis ke Galeri tanpa lembar berbagi (`<a download>` selalu mendarat di
+  // folder Unduhan/File). Jadi tombol ini langsung membuka gambar ukuran
+  // penuh: satu "tekan & tahan -> Simpan gambar" dijamin masuk Galeri di
+  // semua Android/iPhone, termasuk browser bawaan Huawei.
   async function simpanKeGaleri(t: TiketLengkap) {
     setPesanShare('Menyiapkan gambar tiket...')
 
-    let dataUrl: string
     try {
-      dataUrl = await tangkapDariRender(t)
+      const dataUrl = await tangkapDariRender(t)
+      setPratinjau({ dataUrl, kodeTiket: t.pesanan.kode_tiket, mode: 'simpan' })
+      setPesanShare('')
     } catch {
       setPesanShare('Gagal membuat gambar tiket.')
-      return
-    }
-
-    const kodeTiket = t.pesanan.kode_tiket
-    const namaFile = `E-Tiket-${kodeTiket}.png`
-
-    if (perangkatIOS() && typeof navigator.canShare === 'function') {
-      try {
-        const file = dataUrlKeFile(dataUrl, namaFile)
-        if (navigator.canShare({ files: [file] })) {
-          await navigator.share({ files: [file], title: 'E-Tiket Kapal' })
-          setPesanShare('Pilih "Simpan Gambar" di lembar berbagi agar masuk ke Galeri Foto.')
-          return
-        }
-      } catch (err) {
-        if ((err as { name?: string }).name === 'AbortError') return
-        console.error(err)
-      }
-    }
-
-    if (perluTekanTahan()) {
-      setPratinjau({ dataUrl, kodeTiket, mode: 'simpan' })
-      setPesanShare('')
-      return
-    }
-
-    try {
-      unduhGambarDariDataUrl(dataUrl, namaFile)
-      setPesanShare(`Gambar tiket diunduh sebagai ${namaFile}. Cek Galeri atau folder Unduhan.`)
-    } catch (err) {
-      console.error('Gagal mengunduh gambar:', err)
-      setPratinjau({ dataUrl, kodeTiket, mode: 'simpan' })
-      setPesanShare('')
     }
   }
 
@@ -646,11 +628,10 @@ function EtiketPublikContent() {
 
       <div className="flex-shrink-0 bg-white border-t border-gray-200 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)] z-20 print-hidden relative">
         <div className="max-w-md mx-auto p-3 md:p-4 space-y-2">
-          {/* Cukup dua tombol. Simpan ke Galeri = unduhan sekali ketuk tanpa
-              popup; Bagikan E-Tiket = lembar berbagi Android berisi berkas PNG
-              (WhatsApp/Telegram ada di daftar). Logo WA/Telegram terpisah
-              dihapus karena dulu keduanya memanggil fungsi yang sama persis -
-              tidak ada beda hasil, hanya menambah tombol. */}
+          {/* Simpan di kiri sebagai aksi utama: hasilnya langsung masuk Galeri
+              dan itu yang paling sering dipakai pembeli. Kirim/share di kanan,
+              lengkap dengan logo WhatsApp & Telegram supaya tujuan tombolnya
+              langsung terbaca (logo besar = tidak perlu baca tulisan). */}
           <div className="flex gap-2 items-stretch">
             <button
               onClick={() => simpanKeGaleri(t)}
@@ -663,15 +644,28 @@ function EtiketPublikContent() {
 
             <button
               onClick={() => kirimSatu(t)}
-              className="flex-1 bg-blue-600 text-white py-2 md:py-2.5 rounded-md hover:bg-blue-700 text-[11px] md:text-sm font-bold shadow-sm transition-colors"
+              aria-label="Kirim e-tiket lewat WhatsApp"
+              title="Kirim e-tiket lewat WhatsApp"
+              className="flex flex-col items-center justify-center w-12 md:w-16 py-1 bg-white border border-gray-300 rounded-md hover:bg-gray-50 active:bg-gray-100 shadow-sm transition-colors"
             >
-              Bagikan E-Tiket
+              <IkonWhatsApp className="h-[18px] w-[18px] md:h-5 md:w-5" />
+              <span className="text-[8px] md:text-[10px] font-bold text-gray-700 leading-none mt-0.5">WA</span>
+            </button>
+
+            <button
+              onClick={() => kirimSatu(t)}
+              aria-label="Kirim e-tiket lewat Telegram"
+              title="Kirim e-tiket lewat Telegram"
+              className="flex flex-col items-center justify-center w-[58px] md:w-20 py-1 bg-white border border-gray-300 rounded-md hover:bg-gray-50 active:bg-gray-100 shadow-sm transition-colors"
+            >
+              <IkonTelegram className="h-[18px] w-[18px] md:h-5 md:w-5" />
+              <span className="text-[8px] md:text-[10px] font-bold text-gray-700 leading-none mt-0.5">Telegram</span>
             </button>
           </div>
 
           <p className="text-[9px] md:text-[11px] text-gray-500 text-center leading-snug">
-            Simpan &rarr; gambar diunduh, cek Galeri atau folder Unduhan.
-            Bagikan &rarr; pilih WhatsApp atau Telegram di lembar berbagi.
+            Simpan ke Galeri &rarr; tekan &amp; tahan gambar, lalu pilih Simpan gambar.
+            Kirim &rarr; ketuk logo WhatsApp atau Telegram.
           </p>
 
           {tiketList.length > 1 && (
@@ -679,7 +673,7 @@ function EtiketPublikContent() {
               onClick={kirimSemua}
               className="w-full bg-green-600 text-white py-2 md:py-2.5 rounded-md hover:bg-green-700 text-[11px] md:text-sm font-bold shadow-sm transition-colors animate-heartbeat-pink"
             >
-              Bagikan Semua E-Tiket ({tiketList.length})
+              Kirim Semua E-Tiket ({tiketList.length})
             </button>
           )}
 
@@ -727,8 +721,8 @@ function EtiketPublikContent() {
           <div className="bg-white rounded-lg p-3 w-full max-w-md mt-6">
             <p className="text-[12px] text-gray-900 font-medium text-center leading-snug">
               {pratinjau.mode === 'kirim'
-                ? 'Lembar berbagi tidak tersedia di browser ini. Tekan & tahan gambar di bawah, pilih Simpan gambar, lalu kirim dari Galeri.'
-                : 'Tekan & tahan gambar di bawah, lalu pilih Simpan gambar supaya masuk Galeri. Atau ketuk Unduh Gambar (file masuk folder Unduhan).'}
+                ? 'Kirim lewat WhatsApp / Telegram: tekan & tahan gambar di bawah, pilih Simpan gambar, lalu kirim dari Galeri.'
+                : 'Tekan & tahan gambar di bawah, lalu pilih Simpan gambar supaya masuk Galeri.'}
             </p>
 
             <img
@@ -738,17 +732,13 @@ function EtiketPublikContent() {
             />
 
             <div className="grid grid-cols-2 gap-2 mt-3">
-              <button
-                onClick={() =>
-                  unduhGambarDariDataUrl(
-                    pratinjau.dataUrl,
-                    `E-Tiket-${pratinjau.kodeTiket}.png`
-                  )
-                }
+              <a
+                href={pratinjau.dataUrl}
+                download={`E-Tiket-${pratinjau.kodeTiket}.png`}
                 className="bg-blue-600 text-white text-center py-2 rounded-md text-xs font-bold"
               >
                 Unduh Gambar
-              </button>
+              </a>
               <button
                 onClick={() => setPratinjau(null)}
                 className="bg-gray-200 text-gray-800 py-2 rounded-md text-xs font-bold"
@@ -758,8 +748,8 @@ function EtiketPublikContent() {
             </div>
 
             <p className="text-[10px] text-gray-500 text-center mt-2 leading-snug">
-              Unduh Gambar memakai berkas Blob, jadi tetap berfungsi di browser yang
-              memblokir tautan data:.
+              Tekan &amp; tahan gambar = cara paling cepat menyimpan ke Galeri; tombol Unduh
+              Gambar menyimpan ke folder Unduhan/File.
             </p>
           </div>
         </div>
