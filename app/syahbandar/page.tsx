@@ -1,8 +1,8 @@
 'use client'
 
-import { useEffect, useRef, useState, Suspense } from 'react'
+import { useEffect, useRef, useState, Suspense, type ReactNode } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { supabasePublik, formatDaftarAbk } from '@/lib/supabase'
+import { supabase, formatDaftarAbk, logoutOperator } from '@/lib/supabase'
 import { beroperasiPada } from '@/lib/hari'
 import { kotaTerdekat, RADIUS_DETEKSI_KM } from '@/lib/geo'
 
@@ -39,12 +39,14 @@ type DaerahManifest = {
 // security-tahap3-publik.sql mencabut hak SELECT tabel pesanan dari anon,
 // sehingga query langsung selalu gagal "permission denied for table pesanan"
 // dan manifest tampil kosong. RPC ini hanya mengembalikan kolom manifest.
+// Sejak portal ini wajib login, RPC dipanggil dengan sesi staf (authenticated),
+// dan hak `anon` dicabut lewat supabase/manifest-privat.sql.
 // Hasil diambil per 1000 baris (batas maksimum baris PostgREST).
 async function ambilManifest(jadwalIds: string[]) {
   const ukuranHalaman = 1000
   const semua: any[] = []
   for (let offset = 0; offset < 20000; offset += ukuranHalaman) {
-    const { data, error } = await supabasePublik.rpc('publik_manifest_jadwal', {
+    const { data, error } = await supabase.rpc('publik_manifest_jadwal', {
       p_jadwal_ids: jadwalIds,
       p_limit: ukuranHalaman,
       p_offset: offset,
@@ -78,15 +80,16 @@ function SyahbandarContent() {
   })
   const [expandedKunci, setExpandedKunci] = useState<string | null>(null)
 
-  // Portal Syahbandar bersifat publik: tidak ada profil yang dipakai untuk
-  // menyaring manifest, jadi status memuat langsung diserahkan ke fetchData.
+  // Portal Syahbandar WAJIB login. Profil tidak dipakai untuk menyaring
+  // manifest (satu akun berlaku untuk semua daerah), hanya sebagai pintu masuk.
+  // Pemeriksaan sesi dilakukan komponen GerbangSesi di bawah.
 
   // Kartu daerah dibuat OTOMATIS dari semua rute yang ada di sistem (master_rute)
   useEffect(() => {
     async function muatDaerah() {
       const kumpulan: { rute_asal: string; rute_tujuan: string }[] = []
 
-      let qRute = supabasePublik.from('master_rute').select('rute_asal, rute_tujuan')
+      let qRute = supabase.from('master_rute').select('rute_asal, rute_tujuan')
       if (operatorId) qRute = qRute.eq('operator_id', operatorId)
       const { data: dataRute } = await qRute
       ;(dataRute || []).forEach((r: any) => {
@@ -95,7 +98,7 @@ function SyahbandarContent() {
 
       // Rute dari Manajemen Jadwal (template) — sumber utama untuk penyewa baru,
       // karena form jadwal tidak lagi mengisi master_rute.
-      let qTemplate = supabasePublik.from('template_jadwal').select('rute_asal, rute_tujuan')
+      let qTemplate = supabase.from('template_jadwal').select('rute_asal, rute_tujuan')
       if (operatorId) qTemplate = qTemplate.eq('operator_id', operatorId)
       const { data: dataTemplate } = await qTemplate
       ;(dataTemplate || []).forEach((t: any) => {
@@ -104,7 +107,7 @@ function SyahbandarContent() {
 
       // Cadangan: kalau semua sumber di atas kosong, pakai rute yang sudah pernah dipakai di jadwal
       if (kumpulan.length === 0) {
-        let qJadwal = supabasePublik.from('jadwal').select('rute_asal, rute_tujuan').limit(1000)
+        let qJadwal = supabase.from('jadwal').select('rute_asal, rute_tujuan').limit(1000)
         if (operatorId) qJadwal = qJadwal.eq('operator_id', operatorId)
         const { data: dataJadwal } = await qJadwal
         ;(dataJadwal || []).forEach((j: any) => {
@@ -188,11 +191,11 @@ function SyahbandarContent() {
 
       setLoading(true)
 
-      let queryTemplate = supabasePublik
+      let queryTemplate = supabase
         .from('template_jadwal')
         .select('jam_berangkat, hari_operasi, rute_tujuan, kapal_id')
         .eq('rute_asal', lokasi)
-      let queryJadwal = supabasePublik
+      let queryJadwal = supabase
         .from('jadwal')
         .select('id, jam_berangkat, rute_asal, rute_tujuan, kapal_id')
         .eq('tanggal', tanggal)
@@ -222,9 +225,10 @@ function SyahbandarContent() {
       if (idJadwal.length > 0) {
         const hasilRpc = await ambilManifest(idJadwal)
         if (hasilRpc.error) {
-          // Kompatibilitas: RPC belum dibuat (SQL belum dijalankan) atau portal
-          // dibuka oleh staf yang login → coba query langsung sebagai cadangan.
-          const hasilPesanan = await supabasePublik
+          // Cadangan: RPC belum dibuat (SQL belum dijalankan). Query langsung
+          // hanya berhasil untuk akun yang lolos RLS pesanan (mis. Superadmin);
+          // akun syahbandar harus lewat RPC.
+          const hasilPesanan = await supabase
             .from('pesanan')
             .select('id, nama_penumpang, status_boarding, waktu_boarding, is_balita, grup_transaksi_id, jadwal_id, kursi:kursi_id (nomor_kursi)')
             .eq('status', 'paid')
@@ -243,7 +247,7 @@ function SyahbandarContent() {
 
       const kapalMap = new Map<string, any>()
       if (kapalIds.length > 0) {
-        const { data: kapalData } = await supabasePublik.from('kapal').select('*').in('id', kapalIds)
+        const { data: kapalData } = await supabase.from('kapal').select('*').in('id', kapalIds)
         kapalData?.forEach((k: any) => kapalMap.set(k.id, k))
       }
 
@@ -403,7 +407,7 @@ function SyahbandarContent() {
                   <h1 className="text-xl font-bold text-gray-900 leading-tight">Portal Syahbandar</h1>
                   <p className="text-sm text-gray-600 mt-0.5">Pilih daerah untuk melihat dan mencetak manifest penumpang.</p>
                 </div>
-                <button onClick={() => router.push('/login')} className="text-xs text-blue-600 hover:underline bg-gray-50 px-2 py-1.5 rounded border border-gray-200 mt-1">
+                <button onClick={() => logoutOperator()} className="text-xs text-blue-600 hover:underline bg-gray-50 px-2 py-1.5 rounded border border-gray-200 mt-1">
                   &larr; Keluar
                 </button>
               </div>
@@ -517,7 +521,8 @@ function SyahbandarContent() {
                     {errorManifest}
                     {(errorManifest.includes('permission denied') || errorManifest.toLowerCase().includes('could not find the function')) && (
                       <p className="mt-1">
-                        Jalankan <code className="font-mono">supabase/manifest-publik.sql</code> di Supabase SQL Editor, lalu muat ulang halaman ini.
+                        Jalankan <code className="font-mono">supabase/manifest-publik.sql</code> lalu{' '}
+                        <code className="font-mono">supabase/manifest-privat.sql</code> di Supabase SQL Editor, kemudian muat ulang halaman ini.
                       </p>
                     )}
                   </div>
@@ -715,10 +720,45 @@ function SyahbandarContent() {
   )
 }
 
+// Gerbang login /syahbandar.
+// Dulu portal ini terbuka untuk siapa saja yang tahu URL-nya, sehingga nama,
+// kursi, dan status boarding penumpang bisa dibaca tanpa akun. Sekarang isi
+// manifest hanya dirender setelah ada sesi Supabase Auth (hasil /login).
+function GerbangSesi({ children }: { children: ReactNode }) {
+  const router = useRouter()
+  const [siap, setSiap] = useState(false)
+
+  useEffect(() => {
+    let batal = false
+
+    supabase.auth.getSession().then(({ data }) => {
+      if (batal) return
+      if (data.session) {
+        setSiap(true)
+        return
+      }
+      // Tanpa sesi: kembali ke halaman login dengan pesan yang jelas.
+      router.replace('/login?pesan=session_expired')
+    })
+
+    return () => {
+      batal = true
+    }
+  }, [router])
+
+  if (!siap) {
+    return <p className="p-6 text-center text-gray-600">Memeriksa sesi...</p>
+  }
+
+  return <>{children}</>
+}
+
 export default function SyahbandarPage() {
   return (
-    <Suspense fallback={<p className="p-6 text-center text-gray-600">Memuat...</p>}>
-      <SyahbandarContent />
-    </Suspense>
+    <GerbangSesi>
+      <Suspense fallback={<p className="p-6 text-center text-gray-600">Memuat...</p>}>
+        <SyahbandarContent />
+      </Suspense>
+    </GerbangSesi>
   )
 }

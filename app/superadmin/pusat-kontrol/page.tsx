@@ -52,6 +52,13 @@ const KARTU: Kartu[] = [
     ket: 'Tambah / edit / hapus akun. Tulisan halaman diatur di "Teks: Petugas".',
     jenis: 'akun',
   },
+  {
+    path: '/superadmin/pusat-kontrol/admin/syahbandar',
+    ikon: '⚓',
+    judul: 'Akun Syahbandar',
+    ket: 'Akun login manifest syahbandar. Satu akun berlaku untuk semua daerah.',
+    jenis: 'akun',
+  },
 ]
 
 export default function PusatKontrolPage() {

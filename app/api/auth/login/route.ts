@@ -207,13 +207,25 @@ export async function POST(request: Request) {
 
     // Jam operasional dari Admin Utama wajib dipatuhi. Admin Utama sendiri
     // dikecualikan. Kalau Admin Utama mematikan auto-logout, pembatasan ikut mati.
+    //
+    // Syahbandar tidak terikat satu penyewa (operator_id kosong), jadi jam
+    // kerjanya memakai setelan PLATFORM — baris pengaturan_sistem dengan
+    // operator_id NULL yang diatur Superadmin. Tanpa cabang ini, pencarian
+    // setelan memakai id profil syahbandar dan hasilnya kosong, sehingga
+    // login mereka lolos tanpa batas jam sama sekali.
     const roleLogin = adalahKolektor(profil) ? ROLE_KOLEKTOR : (profil.role || '')
     if (roleLogin !== 'admin_utama' && roleLogin !== 'superadmin') {
+      const pakaiJamPlatform = roleLogin === 'syahbandar'
       const operatorId = profil.operator_id || profil.id
-      const { data: setelan, error: errorSetelan } = await admin
+
+      const kueriSetelan = admin
         .from('pengaturan_sistem')
         .select('jam_mulai_kerja, jam_selesai_kerja, auto_logout_aktif')
-        .eq('operator_id', operatorId)
+
+      const { data: setelan, error: errorSetelan } = await (pakaiJamPlatform
+        ? kueriSetelan.is('operator_id', null)
+        : kueriSetelan.eq('operator_id', operatorId)
+      )
         .order('updated_at', { ascending: false })
         .limit(1)
         .maybeSingle()
@@ -224,9 +236,14 @@ export async function POST(request: Request) {
         }, { status: 500 })
       }
 
-      if (setelan && setelan.auto_logout_aktif !== false) {
-        const jamMulai = setelan.jam_mulai_kerja || JAM_MULAI_DEFAULT
-        const jamSelesai = setelan.jam_selesai_kerja || JAM_SELESAI_DEFAULT
+      // Petugas/agen tanpa baris setelan = tidak dibatasi (perilaku lama).
+      // Syahbandar tetap dibatasi jam bawaan 06:00-17:00 walau barisnya hilang,
+      // karena manifest berisi data pribadi penumpang.
+      const batasiJam = setelan ? setelan.auto_logout_aktif !== false : pakaiJamPlatform
+
+      if (batasiJam) {
+        const jamMulai = setelan?.jam_mulai_kerja || JAM_MULAI_DEFAULT
+        const jamSelesai = setelan?.jam_selesai_kerja || JAM_SELESAI_DEFAULT
 
         if (diLuarJamKerja(new Date(), jamMulai, jamSelesai)) {
           return NextResponse.json({

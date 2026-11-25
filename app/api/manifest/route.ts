@@ -6,12 +6,14 @@ export async function GET(request: Request) {
   const isLoginPage = referer.includes('/login')
 
   const manifest = {
-    // id + scope membuat browser menganggap ini SATU aplikasi (bukan bookmark),
-    // dan start_url /login tetap dianggap bagian aplikasi yang sama.
-    id: "/",
-    name: isLoginPage ? "LintasAir - Login Petugas" : "LintasAir - Tiket Kapal Kaltara",
-    short_name: isLoginPage ? "LintasAir Petugas" : "LintasAir",
-    description: isLoginPage ? "Sistem Login Petugas Tiket Kapal Kaltara" : "Sistem Pembelian Tiket Kapal Kaltara",
+    // /login punya identitas PWA SENDIRI: `id` dibedakan supaya Android membuat
+    // ikon kedua ("Login"), tidak menimpa aplikasi pembeli yang sudah terpasang.
+    // `scope` tetap "/" agar setelah login pengguna tetap berada di jendela
+    // aplikasi saat berpindah ke /syahbandar atau dashboard.
+    id: isLoginPage ? "/login" : "/",
+    name: isLoginPage ? "Login Petugas/Agen dan Syahbandar" : "LintasAir - Tiket Kapal Kaltara",
+    short_name: isLoginPage ? "Login" : "LintasAir",
+    description: isLoginPage ? "Halaman masuk petugas/agen dan syahbandar." : "Sistem Pembelian Tiket Kapal Kaltara",
     lang: "id",
     dir: "ltr",
     start_url: isLoginPage ? "/login" : "/",
@@ -78,6 +80,9 @@ export async function GET(request: Request) {
   return NextResponse.json(manifest, {
     headers: {
       'Content-Type': 'application/manifest+json',
+      // Jangan di-cache: identitas manifest bergantung pada halaman asal
+      // (pembeli vs /login), jadi versi lama bisa salah dipakai saat install.
+      'Cache-Control': 'no-store',
     },
   })
 }

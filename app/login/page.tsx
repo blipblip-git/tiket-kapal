@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, Suspense } from 'react'
-import { useRouter, useSearchParams } from 'next/navigation'
+import { useSearchParams } from 'next/navigation'
 import { adalahKolektor } from '@/lib/kolektor'
 import { supabase } from '@/lib/supabase'
 
@@ -17,7 +17,6 @@ function pesanDariQuery(kode: string | null): string {
 }
 
 function LoginContent() {
-  const router = useRouter()
   const searchParams = useSearchParams()
   const initialTab = (searchParams.get('tab') as 'operator' | 'syahbandar') || 'operator'
 
@@ -93,7 +92,10 @@ function LoginContent() {
 
       setPesan('Login berhasil, mengalihkan...');
       setTimeout(() => {
-        if (data.role === 'admin_utama') {
+        if (data.role === 'syahbandar') {
+          // Akun syahbandar selalu bermuara ke manifest, bukan dashboard petugas.
+          window.location.href = '/syahbandar';
+        } else if (data.role === 'admin_utama') {
           window.location.href = '/dashboard'; 
         } else if (data.role === 'terminal_keberangkatan') {
           window.location.href = '/dashboard/keberangkatan';
@@ -117,53 +119,48 @@ function LoginContent() {
     void prosesLogin()
   }
 
+  const labelIdentitas = tab === 'syahbandar' ? 'Nomor HP / Email Syahbandar' : 'Nomor HP / Email'
+
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-100 p-4">
       <div className="w-full max-w-sm transition-all duration-300">
-        
+
+        <h1 className="mb-4 text-center text-xl font-bold leading-snug text-gray-900">
+          Login Petugas/Agen dan Syahbandar
+        </h1>
+
         <div className="bg-white rounded shadow-md overflow-hidden">
           <div className="flex border-b">
-            <button onClick={() => { setTab('operator'); setPesan('') }} className={`flex-1 py-3 text-sm font-medium transition ${tab === 'operator' ? 'bg-blue-50 text-blue-700 border-b-2 border-blue-600' : 'text-gray-500 hover:bg-gray-50'}`}>Login Petugas / Agen</button>
-            <button onClick={() => { setTab('syahbandar'); setPesan('') }} className={`flex-1 py-3 text-sm font-medium transition ${tab === 'syahbandar' ? 'bg-blue-800 text-white border-b-2 border-blue-900' : 'text-gray-500 hover:bg-gray-50'}`}>Portal Syahbandar</button>
+            <button onClick={() => { setTab('operator'); setPesan('') }} className={`flex-1 py-3 text-sm font-medium transition ${tab === 'operator' ? 'bg-blue-50 text-blue-700 border-b-2 border-blue-600' : 'text-gray-500 hover:bg-gray-50'}`}>Petugas / Agen</button>
+            <button onClick={() => { setTab('syahbandar'); setPesan('') }} className={`flex-1 py-3 text-sm font-medium transition ${tab === 'syahbandar' ? 'bg-blue-50 text-blue-700 border-b-2 border-blue-600' : 'text-gray-500 hover:bg-gray-50'}`}>Syahbandar</button>
           </div>
 
-          {tab === 'operator' && (
-            <form onSubmit={handleLogin} className="p-6" autoComplete="off">
-              <label className="block mb-2 text-sm font-medium text-gray-900">Nomor HP / Email</label>
-              <input type="text" name="operator_hp_no_autofill" value={noHp} onChange={(e) => setNoHp(e.target.value)} className="w-full border rounded px-3 py-2 mb-4 text-gray-900 focus:ring-blue-500 focus:border-blue-500" required autoComplete="off" />
+          <form onSubmit={handleLogin} className="p-6" autoComplete="off">
+            <label className="block mb-2 text-sm font-medium text-gray-900">{labelIdentitas}</label>
+            <input type="text" name="operator_hp_no_autofill" value={noHp} onChange={(e) => setNoHp(e.target.value)} className="w-full border rounded px-3 py-2 mb-4 text-gray-900 focus:ring-blue-500 focus:border-blue-500" required autoComplete="off" />
 
-              <label className="block mb-2 text-sm font-medium text-gray-900">Password</label>
-              <div className="relative mb-6">
-                <input type={showPassword ? 'text' : 'password'} name="admin_pass_no_autofill" value={password} onChange={(e) => setPassword(e.target.value)} className="w-full border rounded px-3 py-2 pr-10 text-gray-900 focus:ring-blue-500 focus:border-blue-500" required autoComplete="new-password" />
-                <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-2 top-1/2 transform -translate-y-1/2 text-gray-500 hover:text-gray-700 focus:outline-none">
-                  {showPassword ? '🙈' : '👁️'}
-                </button>
-              </div>
-
-              <button type="submit" disabled={loading} className="w-full bg-blue-600 text-white py-2 rounded hover:bg-blue-700 disabled:bg-gray-400 font-medium">
-                {loading ? 'Memproses...' : 'Login'}
-              </button>
-
-              {pesan && (
-                <p className={`mt-4 text-sm text-center break-words font-medium ${pesan.includes('berhasil') ? 'text-green-600' : 'text-red-600'}`}>{pesan}</p>
-              )}
-            </form>
-          )}
-
-          {tab === 'syahbandar' && (
-            <div className="p-6 bg-gray-50 min-h-[300px] flex flex-col items-center justify-center text-center">
-              <div className="text-5xl mb-4">⚓</div>
-              <h2 className="text-lg font-bold text-gray-800 mb-2">Portal Syahbandar</h2>
-              <p className="text-sm text-gray-600 mb-6">Silakan masuk ke halaman khusus Syahbandar untuk melihat dan mencetak manifest penumpang.</p>
-              
-              <button 
-                onClick={() => router.push('/syahbandar')} 
-                className="w-full bg-blue-800 text-white py-2.5 rounded hover:bg-blue-900 font-bold shadow-sm transition"
-              >
-                Masuk ke Portal Syahbandar &rarr;
+            <label className="block mb-2 text-sm font-medium text-gray-900">Password</label>
+            <div className="relative mb-4">
+              <input type={showPassword ? 'text' : 'password'} name="admin_pass_no_autofill" value={password} onChange={(e) => setPassword(e.target.value)} className="w-full border rounded px-3 py-2 pr-10 text-gray-900 focus:ring-blue-500 focus:border-blue-500" required autoComplete="new-password" />
+              <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-2 top-1/2 transform -translate-y-1/2 text-gray-500 hover:text-gray-700 focus:outline-none">
+                {showPassword ? '🙈' : '👁️'}
               </button>
             </div>
-          )}
+
+            {tab === 'syahbandar' && (
+              <p className="mb-4 text-[11px] leading-snug text-gray-500">
+                Akun syahbandar diberikan oleh Admin. Password tidak dikirim lewat chat — minta reset ke Admin bila lupa.
+              </p>
+            )}
+
+            <button type="submit" disabled={loading} className="w-full bg-blue-600 text-white py-2 rounded hover:bg-blue-700 disabled:bg-gray-400 font-medium">
+              {loading ? 'Memproses...' : tab === 'syahbandar' ? 'Masuk Syahbandar' : 'Login'}
+            </button>
+
+            {pesan && (
+              <p className={`mt-4 text-sm text-center break-words font-medium ${pesan.includes('berhasil') ? 'text-green-600' : 'text-red-600'}`}>{pesan}</p>
+            )}
+          </form>
         </div>
       </div>
     </div>

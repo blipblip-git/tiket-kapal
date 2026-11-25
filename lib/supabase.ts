@@ -361,12 +361,50 @@ export async function ambilPengaturan(operatorId?: string | null) {
   return data
 }
 
+// ==================== AMBIL PENGATURAN PLATFORM ====================
+// Baris pengaturan_sistem dengan operator_id KOSONG = setelan milik platform
+// (diatur Superadmin). Dipakai akun lintas penyewa seperti Syahbandar.
+// Sengaja terpisah dari ambilPengaturan(): tanpa filter operator_id, fungsi itu
+// mengambil baris penyewa yang paling baru diubah — bisa jadi 22:00 milik
+// penyewa lain, bukan jam kerja platform.
+export async function ambilPengaturanPlatform() {
+  const { data, error } = await supabase
+    .from('pengaturan_sistem')
+    .select('*')
+    .is('operator_id', null)
+    .order('updated_at', { ascending: false })
+    .limit(1)
+    .maybeSingle()
+
+  if (error || !data) return null
+  return data
+}
+
 // ==================== CEK AUTO-LOGOUT ====================
 // Aturan ketat: jam operasional dari Admin Utama wajib dipatuhi.
 // Staf/agen/kolektor di luar jam mulai-selesai akan ditolak saat login dan
 // sesi yang masih berjalan otomatis diakhiri. Admin Utama tidak terkena.
 export async function cekAutoLogout(profile: Profile): Promise<boolean> {
   if (!profile || profile.role === 'admin_utama' || profile.role === 'superadmin') return false
+
+  const peran = (profile.role || '').trim().toLowerCase()
+
+  // Syahbandar tidak punya penyewa: jam kerjanya ikut setelan platform.
+  // Kalau barisnya hilang, tetap dibatasi jam bawaan (06:00-17:00) karena
+  // halaman manifest memuat nama penumpang.
+  if (peran === 'syahbandar') {
+    const pengaturanPlatform = await ambilPengaturanPlatform()
+    if (!pengaturanPlatform) {
+      return diLuarJamKerja(new Date(), JAM_MULAI_DEFAULT, JAM_SELESAI_DEFAULT)
+    }
+    if (pengaturanPlatform.auto_logout_aktif === false) return false
+
+    return diLuarJamKerja(
+      new Date(),
+      pengaturanPlatform.jam_mulai_kerja || JAM_MULAI_DEFAULT,
+      pengaturanPlatform.jam_selesai_kerja || JAM_SELESAI_DEFAULT
+    )
+  }
 
   // Sesi dari /login tidak membawa operator_id terbaru untuk akun lama.
   let operatorId = profile.operator_id

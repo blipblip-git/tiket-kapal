@@ -15,8 +15,7 @@ const HALAMAN: Array<{
 }> = [
   // Beranda pembeli: jadwal berubah tiap hari, jadi paling sering berubah.
   { path: '/', priority: 1, changeFrequency: 'daily' },
-  { path: '/cek-tiket', priority: 0.6, changeFrequency: 'weekly' },
-  { path: '/syahbandar', priority: 0.6, changeFrequency: 'weekly' }
+  { path: '/cek-tiket', priority: 0.6, changeFrequency: 'weekly' }
 ]
 
 export default function sitemap(): MetadataRoute.Sitemap {

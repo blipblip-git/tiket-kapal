@@ -1,5 +1,11 @@
 -- =====================================================================
 -- MANIFEST PUBLIK (PORTAL SYAHBANDAR) — TIKET KAPAL
+--
+-- ⚠️ SEJAK 26 Nov 2026 PORTAL INI WAJIB LOGIN.
+-- Hak `anon` sudah DICABUT lewat supabase/manifest-privat.sql. Berkas ini
+-- sengaja hanya memberi hak ke `authenticated` supaya menjalankannya ulang
+-- TIDAK membuka kembali data penumpang untuk publik.
+--
 -- Masalah: security-tahap3-publik.sql mencabut `select` tabel pesanan dari
 -- anon (permission denied for table pesanan), sehingga manifest Syahbandar
 -- selalu kosong walau jadwalnya ada.
@@ -47,6 +53,6 @@ language sql stable security definer set search_path = public as $$
 $$;
 
 revoke all on function public.publik_manifest_jadwal(uuid[], int, int) from public;
-grant execute on function public.publik_manifest_jadwal(uuid[], int, int) to anon, authenticated;
+grant execute on function public.publik_manifest_jadwal(uuid[], int, int) to authenticated;
 
 notify pgrst, 'reload schema';

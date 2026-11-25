@@ -17,7 +17,9 @@ const SITUS = (process.env.NEXT_PUBLIC_SITE_URL || 'https://www.lintasair.com')
   .replace(/\/+$/, '')
 
 // Hanya halaman pembeli yang layak muncul di hasil pencarian.
-const HALAMAN_PUBLIK = ['/', '/cek-tiket', '/syahbandar']
+// /syahbandar TIDAK termasuk: isinya nama penumpang (data pribadi) dan sekarang
+// wajib login, jadi tidak boleh masuk indeks mesin pencari.
+const HALAMAN_PUBLIK = ['/', '/cek-tiket']
 
 // Halaman staf, superadmin, dan API tidak boleh diindeks.
 const HALAMAN_PRIVAT = [
@@ -39,6 +41,7 @@ const HALAMAN_PRIVAT = [
   '/rekap-bagi-hasil',
   '/scan',
   '/superadmin',
+  '/syahbandar',
   '/template-jadwal'
 ]
 

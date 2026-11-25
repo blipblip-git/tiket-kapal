@@ -51,6 +51,7 @@ export default function SessionGuard() {
       '/pusat-laporan-keberangkatan',
       '/rekap-bagi-hasil',
       '/scan',
+      '/syahbandar',
       '/template-jadwal',
       '/superadmin/pusat-kontrol',
     ]
