@@ -61,6 +61,13 @@ function FormContent() {
   const [penumpangList, setPenumpangList] = useState<Penumpang[]>([])
   const [noHp, setNoHp] = useState('')
 
+  // Dua jenis kesalahan dibedakan supaya isian pembeli tidak pernah hilang:
+  // - `error`      : jadwal/kursi gagal dimuat -> form memang tidak bisa dipakai.
+  // - `errorForm`  : isian kurang tepat atau server menolak (NIK, kuota pending)
+  //                  -> form TETAP tampil lengkap dengan semua data yang sudah
+  //                     diketik, hanya pesannya yang muncul di dekat tombol.
+  const [errorForm, setErrorForm] = useState('')
+
   const kursiIds = kursiIdStr ? kursiIdStr.split(',') : []
 
   useEffect(() => {
@@ -138,33 +145,55 @@ function FormContent() {
     setPenumpangList(baru)
   }
 
+  // Arahkan pengguna ke kolom yang bermasalah tanpa membuang isian lainnya.
+  const fokusKolom = (id: string) => {
+    if (typeof document === 'undefined') return
+    const el = document.getElementById(id) as HTMLInputElement | null
+    if (!el) return
+    el.scrollIntoView({ block: 'center', behavior: 'smooth' })
+    el.focus({ preventScroll: true })
+  }
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    setErrorForm('')
     
     if (!jadwal || kursiList.length === 0) {
-      setError('Data jadwal atau kursi belum siap.')
+      setErrorForm('Data jadwal atau kursi belum siap. Muat ulang halaman ini.')
       return
     }
     
     for (let i = 0; i < penumpangList.length; i++) {
-      if (!penumpangList[i].nama) {
-        setError(`Nama penumpang #${i + 1} wajib diisi.`)
+      if (!penumpangList[i].nama.trim()) {
+        setErrorForm(`Nama penumpang #${i + 1} wajib diisi.`)
+        fokusKolom(`nama-${i}`)
         return
       }
       if (penumpangList[i].nik.length !== 16) {
-        setError(`NIK penumpang #${i + 1} harus 16 digit.`)
+        setErrorForm(
+          `NIK penumpang #${i + 1} harus 16 digit, sekarang ${penumpangList[i].nik.length} digit. ` +
+            `Isian lain tetap tersimpan - perbaiki NIK-nya lalu tekan tombol lagi.`
+        )
+        fokusKolom(`nik-${i}`)
         return
       }
       const balitaKosong = penumpangList[i].balita.findIndex((n) => !n.trim())
       if (balitaKosong !== -1) {
         const labelBalita = penumpangList[i].balita.length > 1 ? ` ${balitaKosong + 1}` : ''
-        setError(`Nama balita${labelBalita} untuk penumpang #${i + 1} wajib diisi.`)
+        setErrorForm(`Nama balita${labelBalita} untuk penumpang #${i + 1} wajib diisi.`)
+        fokusKolom(`balita-${i}-${balitaKosong}`)
         return
       }
     }
-    
+
+    if (!noHp.trim()) {
+      setErrorForm('Nomor HP wajib diisi supaya e-tiket bisa dikirim.')
+      fokusKolom('hp')
+      return
+    }
+
     setProses(true)
-    setError('')
+    setErrorForm('')
 
     try {
       const payload = {
@@ -193,7 +222,7 @@ function FormContent() {
 
     } catch (err: any) {
       console.error('Error saat insert:', err)
-      setError('Gagal memproses pesanan: ' + err.message)
+      setErrorForm(err?.message ? String(err.message) : 'Gagal memproses pesanan. Coba lagi.')
       setProses(false)
     }
   }
@@ -241,6 +270,7 @@ function FormContent() {
                       type="text"
                       required
                       className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm text-gray-900 focus:ring-blue-500 focus:border-blue-500 text-sm"
+                      id={`nama-${idx}`}
                       value={p.nama}
                       onChange={(e) => updatePenumpang(idx, 'nama', e.target.value)}
                       placeholder="Sesuai KTP"
@@ -278,6 +308,7 @@ function FormContent() {
                         <input
                           type="text"
                           className="block w-full px-3 py-2 border border-orange-300 rounded-md shadow-sm text-gray-900 focus:ring-orange-500 focus:border-orange-500 text-sm"
+                          id={`balita-${idx}-${bIdx}`}
                           value={namaBalita}
                           onChange={(e) => updateBalita(idx, bIdx, e.target.value)}
                           placeholder={p.balita.length > 1 ? `Nama Balita ${bIdx + 1}` : 'Nama Balita'}
@@ -308,6 +339,8 @@ function FormContent() {
                     required
                     maxLength={16}
                     className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm text-gray-900 focus:ring-blue-500 focus:border-blue-500 text-sm"
+                    id={`nik-${idx}`}
+                    inputMode="numeric"
                     value={p.nik}
                     onChange={(e) => updatePenumpang(idx, 'nik', e.target.value.replace(/\D/g, '').slice(0, 16))}
                     placeholder="16 digit angka"
@@ -323,13 +356,21 @@ function FormContent() {
               type="tel"
               required
               className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm text-gray-900 focus:ring-blue-500 focus:border-blue-500"
+              id="hp"
               value={noHp}
               onChange={(e) => setNoHp(e.target.value.replace(/\D/g, ''))}
               placeholder="Contoh: 081234567890"
             />
           </div>
 
-          {error && <p className="text-red-500 text-sm">{error}</p>}
+          {errorForm && (
+            <p
+              role="alert"
+              className="text-red-700 text-sm font-medium bg-red-50 border border-red-200 rounded-md px-3 py-2 leading-snug"
+            >
+              {errorForm}
+            </p>
+          )}
 
           <button
             type="submit"
