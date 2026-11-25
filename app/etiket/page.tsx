@@ -441,7 +441,7 @@ function EtiketPublikContent() {
         return
       }
 
-      setPratinjau({ dataUrl: dataUrlPertama, kodeTiket: kodePertama, mode: 'simpan' })
+      setPratinjau({ dataUrl: dataUrlPertama, kodeTiket: kodePertama, mode: 'kirim' })
       setPesanShare('')
     } catch (err) {
       const e = err as { name?: string }
@@ -450,7 +450,7 @@ function EtiketPublikContent() {
         return
       }
       console.error(err)
-      setPratinjau({ dataUrl: dataUrlPertama, kodeTiket: kodePertama, mode: 'simpan' })
+      setPratinjau({ dataUrl: dataUrlPertama, kodeTiket: kodePertama, mode: 'kirim' })
       setPesanShare('')
     }
   }
