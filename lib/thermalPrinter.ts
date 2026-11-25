@@ -140,10 +140,19 @@ export async function cetakTiketThermal(tiket: any) {
       }
       await sendData(imageBytes)
       
-      // === MOBILE: FEED AWAL 10 DOTS + FEED SEBELUM CUT 72 DOTS ===
-      // \x1B\x4A\x0A = ESC J 10 | \x1B\x4A\x48 = ESC J 72
-      const endData = '\x1B\x4A\x0A\x1B\x4A\x48\x1D\x56\x00' 
-      await sendData(encoder.encode(endData))
+      // === MOBILE: FEED + POTONG (setara desktop 72 dots) ===
+      // Printer Bluetooth murah punya buffer sendiri: kalau feed/cut dikirim
+      // beruntun, byte terakhir bisa hilang selagi printer masih mencetak raster
+      // QR -> kertas berhenti tepat di bawah barcode dan harus ditekan manual.
+      // Desktop (Web Serial 9600 baud) tidak kena karena data mengalir lambat.
+      // Jadi: beri jeda, lalu feed dua tahap + potong.
+      await new Promise((r) => setTimeout(r, 800))
+      await sendData(encoder.encode('\x1B\x64\x02')) // ESC d 2: 2 baris (~7,5 mm)
+      await new Promise((r) => setTimeout(r, 150))
+      await sendData(encoder.encode('\x1B\x4A\x18')) // ESC J 24 dots (~3 mm)
+      await new Promise((r) => setTimeout(r, 150))
+      await sendData(encoder.encode('\x1D\x56\x00')) // GS V 0: potong kertas
+      await new Promise((r) => setTimeout(r, 400)) // beri waktu potong selesai
 
       device.gatt.disconnect()
       

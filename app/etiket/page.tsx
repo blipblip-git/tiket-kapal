@@ -5,7 +5,7 @@ import { useSearchParams, useRouter } from 'next/navigation'
 import { supabase, getOperatorSession } from '@/lib/supabase'
 import { ambilPesananPublik, type PesananPublik } from '@/lib/publikPesanan'
 import QRCode from 'qrcode'
-import { toPng } from 'html-to-image'
+import { tangkapGambarTiket } from '@/lib/gambarTiket'
 import { jsPDF } from 'jspdf'
 
 type Detail = {
@@ -281,13 +281,7 @@ function EtiketPublikContent() {
     const ref = tiketRefs.current[pesananId]
     if (!ref) return
     try {
-      const dataUrl = await toPng(ref, {
-        quality: 0.85,
-        pixelRatio: 1.5,
-        backgroundColor: '#ffffff',
-        width: ref.clientWidth,
-        height: ref.clientHeight
-      })
+      const dataUrl = await tangkapGambarTiket(ref)
       const namaDepan = namaPenumpang.split(' ')[0]
       const img = new Image()
       img.src = dataUrl
@@ -314,13 +308,7 @@ function EtiketPublikContent() {
 
       if (renderRef.current) {
         try {
-          const dataUrl = await toPng(renderRef.current, {
-            quality: 0.85,
-            pixelRatio: 1.5,
-            backgroundColor: '#ffffff',
-            width: renderRef.current.clientWidth,
-            height: renderRef.current.clientHeight
-          })
+          const dataUrl = await tangkapGambarTiket(renderRef.current)
 
           const namaDepan = t.pesanan.nama_penumpang.split(' ')[0]
           const img = new Image()
@@ -348,15 +336,10 @@ function EtiketPublikContent() {
 
     const ref = tiketRefs.current[pesananId]
     if (!ref) return
-    let dataUrl: string | null = null
+
+    let dataUrl: string
     try {
-      dataUrl = await toPng(ref, {
-        quality: 0.85,
-        pixelRatio: 1.5,
-        backgroundColor: '#ffffff',
-        width: ref.clientWidth,
-        height: ref.clientHeight
-      })
+      dataUrl = await tangkapGambarTiket(ref)
     } catch {
       setPesanShare('Gagal membuat gambar tiket')
       return
@@ -389,6 +372,56 @@ function EtiketPublikContent() {
       if (e.name !== 'AbortError') {
         setPesanShare('Gagal membagikan gambar: ' + (e.message || 'Kesalahan tidak diketahui'))
       }
+    }
+  }
+
+  // Gambar TIDAK bisa langsung "masuk Galeri" dari browser: atribut <a download>
+  // selalu mendarat di folder Unduhan/File. Di Android/iOS satu-satunya jalan
+  // resmi adalah lembar berbagi (Share) lalu pilih "Simpan ke Foto"/Google
+  // Photos. Tombol ini melakukan itu, dan tetap menyediakan unduhan biasa
+  // sebagai cadangan kalau browser tidak mendukung berbagi berkas.
+  async function simpanKeGaleri(pesananId: string, kodeTiket: string) {
+    setPesanShare('Menyiapkan gambar tiket...')
+
+    const ref = tiketRefs.current[pesananId]
+    if (!ref) return
+
+    let dataUrl: string
+    try {
+      dataUrl = await tangkapGambarTiket(ref)
+    } catch {
+      setPesanShare('Gagal membuat gambar tiket.')
+      return
+    }
+
+    try {
+      const blob = await (await fetch(dataUrl)).blob()
+      const file = new File([blob], `E-Tiket-${kodeTiket}.png`, { type: 'image/png' })
+      const bisaBagikanFile = typeof navigator.canShare === 'function' && navigator.canShare({ files: [file] })
+
+      if (bisaBagikanFile) {
+        await navigator.share({
+          files: [file],
+          title: 'E-Tiket Kapal',
+          text: `E-Tiket Kapal (Kode: ${kodeTiket}). Perlihatkan gambar ini ke petugas saat boarding.`
+        })
+        setPesanShare('Pilih "Simpan ke Foto" / Google Photos di daftar tadi agar gambar masuk Galeri.')
+        return
+      }
+
+      const link = document.createElement('a')
+      link.download = `E-Tiket-${kodeTiket}.png`
+      link.href = dataUrl
+      link.click()
+      setPesanShare('Browser ini belum bisa simpan langsung ke Galeri. Gambar ada di folder Unduhan/File - buka lewat aplikasi File lalu pilih "Pindahkan ke Galeri".')
+    } catch (err) {
+      const e = err as { name?: string; message?: string }
+      if (e.name === 'AbortError') {
+        setPesanShare('Penyimpanan dibatalkan. Tekan tombol lagi kalau ingin menyimpan gambar.')
+        return
+      }
+      console.error(err)
+      setPesanShare('Gagal menyimpan gambar: ' + (e.message || 'Kesalahan tidak diketahui'))
     }
   }
 
@@ -518,14 +551,28 @@ function EtiketPublikContent() {
 
       <div className="flex-shrink-0 bg-white border-t border-gray-200 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)] z-20 print-hidden relative">
         <div className="max-w-md mx-auto p-3 md:p-4 space-y-2">
-          <button
-            onClick={() => simpanPdfSatu(t.pesanan.id, t.pesanan.nama_penumpang, t.pesanan.kode_tiket)}
-            className={`w-full bg-blue-600 text-white py-2 md:py-2.5 rounded-md hover:bg-blue-700 text-[11px] md:text-sm font-bold shadow-sm transition-colors ${
-              tiketList.length === 1 ? 'animate-heartbeat-blue' : ''
-            }`}
-          >
-            Simpan PDF
-          </button>
+          <div className="grid grid-cols-2 gap-2">
+            <button
+              onClick={() => simpanKeGaleri(t.pesanan.id, t.pesanan.kode_tiket)}
+              className={`bg-blue-600 text-white py-2 md:py-2.5 rounded-md hover:bg-blue-700 text-[11px] md:text-sm font-bold shadow-sm transition-colors ${
+                tiketList.length === 1 ? 'animate-heartbeat-blue' : ''
+              }`}
+            >
+              Simpan Gambar
+            </button>
+
+            <button
+              onClick={() => simpanPdfSatu(t.pesanan.id, t.pesanan.nama_penumpang, t.pesanan.kode_tiket)}
+              className="bg-white text-blue-700 border border-blue-600 py-2 md:py-2.5 rounded-md hover:bg-blue-50 text-[11px] md:text-sm font-bold shadow-sm transition-colors"
+            >
+              Simpan PDF
+            </button>
+          </div>
+
+          <p className="text-[9px] md:text-[11px] text-gray-500 text-center leading-snug">
+            Simpan Gambar &rarr; pilih &quot;Simpan ke Foto&quot; / Google Photos supaya masuk Galeri.
+            Simpan PDF masuk ke folder Unduhan/File.
+          </p>
 
           {tiketList.length > 1 && (
             <button

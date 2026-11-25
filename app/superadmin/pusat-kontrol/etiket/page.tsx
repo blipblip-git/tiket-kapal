@@ -4,7 +4,7 @@ import { useEffect, useState, Suspense, useRef } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
 import { supabase, getProfile, getOperatorSession, type Profile } from '@/lib/supabase'
 import QRCode from 'qrcode'
-import { toPng } from 'html-to-image'
+import { tangkapGambarTiket } from '@/lib/gambarTiket'
 import { jsPDF } from 'jspdf'
 import { cetakTiketThermal } from '@/lib/thermalPrinter'
 
@@ -289,13 +289,7 @@ function EtiketSuperadminContent() {
     const ref = tiketRefs.current[pesananId]
     if (!ref) return
     try {
-      const dataUrl = await toPng(ref, {
-        quality: 0.85,
-        pixelRatio: 1.5,
-        backgroundColor: '#ffffff',
-        width: ref.clientWidth,
-        height: ref.clientHeight,
-      })
+      const dataUrl = await tangkapGambarTiket(ref)
       const namaDepan = namaPenumpang.split(' ')[0]
       const img = new Image()
       img.src = dataUrl
@@ -321,13 +315,7 @@ function EtiketSuperadminContent() {
 
       if (renderRef.current) {
         try {
-          const dataUrl = await toPng(renderRef.current, {
-            quality: 0.85,
-            pixelRatio: 1.5,
-            backgroundColor: '#ffffff',
-            width: renderRef.current.clientWidth,
-            height: renderRef.current.clientHeight,
-          })
+          const dataUrl = await tangkapGambarTiket(renderRef.current)
           
           const namaDepan = t.pesanan.nama_penumpang.split(' ')[0]
           const img = new Image()
@@ -355,16 +343,10 @@ function EtiketSuperadminContent() {
     
     const ref = tiketRefs.current[pesananId]
     if (!ref) return
-    let dataUrl: string | null = null
+    let dataUrl: string
     try {
-      dataUrl = await toPng(ref, {
-        quality: 0.85,
-        pixelRatio: 1.5,
-        backgroundColor: '#ffffff',
-        width: ref.clientWidth,
-        height: ref.clientHeight,
-      })
-    } catch (err) {
+      dataUrl = await tangkapGambarTiket(ref)
+    } catch {
       setPesanShare('Gagal membuat gambar tiket')
       return
     }
