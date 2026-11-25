@@ -74,7 +74,11 @@ function EtiketSuperadminContent() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [pesanShare, setPesanShare] = useState('')
-  const [showShareMenu, setShowShareMenu] = useState<string | null>(null)
+  // Browser tanpa Web Share berkas (browser bawaan Huawei, WebView WhatsApp)
+  // tidak bisa mengirim gambar sama sekali. Daripada berhenti di pesan error,
+  // gambar ditampilkan besar: "tekan & tahan -> Simpan gambar" pasti masuk
+  // Galeri, lalu petugas bisa mengirimnya dari WhatsApp.
+  const [pratinjau, setPratinjau] = useState<{ dataUrl: string; kodeTiket: string } | null>(null)
   const [activeTiketIndex, setActiveTiketIndex] = useState(0)
 
   const [renderData, setRenderData] = useState<TiketLengkap | null>(null)
@@ -97,20 +101,15 @@ function EtiketSuperadminContent() {
     init()
   }, [router])
 
+  // Escape menutup pratinjau gambar. Menu berbagi sudah tidak ada lagi:
+  // tombol "Kirim E-Tiket" langsung membuka lembar berbagi Android/iOS.
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setShowShareMenu(null)
-    }
-    const handleClickOutside = (e: MouseEvent) => {
-      if (!(e.target as Element).closest('.share-container')) {
-        setShowShareMenu(null)
-      }
+      if (e.key === 'Escape') setPratinjau(null)
     }
     document.addEventListener('keydown', handleKeyDown)
-    document.addEventListener('mousedown', handleClickOutside)
     return () => {
       document.removeEventListener('keydown', handleKeyDown)
-      document.removeEventListener('mousedown', handleClickOutside)
     }
   }, [])
 
@@ -348,8 +347,7 @@ function EtiketSuperadminContent() {
   }
 
   async function shareKe(pesananId: string, kodeTiket: string) {
-    setShowShareMenu(null)
-    setPesanShare('Menyiapkan gambar untuk dibagikan...')
+    setPesanShare('Menyiapkan e-tiket untuk dikirim...')
 
     const t = tiketList.find((x) => x.pesanan.id === pesananId)
     if (!t) return
@@ -368,25 +366,30 @@ function EtiketSuperadminContent() {
 
       const teksPesan = `E-Tiket Kapal Anda (Kode: ${kodeTiket}). Perlihatkan gambar ini ke petugas saat boarding.`
 
-      if (navigator.canShare && navigator.canShare({ files: [file] })) {
+      if (typeof navigator.canShare === 'function' && navigator.canShare({ files: [file] })) {
         await navigator.share({
           files: [file],
           title: 'E-Tiket Kapal',
           text: teksPesan,
         })
-        setPesanShare('Gambar tiket berhasil dibagikan. Cek di Galeri Foto atau WhatsApp.')
-      } else {
-        const link = document.createElement('a')
-        link.download = `E-Tiket-${kodeTiket}.png`
-        link.href = dataUrl
-        link.click()
-        setPesanShare('Gambar tiket berhasil diunduh. Cek di Galeri Foto HP Anda.')
+        setPesanShare('E-Tiket sudah dikirim. Kalau belum, ulangi lalu pilih WhatsApp atau Telegram.')
+        return
       }
-    } catch (err: any) {
+
+      // Tanpa Web Share: tampilkan gambar supaya bisa disimpan lalu dikirim
+      // manual. Jangan mengunduh diam-diam - hasilnya di folder Unduhan/File,
+      // bukan Galeri, dan petugas mengira gambarnya sudah masuk Galeri.
+      setPratinjau({ dataUrl, kodeTiket })
+      setPesanShare('')
+    } catch (err) {
+      const e = err as { name?: string; message?: string }
+      if (e.name === 'AbortError') {
+        setPesanShare('Pengiriman dibatalkan.')
+        return
+      }
       console.error(err)
-      if (err.name !== 'AbortError') {
-        setPesanShare('Gagal membagikan gambar: ' + err.message)
-      }
+      setPratinjau({ dataUrl, kodeTiket })
+      setPesanShare('')
     }
   }
 
@@ -619,22 +622,37 @@ function EtiketSuperadminContent() {
             </button>
           )}
 
-          <div className="relative share-container">
+          <div className="grid grid-cols-2 gap-2">
             <button
-              onClick={() => setShowShareMenu(showShareMenu === t.pesanan.id ? null : t.pesanan.id)}
+              onClick={() => shareKe(t.pesanan.id, t.pesanan.kode_tiket)}
               className="w-full bg-green-600 text-white py-2 md:py-2.5 rounded-md hover:bg-green-700 text-[11px] md:text-sm font-bold shadow-sm transition-colors"
             >
-              Share / Kirim Tiket
+              Kirim E-Tiket
             </button>
 
-            {showShareMenu === t.pesanan.id && (
-              <div className="absolute bottom-12 left-0 right-0 bg-white border border-gray-200 rounded-lg shadow-xl p-2 z-50 flex justify-center">
-                <button onClick={() => shareKe(t.pesanan.id, t.pesanan.kode_tiket)} className="flex flex-col items-center p-2 hover:bg-gray-50 rounded w-full">
-                  <span className="text-[10px] md:text-xs font-medium text-gray-700">Bagikan Gambar (WA/TG)</span>
-                </button>
-              </div>
-            )}
+            <button
+              onClick={() => simpanPdfSatu(t.pesanan.id, t.pesanan.nama_penumpang)}
+              className={`w-full bg-white text-blue-700 border border-blue-600 py-2 md:py-2.5 rounded-md hover:bg-blue-50 text-[11px] md:text-sm font-bold shadow-sm transition-colors ${
+                tiketList.length === 1 ? 'animate-heartbeat-blue' : ''
+              }`}
+            >
+              Simpan PDF
+            </button>
           </div>
+
+          <p className="text-[9px] md:text-[11px] text-gray-500 text-center leading-snug">
+            Kirim E-Tiket &rarr; pilih WhatsApp atau Telegram. Simpan PDF masuk ke folder
+            Unduhan/File.
+          </p>
+
+          {tiketList.length > 1 && (
+            <button
+              onClick={simpanSemuaPdf}
+              className="w-full bg-pink-500 text-white py-2 md:py-2.5 rounded-md hover:bg-pink-600 text-[11px] md:text-sm font-bold shadow-sm transition-colors animate-heartbeat-pink"
+            >
+              Simpan Semua PDF ({tiketList.length})
+            </button>
+          )}
 
         </div>
       </div>
@@ -650,6 +668,48 @@ function EtiketSuperadminContent() {
           </div>
         )}
       </div>
+
+      {pratinjau && (
+        <div
+          className="fixed inset-0 z-50 bg-black/70 flex items-start justify-center p-3 overflow-y-auto print-hidden"
+          role="dialog"
+          aria-modal="true"
+        >
+          <div className="bg-white rounded-lg p-3 w-full max-w-md mt-6">
+            <p className="text-[12px] text-gray-900 font-medium text-center leading-snug">
+              Kirim lewat WhatsApp / Telegram: tekan &amp; tahan gambar di bawah, pilih
+              Simpan gambar, lalu kirim dari Galeri.
+            </p>
+
+            <img
+              src={pratinjau.dataUrl}
+              alt={`E-Tiket ${pratinjau.kodeTiket}`}
+              className="w-full h-auto mt-2 border border-gray-200 rounded"
+            />
+
+            <div className="grid grid-cols-2 gap-2 mt-3">
+              <a
+                href={pratinjau.dataUrl}
+                download={`E-Tiket-${pratinjau.kodeTiket}.png`}
+                className="bg-blue-600 text-white text-center py-2 rounded-md text-xs font-bold"
+              >
+                Unduh Gambar
+              </a>
+              <button
+                onClick={() => setPratinjau(null)}
+                className="bg-gray-200 text-gray-800 py-2 rounded-md text-xs font-bold"
+              >
+                Tutup
+              </button>
+            </div>
+
+            <p className="text-[10px] text-gray-500 text-center mt-2 leading-snug">
+              Tekan &amp; tahan gambar = cara paling cepat menyimpan ke Galeri; tombol Unduh
+              Gambar menyimpan ke folder Unduhan/File.
+            </p>
+          </div>
+        </div>
+      )}
 
     </div>
   )
