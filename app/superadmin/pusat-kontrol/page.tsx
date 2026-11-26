@@ -57,7 +57,7 @@ const KARTU: Kartu[] = [
     path: '/superadmin/pusat-kontrol/admin/syahbandar',
     ikon: '⚓',
     judul: 'Akun Syahbandar',
-    ket: 'Akun login manifest syahbandar. Satu akun berlaku untuk semua daerah.',
+    ket: 'Akun login manifest syahbandar (password-only). Satu akun berlaku untuk semua daerah.',
     jenis: 'akun',
   },
 ]

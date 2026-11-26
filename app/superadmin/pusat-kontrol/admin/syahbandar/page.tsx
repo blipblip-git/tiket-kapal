@@ -130,11 +130,37 @@ export default function AdminSyahbandarPage() {
     setAksiLoading(null)
   }
 
+  async function handleHapus(target: Profile) {
+    if (!confirm(
+      `Hapus permanen akun syahbandar ${target.nama}?\n\n` +
+      'Akun tidak bisa dikembalikan. Kalau hanya ingin menutup akses sementara, pakai Nonaktifkan.'
+    )) return
+
+    setAksiLoading(target.id)
+    setPesan(null)
+
+    // RLS `tulis_profil_delete` mengizinkan Superadmin menghapus profil.
+    const { error } = await supabase.from('profiles').delete().eq('id', target.id)
+
+    if (error) {
+      setPesan({ tipe: 'err', teks: 'Gagal hapus: ' + error.message })
+      setAksiLoading(null)
+      return
+    }
+
+    if (editId === target.id) setEditId(null)
+    setPesan({ tipe: 'ok', teks: `Akun syahbandar ${target.nama} dihapus permanen.` })
+    await loadAkun()
+    setAksiLoading(null)
+  }
+
   async function handleTambah(e: React.FormEvent) {
     e.preventDefault()
     setPesan(null)
-    if (!inputNama.trim() || !inputHp.trim() || !inputUnit.trim() || !inputPass) {
-      setPesan({ tipe: 'err', teks: 'Semua kolom wajib diisi.' })
+    // Nomor HP opsional: login Syahbandar hanya memakai password, nomor HP
+    // cuma dipakai untuk tombol WA/kontak.
+    if (!inputNama.trim() || !inputUnit.trim() || !inputPass) {
+      setPesan({ tipe: 'err', teks: 'Nama, instansi, dan password wajib diisi. Nomor HP boleh dikosongkan.' })
       return
     }
 
@@ -156,17 +182,19 @@ export default function AdminSyahbandarPage() {
       return
     }
 
-    const cekNomor = await validasiNomorHpUnik(inputHp)
-    if (!cekNomor.ok) {
-      setModalLoading(false)
-      setPesan({ tipe: 'err', teks: cekNomor.pesan })
-      return
+    if (inputHp.trim()) {
+      const cekNomor = await validasiNomorHpUnik(inputHp)
+      if (!cekNomor.ok) {
+        setModalLoading(false)
+        setPesan({ tipe: 'err', teks: cekNomor.pesan })
+        return
+      }
     }
 
     const { error } = await supabase.from('profiles').insert({
       id: crypto.randomUUID(),
       email: null,
-      nomor_hp: normalisasiNomorHp(inputHp),
+      nomor_hp: inputHp.trim() ? normalisasiNomorHp(inputHp) : null,
       nama: inputNama.trim(),
       role: 'syahbandar',
       lokasi: null, // berlaku untuk SEMUA daerah, bukan satu pelabuhan
@@ -198,18 +226,20 @@ export default function AdminSyahbandarPage() {
   }
 
   async function handleSimpanEdit(id: string) {
-    if (!editNama.trim() || !editHp.trim() || !editUnit.trim()) {
-      setPesan({ tipe: 'err', teks: 'Nama, instansi, dan No HP wajib diisi.' })
+    if (!editNama.trim() || !editUnit.trim()) {
+      setPesan({ tipe: 'err', teks: 'Nama dan instansi wajib diisi. Nomor HP boleh dikosongkan.' })
       return
     }
 
     setEditLoading(true)
 
-    const cekNomor = await validasiNomorHpUnik(editHp, id)
-    if (!cekNomor.ok) {
-      setEditLoading(false)
-      setPesan({ tipe: 'err', teks: cekNomor.pesan })
-      return
+    if (editHp.trim()) {
+      const cekNomor = await validasiNomorHpUnik(editHp, id)
+      if (!cekNomor.ok) {
+        setEditLoading(false)
+        setPesan({ tipe: 'err', teks: cekNomor.pesan })
+        return
+      }
     }
 
     if (editPass) {
@@ -232,7 +262,7 @@ export default function AdminSyahbandarPage() {
 
     const updateData: Record<string, unknown> = {
       nama: editNama.trim(),
-      nomor_hp: normalisasiNomorHp(editHp),
+      nomor_hp: editHp.trim() ? normalisasiNomorHp(editHp) : null,
       unit: editUnit.trim(),
       email: null,
       lokasi: null,
@@ -263,7 +293,15 @@ export default function AdminSyahbandarPage() {
   }
 
   function kirimWA(p: Profile) {
-    let noHpMurni = p.nomor_hp ? p.nomor_hp.replace(/\D/g, '') : ''
+    if (!p.nomor_hp) {
+      setPesan({
+        tipe: 'err',
+        teks: `Akun ${p.nama} belum punya nomor HP. Isi lewat Edit kalau perlu kirim info login lewat WA.`
+      })
+      return
+    }
+
+    let noHpMurni = p.nomor_hp.replace(/\D/g, '')
     if (noHpMurni.startsWith('0')) noHpMurni = '62' + noHpMurni.slice(1)
 
     // Password TIDAK pernah dikirim lewat chat. Sampaikan langsung/lisan.
@@ -287,7 +325,7 @@ export default function AdminSyahbandarPage() {
               </span>
             </h1>
             <p className="text-sm text-gray-500 mt-1">
-              Satu akun berlaku untuk semua daerah. Login lewat halaman Login (tab Syahbandar) hanya dengan password — tanpa nomor HP/email.
+              Satu akun berlaku untuk semua daerah. Login lewat halaman Login (tab Syahbandar) hanya dengan password — tanpa nomor HP/email. Nomor HP cukup untuk kontak/WA dan boleh dikosongkan.
             </p>
           </div>
           <div className="flex gap-2 w-full md:w-auto">
@@ -314,7 +352,7 @@ export default function AdminSyahbandarPage() {
                   <th className="px-4 py-3 w-12">No</th>
                   <th className="px-4 py-3">Nama</th>
                   <th className="px-4 py-3">Instansi</th>
-                  <th className="px-4 py-3">No. HP / Pass</th>
+                  <th className="px-4 py-3">Kontak / Pass</th>
                   <th className="px-4 py-3 text-center">Status</th>
                   <th className="px-4 py-3 text-center">Aksi</th>
                 </tr>
@@ -334,7 +372,7 @@ export default function AdminSyahbandarPage() {
                           <input type="text" value={editUnit} onChange={(e) => setEditUnit(e.target.value)} className="w-full border rounded px-2 py-1 text-gray-900" placeholder="KSOP Tarakan" />
                         </td>
                         <td className="px-4 py-2 space-y-1">
-                          <input type="tel" value={editHp} onChange={(e) => setEditHp(e.target.value)} className="w-full border rounded px-2 py-1 text-gray-900" />
+                          <input type="tel" value={editHp} onChange={(e) => setEditHp(e.target.value)} className="w-full border rounded px-2 py-1 text-gray-900" placeholder="No HP opsional" />
                           <input type="text" value={editPass} onChange={(e) => setEditPass(e.target.value)} className="w-full border rounded px-2 py-1 text-gray-900" placeholder="Kosongkan jika tidak reset password" />
                         </td>
                         <td className="px-4 py-2 text-center text-gray-400">—</td>
@@ -356,7 +394,7 @@ export default function AdminSyahbandarPage() {
                       <td className="px-4 py-3 font-bold text-gray-900">{p.nama}</td>
                       <td className="px-4 py-3 font-medium text-gray-900">{p.unit || '-'}</td>
                       <td className="px-4 py-3 text-gray-600">
-                        <div>{p.nomor_hp || '-'}</div>
+                        <div>{p.nomor_hp || <span className="italic text-gray-400">Tanpa No HP</span>}</div>
                         <div className="text-xs text-gray-400">{p.password_hash || p.password_plain ? '••••••••' : '-'}</div>
                       </td>
                       <td className="px-4 py-3 text-center">
@@ -371,6 +409,10 @@ export default function AdminSyahbandarPage() {
                         <span className="text-gray-300 mx-2">|</span>
                         <button onClick={() => toggleAktif(p)} disabled={aksiLoading === p.id} className={p.aktif ? 'text-orange-600 hover:underline font-medium disabled:opacity-50' : 'text-green-600 hover:underline font-medium disabled:opacity-50'}>
                           {aksiLoading === p.id ? '...' : p.aktif ? 'Nonaktifkan' : 'Aktifkan'}
+                        </button>
+                        <span className="text-gray-300 mx-2">|</span>
+                        <button onClick={() => handleHapus(p)} disabled={aksiLoading === p.id} className="text-red-600 hover:underline font-medium disabled:opacity-50" title="Hapus permanen akun ini">
+                          Hapus
                         </button>
                       </td>
                     </tr>
@@ -388,6 +430,7 @@ export default function AdminSyahbandarPage() {
 
         <p className="mt-4 text-xs text-gray-500">
           Tips: kirim link <span className="font-mono">{URL_LOGIN}</span> dan sampaikan password secara langsung (bukan lewat WA/chat).
+          Tombol <span className="font-semibold text-red-600">Hapus</span> bersifat permanen; pakai <span className="font-semibold">Nonaktifkan</span> kalau hanya ingin menutup akses sementara.
         </p>
       </div>
 
@@ -399,8 +442,9 @@ export default function AdminSyahbandarPage() {
               <label className="block text-sm font-medium text-gray-700 mb-1">Nama Lengkap</label>
               <input type="text" value={inputNama} onChange={(e) => setInputNama(e.target.value)} className="w-full border rounded px-3 py-2 mb-3 text-gray-900" required />
 
-              <label className="block text-sm font-medium text-gray-700 mb-1">Nomor HP</label>
-              <input type="tel" value={inputHp} onChange={(e) => setInputHp(e.target.value)} className="w-full border rounded px-3 py-2 mb-3 text-gray-900" placeholder="0823..." required />
+              <label className="block text-sm font-medium text-gray-700 mb-1">Nomor HP (opsional)</label>
+              <input type="tel" value={inputHp} onChange={(e) => setInputHp(e.target.value)} className="w-full border rounded px-3 py-2 mb-1 text-gray-900" placeholder="0823... (boleh dikosongkan)" />
+              <p className="text-[11px] text-gray-500 mb-3">Hanya untuk tombol WA/kontak — login Syahbandar tetap memakai password.</p>
 
               <label className="block text-sm font-medium text-gray-700 mb-1">Instansi</label>
               <input type="text" value={inputUnit} onChange={(e) => setInputUnit(e.target.value)} className="w-full border rounded px-3 py-2 mb-3 text-gray-900" placeholder="Contoh: KSOP Tarakan" required />
