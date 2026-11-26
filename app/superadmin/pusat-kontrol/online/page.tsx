@@ -87,11 +87,11 @@ function OnlineSuperadminContent() {
         {/* HEADER */}
         <div className="flex justify-between items-center mb-6">
           <div>
-            <h1 className="text-2xl font-bold text-white">Pusat Kendali Lintasea</h1>
+            <h1 className="text-2xl font-bold text-white">Pusat Kendali Lintasair</h1>
             <p className="text-sm text-gray-400">Simulasi Etalase Penjualan Online (Pembeli)</p>
           </div>
           <button 
-            onClick={() => router.push('/superadmin/pusat-kontrol')} 
+            onClick={() => router.push('/dashboard-superadmin')} 
             className="text-sm bg-gray-800 px-4 py-2 rounded hover:bg-gray-700 border border-gray-700"
           >
             &larr; Kembali

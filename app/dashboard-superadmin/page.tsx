@@ -89,7 +89,7 @@ export default function DashboardSuperadminPage() {
             className="bg-gray-800 p-8 rounded-xl shadow-lg hover:bg-gray-700 transition border border-gray-700 text-left flex flex-col items-start h-48 justify-center group"
           >
             <div className="text-5xl mb-4 group-hover:scale-110 transition">🌐</div>
-            <h2 className="text-xl font-bold text-white mb-2">Pusat Kendali Lintasea</h2>
+            <h2 className="text-xl font-bold text-white mb-2">Pusat Kendali Lintasair</h2>
             <p className="text-sm text-gray-400">Atur teks, ikon, dan tampilan halaman pembeli online.</p>
           </button>
 

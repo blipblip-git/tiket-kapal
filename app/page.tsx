@@ -366,6 +366,33 @@ function BerandaContent() {
         </div>
       </div>
 
+      {/* Ikon Jadwal Kapal: mengisi ruang kosong di bawah kartu pencarian. */}
+      <button
+        type="button"
+        onClick={() => router.push('/jadwal-kapal')}
+        className="mt-4 sm:mt-5 bg-white rounded-3xl shadow-lg w-full max-w-[340px] sm:max-w-sm px-5 py-4 flex items-center gap-3 text-left hover:shadow-xl transition-shadow"
+      >
+        <span className="shrink-0 w-11 h-11 rounded-2xl bg-purple-100 text-purple-700 flex items-center justify-center">
+          <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              d="M3 14l1.5 4.5A2 2 0 006.4 20h11.2a2 2 0 001.9-1.5L21 14M5 14V9a1 1 0 011-1h12a1 1 0 011 1v5M9 8V5h6v3M12 2v3"
+            />
+          </svg>
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className="block text-sm sm:text-base font-bold text-gray-900">Jadwal Kapal</span>
+          <span className="block text-[11px] sm:text-xs text-gray-500">
+            Semua rute &amp; jam keberangkatan hari ini
+          </span>
+        </span>
+        <svg className="w-5 h-5 text-gray-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+        </svg>
+      </button>
+
       {showAsalModal && (
         <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-xl shadow-2xl w-full max-w-xs overflow-hidden flex flex-col max-h-[80vh]">
