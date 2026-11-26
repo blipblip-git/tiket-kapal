@@ -63,6 +63,11 @@ DEMO_MODE=true
 
 Jangan mengisi `DEMO_SUPABASE_URL` di deployment demo dengan URL real.
 
+**Penting:** demo harus menjadi **project Vercel terpisah** dari real. Jangan
+menambahkan `demo.lintasair.com` sebagai domain kedua di project real, karena
+environment variable Vercel berlaku untuk seluruh project — `DEMO_MODE=true`
+akan ikut menutup area Superadmin di real.
+
 ## Membangun database demo (setelah schema-only dump tersedia)
 
 Repo ini hanya berisi migrasi incremental; **belum ada base schema** yang bisa
@@ -74,9 +79,43 @@ membangun database kosong dari nol. Langkah yang benar:
 3. Jalankan `schema-real.sql` di SQL Editor demo.
 4. Jalankan migrasi incremental dari repo dengan urutan aman:
    `security-hardening` → `security-tahap2` → `security-tahap2b-grant` →
-   `security-tahap3-publik` → `kursi-segmen` → `security-tahap4-rls`.
-5. **Jangan** menjalankan seed/data contoh apa pun.
-6. Verifikasi dengan `node scripts/verify-demo-clean.mjs`.
+   `security-tahap3-publik` → `kursi-segmen`.
+5. **Jangan** menjalankan `security-tahap4-rls.sql` hanya di demo kalau di real
+   belum dijalankan. Tujuannya demo punya skema yang sama dengan real. Jalankan
+   tahap 4 di **keduanya** setelah disetujui, atau lewati dulu.
+6. **Jangan** menjalankan seed/data contoh apa pun.
+7. Verifikasi dengan `node scripts/verify-demo-clean.mjs`.
+
+## Akun bootstrap demo (wajib 1 akun admin)
+
+Pendaftaran mandiri (`/daftar-admin` dan `/registrasi-admin`) **ditutup**, jadi
+demo tidak bisa dimulai dari `profiles` kosong lalu mendaftar lewat UI. Buat
+satu akun `admin_utama` netral langsung lewat SQL Editor demo, setelah skema
+selesai dan sebelum login pertama.
+
+1. Buat hash password dengan perintah Node (sama dengan hash aplikasi):
+
+   ```bash
+   node -e "const {randomBytes,pbkdf2Sync}=require('crypto');const p=process.argv[1];const s=randomBytes(16);const h=pbkdf2Sync(p,s,120000,32,'sha256');console.log('pbkdf2$120000$'+s.toString('base64')+'$'+h.toString('base64'))" 'PASSWORD_DEMO'
+   ```
+
+2. Jalankan di SQL Editor **database demo**:
+
+   ```sql
+   insert into public.profiles
+     (id, email, nama, nama_perusahaan, nomor_hp, role, aktif, password_hash)
+   values
+     (gen_random_uuid(), 'demo@lintasair.com', 'Admin Demo',
+      'Demo Lintas Air', null, 'admin_utama', true, 'HASH_DARI_LANGKAH_1');
+   ```
+
+3. Login di `https://demo.lintasair.com/login` memakai email
+   `demo@lintasair.com` dan password tadi. Pada login pertama, server membuat
+   akun Supabase Auth otomatis dan menyimpan `auth_user_id`.
+
+Akun ini **bukan** Superadmin. Jangan membuat akun `role='superadmin'` di demo.
+Setelah akun bootstrap ada, `npm run demo:verify` tetap harus lulus (script
+hanya melarang data operasional dan akun Superadmin).
 
 ## Verifikasi wajib
 
