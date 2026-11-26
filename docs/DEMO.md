@@ -96,7 +96,7 @@ selesai dan sebelum login pertama.
 1. Buat hash password dengan perintah Node (sama dengan hash aplikasi):
 
    ```bash
-   node -e "const {randomBytes,pbkdf2Sync}=require('crypto');const p=process.argv[1];const s=randomBytes(16);const h=pbkdf2Sync(p,s,120000,32,'sha256');console.log('pbkdf2$120000$'+s.toString('base64')+'$'+h.toString('base64'))" 'PASSWORD_DEMO'
+   node -e 'const {randomBytes,pbkdf2Sync}=require("crypto");const p=process.argv[1];const s=randomBytes(16);const h=pbkdf2Sync(p,s,120000,32,"sha256");console.log("pbkdf2$120000$"+s.toString("base64")+"$"+h.toString("base64"))' 'PASSWORD_DEMO'
    ```
 
 2. Jalankan di SQL Editor **database demo**:
