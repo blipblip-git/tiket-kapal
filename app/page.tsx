@@ -418,11 +418,12 @@ function BerandaContent() {
         onClick={() => router.push('/jadwal-kapal')}
         className="bg-white rounded-3xl shadow-lg w-full max-w-[340px] sm:max-w-sm px-[clamp(14px,4vw,20px)] py-[clamp(6px,1.4vh,14px)] flex items-center gap-[clamp(8px,1.4vh,12px)] text-left hover:shadow-xl transition-shadow"
       >
-        <span className="shrink-0 w-[clamp(52px,8vh,64px)] h-[clamp(30px,4.6vh,38px)] rounded-xl bg-purple-100 flex items-center justify-center overflow-hidden px-1">
-          <IkonKapal className="w-full h-auto" />
-        </span>
+        <IkonKapal
+          variant="garis"
+          className="shrink-0 w-[clamp(52px,8vh,64px)] h-auto text-black"
+        />
         <span className="min-w-0 flex-1">
-          <span className="block text-[clamp(13px,2.2vh,16px)] font-bold text-gray-900">Jadwal Kapal</span>
+          <span className="block text-[clamp(13px,2.2vh,16px)] font-bold text-gray-900">Jadwal Kapal Speed</span>
           <span className="block text-[clamp(10px,1.7vh,12px)] text-gray-500">
             Semua rute &amp; jam keberangkatan hari ini
           </span>

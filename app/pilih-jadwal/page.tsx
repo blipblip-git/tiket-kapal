@@ -13,7 +13,6 @@ import {
   formatTanggalPanjang,
   tanggalOperasiTerdekatDari
 } from '@/lib/hari'
-import IkonKapal from '@/components/IkonKapal'
 
 type JadwalItem = {
   id: string
@@ -234,19 +233,13 @@ function PilihJadwalContent() {
                   : 'bg-white border-gray-200 hover:border-purple-500 hover:bg-purple-50'
               }`}
             >
-              <div className="flex items-center gap-2">
-                {/* Ilustrasi kapal di sebelah jam berangkat */}
-                <IkonKapal
-                  className={`shrink-0 w-[clamp(50px,15vw,70px)] h-auto ${j.isClosed ? 'opacity-60 grayscale' : ''}`}
-                />
-                <div className="min-w-0">
-                  <p className={`font-bold text-xl truncate ${j.isClosed ? 'text-gray-500' : 'text-purple-700'}`}>
-                    {j.jam_berangkat.substring(0, 5)}
-                  </p>
-                  <p className={`text-sm font-medium mt-1 truncate ${j.isClosed ? 'text-gray-400' : 'text-gray-800'}`}>
-                    {j.nama_kapal}
-                  </p>
-                </div>
+              <div className="min-w-0">
+                <p className={`font-bold text-xl truncate ${j.isClosed ? 'text-gray-500' : 'text-purple-700'}`}>
+                  {j.jam_berangkat.substring(0, 5)}
+                </p>
+                <p className={`text-sm font-medium mt-1 truncate ${j.isClosed ? 'text-gray-400' : 'text-gray-800'}`}>
+                  {j.nama_kapal}
+                </p>
               </div>
               <div className="text-right">
                 <p className={`font-bold whitespace-nowrap ${j.isClosed ? 'text-gray-500' : 'text-gray-900'}`}>
@@ -264,7 +257,6 @@ function PilihJadwalContent() {
       {showEmptyPopup && (
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-2xl shadow-xl max-w-sm w-full p-6 text-center">
-            <IkonKapal ombak className="w-[70px] h-auto mx-auto mb-3" />
             <h3 className="text-xl font-bold text-gray-900 mb-2">
               {infoKosong ? 'Kapal Tidak Beroperasi' : 'Jadwal Tidak Ditemukan'}
             </h3>

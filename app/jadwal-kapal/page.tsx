@@ -90,28 +90,29 @@ function KartuRute({
 
   return (
     <div className="bg-white rounded-2xl shadow-lg overflow-hidden">
-      <div className="flex flex-wrap items-center gap-x-2 gap-y-1 px-4 py-3 border-b border-gray-100 bg-gray-50">
+      <div className="flex flex-nowrap items-center gap-x-2 px-3 py-2.5 sm:px-4 sm:py-3 border-b border-gray-100 bg-gray-50">
         {/* Judul dua arah: kiri arah yang sedang tampil, panah di tengah
             (tombol putar), kanan arah kebalikannya. Tidak ada label "Rute"
             lagi. key ikut berubah saat diputar supaya teks bergeser masuk
-            sehingga perubahan arah langsung terlihat. */}
+            sehingga perubahan arah langsung terlihat. Font dibuat kecil di
+            HP supaya kedua arah tetap muat satu baris (tidak jadi 2 lapis). */}
         <h2
           key={`${asal}-${tujuan}`}
-          className="rute-geser text-sm sm:text-base font-bold text-gray-900 whitespace-nowrap"
+          className="rute-geser shrink-0 text-[12px] sm:text-base font-bold text-gray-900 whitespace-nowrap"
         >
           {asal} &ndash; {tujuan}
         </h2>
-        {/* Panah + arah kebalikan dibungkus supaya tetap satu baris saat
-            layar sempit (keduanya turun bersama, tidak terpisah). */}
-        <div className="flex items-center gap-1.5">
+        {/* Panah + arah kebalikan dibungkus supaya tetap satu baris. Teks arah
+            kebalikan dipotong rapi kalau layar benar-benar sempit. */}
+        <div className="flex min-w-0 items-center gap-1.5">
           <button
             type="button"
             onClick={onPutar}
             title="Putar arah rute"
             aria-label={`Putar arah rute ${asal} - ${tujuan}`}
-            className="shrink-0 w-6 h-6 flex items-center justify-center rounded-full border border-gray-200 bg-white text-gray-600 hover:text-purple-700 hover:border-purple-300 transition-colors"
+            className="shrink-0 w-5 h-5 sm:w-6 sm:h-6 flex items-center justify-center rounded-full border border-gray-200 bg-white text-gray-600 hover:text-purple-700 hover:border-purple-300 transition-colors"
           >
-            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg className="w-3 h-3 sm:w-3.5 sm:h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path
                 strokeLinecap="round"
                 strokeLinejoin="round"
@@ -122,7 +123,7 @@ function KartuRute({
           </button>
           <span
             key={`${tujuan}-${asal}`}
-            className="rute-geser text-[11px] sm:text-xs font-semibold text-gray-400 whitespace-nowrap"
+            className="rute-geser min-w-0 truncate text-[10px] sm:text-xs font-semibold text-gray-400 whitespace-nowrap"
           >
             {tujuan} &ndash; {asal}
           </span>
