@@ -5,9 +5,10 @@ import { useEffect, useState } from 'react'
 import { supabase, type Profile } from '@/lib/supabase'
 
 // Pusat Kontrol = "mother file" untuk SEMUA kamar penyewa (khusus Superadmin).
-// Isi kartu dibagi 2 jenis:
-// 1. Editor TEKS  -> mengubah tulisan/tombol yang dibaca dashboard role terkait.
-// 2. Kelola AKUN  -> CRUD akun petugas (bukan editor tampilan).
+// Semua kartu di sini hanya mengubah tulisan/tampilan atau data global.
+// TIDAK ada pengelolaan akun petugas di sini: akun petugas adalah milik
+// penyewa dan dibuat Admin Utama masing-masing. Satu-satunya kartu akun
+// adalah Syahbandar (akun platform, lintas penyewa).
 type Kartu = {
   path: string
   ikon: string
@@ -35,7 +36,7 @@ const KARTU: Kartu[] = [
     path: '/superadmin/pusat-kontrol/petugas',
     ikon: '📷',
     judul: 'Teks: Petugas',
-    ket: 'Judul dashboard, menu petugas, dan tulisan halaman Akun Petugas.',
+    ket: 'Judul dashboard dan nama menu untuk semua Petugas Keberangkatan.',
     jenis: 'teks',
   },
   {
@@ -46,11 +47,11 @@ const KARTU: Kartu[] = [
     jenis: 'teks',
   },
   {
-    path: '/superadmin/pusat-kontrol/admin/petugas',
-    ikon: '🧑‍✈️',
-    judul: 'Akun Petugas',
-    ket: 'Tambah / edit / hapus akun. Tulisan halaman diatur di "Teks: Petugas".',
-    jenis: 'akun',
+    path: '/superadmin/pusat-kontrol/petugas/akun',
+    ikon: '📝',
+    judul: 'Teks: Akun Petugas',
+    ket: 'Tulisan halaman Akun Petugas (judul, keterangan, 2 kartu). Hanya teks, bukan pembuatan akun.',
+    jenis: 'teks',
   },
   {
     path: '/superadmin/pusat-kontrol/admin/syahbandar',
@@ -131,7 +132,7 @@ export default function PusatKontrolPage() {
         </div>
 
         <p className="text-xs text-gray-500 mt-6">
-          Catatan: kartu <b>Editor Teks</b> mengubah tulisan. Kartu <b>Kelola Akun</b> hanya mengelola akun login petugas.
+          Catatan: kartu <b>Editor Teks</b> hanya mengubah tulisan. Kartu <b>Kelola Akun</b> hanya untuk akun <b>Syahbandar</b> (akun platform). Akun petugas dibuat oleh Admin Utama masing-masing penyewa.
         </p>
       </div>
     </div>

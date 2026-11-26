@@ -63,20 +63,17 @@ export default function AdminPetugasPage() {
         return
       }
 
-      // Halaman ini hanya untuk Admin Utama penyewa / Superadmin.
-      // Kolektor, petugas, dan agen tidak boleh membuka manajemen akun.
+      // Halaman ini hanya untuk Admin Utama penyewa (akun petugas = akun tenant).
+      // Kolektor, petugas, agen, dan Superadmin tidak boleh membuka manajemen akun.
       const role = (profile.role || '').trim().toLowerCase()
-      if (role !== 'admin_utama' && role !== 'superadmin') {
+      if (role !== 'admin_utama') {
         setAksesDitolak(true)
-        setPesan({ tipe: 'err', teks: 'Akses ditolak. Halaman ini hanya untuk Admin Utama atau Superadmin aktif.' })
+        setPesan({ tipe: 'err', teks: 'Akses ditolak. Halaman ini hanya untuk Admin Utama penyewa.' })
         setLoading(false)
         return
       }
 
-      // Ambil operator_id dari URL (jika Superadmin lagi ngetes), atau dari Profil (jika Admin asli)
-      const urlParams = new URLSearchParams(window.location.search)
-      const urlOperatorId = urlParams.get('operator')
-      const targetOperatorId = urlOperatorId || profile.operator_id || profile.id
+      const targetOperatorId = profile.operator_id || profile.id
 
       // Simulasi profil "me" biar filter jalan
       setMe({ ...profile, operator_id: targetOperatorId, id: targetOperatorId } as Profile)
@@ -272,11 +269,8 @@ export default function AdminPetugasPage() {
         {/* HEADER */}
         <div className="mb-6 flex flex-col md:flex-row md:items-start md:justify-between gap-3">
           <div className="min-w-0">
-            <h1 className="text-xl md:text-2xl font-bold text-gray-800 flex flex-wrap items-center gap-2">
+            <h1 className="text-xl md:text-2xl font-bold text-gray-800">
               Manajemen Petugas
-              <span className="text-xs bg-green-100 text-green-700 px-2 py-1 rounded-full inline-flex items-center gap-1 border border-green-300 whitespace-nowrap">
-                <span className="w-2 h-2 rounded-full bg-green-500"></span> Mode Pusat Kontrol
-              </span>
             </h1>
             <p className="text-sm text-gray-500 mt-1">Kelola akun petugas keberangkatan (Scan & Manifest) untuk kapal Anda.</p>
           </div>

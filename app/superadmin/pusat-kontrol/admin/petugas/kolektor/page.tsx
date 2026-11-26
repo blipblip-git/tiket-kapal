@@ -58,20 +58,17 @@ export default function AdminPetugasKolektorPage() {
         return
       }
 
-      // Halaman ini hanya untuk Admin Utama penyewa / Superadmin.
-      // Kolektor, petugas, dan agen tidak boleh membuka manajemen akun.
+      // Halaman ini hanya untuk Admin Utama penyewa (akun petugas = akun tenant).
+      // Kolektor, petugas, agen, dan Superadmin tidak boleh membuka manajemen akun.
       const role = (profile.role || '').trim().toLowerCase()
-      if (role !== 'admin_utama' && role !== 'superadmin') {
+      if (role !== 'admin_utama') {
         setAksesDitolak(true)
-        setPesan({ tipe: 'err', teks: 'Akses ditolak. Halaman ini hanya untuk Admin Utama atau Superadmin aktif.' })
+        setPesan({ tipe: 'err', teks: 'Akses ditolak. Halaman ini hanya untuk Admin Utama penyewa.' })
         setLoading(false)
         return
       }
 
-      // ?operator=... dipakai Superadmin saat menguji penyewa tertentu.
-      const urlParams = new URLSearchParams(window.location.search)
-      const urlOperatorId = urlParams.get('operator')
-      const targetOperatorId = urlOperatorId || profile.operator_id || profile.id
+      const targetOperatorId = profile.operator_id || profile.id
 
       setMe({ ...profile, operator_id: targetOperatorId, id: targetOperatorId } as Profile)
       await loadKolektor(targetOperatorId)
@@ -270,11 +267,8 @@ export default function AdminPetugasKolektorPage() {
 
         <div className="mb-6 flex items-center justify-between">
           <div>
-            <h1 className="text-2xl font-bold text-gray-800 flex items-center gap-2">
+            <h1 className="text-2xl font-bold text-gray-800">
               Manajemen Petugas Kolektor
-              <span className="text-xs bg-green-100 text-green-700 px-2 py-1 rounded-full flex items-center gap-1 border border-green-300">
-                <span className="w-2 h-2 rounded-full bg-green-500"></span> Mode Pusat Kontrol
-              </span>
             </h1>
             <p className="text-sm text-gray-500 mt-1">
               Kolektor menagih uang cash dari agen &amp; petugas di lokasi yang sama. Hanya bisa melihat + mencetak laporan penjualan harian.

@@ -2,18 +2,19 @@
 
 import { useRouter } from 'next/navigation'
 import { useEffect, useState } from 'react'
-import { supabase } from '@/lib/supabase'
+import { supabase, getProfile } from '@/lib/supabase'
 
-// Halaman pemilih: "Manajemen Petugas" sekarang punya 2 jenis akun.
+// Halaman pemilih: "Manajemen Petugas" punya 2 jenis akun.
 // - Petugas Keberangkatan: scan boarding & manifest (menu lama).
 // - Petugas Kolektor: penagih cash dari agen/petugas di lokasi yang sama.
 //
-// Catatan: halaman ini untuk KELOLA AKUN. Untuk mengubah tulisan/tampilannya,
-// Superadmin memakai Pusat Kontrol > Teks: Petugas.
+// Halaman ini MILIK ADMIN UTAMA PENYEWA (akun petugas = akun tenant).
+// Superadmin TIDAK mengelola akun petugas; tulisan halaman ini hanya diatur
+// di Pusat Kontrol > Teks: Akun Petugas (khusus tampilan).
 export default function ManajemenPetugasPage() {
   const router = useRouter()
-  const [isSuperadmin, setIsSuperadmin] = useState(false)
   const [loading, setLoading] = useState(true)
+  const [aksesDitolak, setAksesDitolak] = useState(false)
 
   const [teks, setTeks] = useState({
     judul_akun_petugas: 'Manajemen Petugas',
@@ -26,14 +27,14 @@ export default function ManajemenPetugasPage() {
 
   useEffect(() => {
     async function siapkan() {
-      const { data: { user } } = await supabase.auth.getUser()
-      if (user) {
-        const { data: p } = await supabase
-          .from('profiles')
-          .select('role')
-          .eq('id', user.id)
-          .single()
-        setIsSuperadmin(p?.role === 'superadmin')
+      // Role dicek lewat getProfile() supaya tetap jalan untuk Admin Utama
+      // yang login pakai sesi operator (HP), bukan hanya akun auth email.
+      const profil = await getProfile()
+      const role = (profil?.role || '').trim().toLowerCase()
+      if (role !== 'admin_utama') {
+        setAksesDitolak(true)
+        setLoading(false)
+        return
       }
 
       const { data } = await supabase
@@ -51,22 +52,28 @@ export default function ManajemenPetugasPage() {
   }, [])
 
   function buka(path: string) {
-    // Teruskan ?operator=... supaya mode "tes sebagai penyewa" di Pusat Kontrol tetap jalan.
-    const suffix = typeof window !== 'undefined' ? window.location.search : ''
-    router.push(path + suffix)
+    router.push(path)
   }
 
-  // Tujuan kembali ditentukan dari role, BUKAN history browser
+  // Tujuan kembali tetap, BUKAN history browser
   // (dulu pakai router.back() sehingga bisa muter-muter di halaman ini).
   function kembali() {
-    if (isSuperadmin) {
-      router.push('/superadmin/pusat-kontrol')
-      return
-    }
     router.push('/dashboard')
   }
 
   if (loading) return <p className="p-8 text-center text-gray-500">Memuat...</p>
+
+  if (aksesDitolak) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center p-6">
+        <div className="max-w-md text-center">
+          <h1 className="text-xl font-bold text-gray-800 mb-2">Akses ditolak</h1>
+          <p className="text-sm text-gray-600 mb-4">Halaman ini hanya untuk Admin Utama penyewa. Akun petugas dikelola oleh admin masing-masing penyewa.</p>
+          <button onClick={() => router.push('/dashboard')} className="text-sm text-blue-600 hover:underline">&larr; Kembali</button>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="min-h-screen bg-gray-50 py-8 px-4">
@@ -74,23 +81,10 @@ export default function ManajemenPetugasPage() {
 
         <div className="mb-6 flex items-start justify-between gap-3">
           <div>
-            <h1 className="text-2xl font-bold text-gray-800 flex items-center gap-2 flex-wrap">
+            <h1 className="text-2xl font-bold text-gray-800">
               {teks.judul_akun_petugas}
-              {isSuperadmin && (
-                <span className="text-xs bg-green-100 text-green-700 px-2 py-1 rounded-full flex items-center gap-1 border border-green-300">
-                  <span className="w-2 h-2 rounded-full bg-green-500"></span> Mode Pusat Kontrol
-                </span>
-              )}
             </h1>
             <p className="text-sm text-gray-500 mt-1">{teks.ket_akun_petugas}</p>
-            {isSuperadmin && (
-              <button
-                onClick={() => router.push('/superadmin/pusat-kontrol/petugas')}
-                className="text-xs text-blue-600 hover:underline mt-2 font-bold"
-              >
-                ✏️ Ubah tulisan halaman ini (Pusat Kontrol &rsaquo; Teks: Petugas)
-              </button>
-            )}
           </div>
           <button onClick={kembali} className="text-sm text-blue-600 hover:underline px-2 flex-shrink-0">
             ← Kembali
