@@ -90,32 +90,43 @@ function KartuRute({
 
   return (
     <div className="bg-white rounded-2xl shadow-lg overflow-hidden">
-      <div className="flex items-center justify-between gap-2 px-4 py-3 border-b border-gray-100 bg-gray-50">
-        {/* Label "Rute" tidak dipakai lagi: cukup nama kota asal - tujuan.
-            key ikut berubah saat diputar supaya teks lama bergeser ke kiri
-            dan teks baru masuk, jadi arah baru langsung terlihat. */}
+      <div className="flex flex-wrap items-center gap-x-2 gap-y-1 px-4 py-3 border-b border-gray-100 bg-gray-50">
+        {/* Judul dua arah: kiri arah yang sedang tampil, panah di tengah
+            (tombol putar), kanan arah kebalikannya. Tidak ada label "Rute"
+            lagi. key ikut berubah saat diputar supaya teks bergeser masuk
+            sehingga perubahan arah langsung terlihat. */}
         <h2
           key={`${asal}-${tujuan}`}
-          className="rute-geser text-sm sm:text-base font-bold text-gray-900 min-w-0 truncate"
+          className="rute-geser text-sm sm:text-base font-bold text-gray-900 whitespace-nowrap"
         >
           {asal} &ndash; {tujuan}
         </h2>
-        <button
-          type="button"
-          onClick={onPutar}
-          title="Putar arah rute"
-          aria-label="Putar arah rute"
-          className="shrink-0 w-8 h-8 flex items-center justify-center rounded-full border border-gray-200 bg-white text-gray-600 hover:text-purple-700 hover:border-purple-300 transition-colors"
-        >
-          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={2}
-              d="M4 8h13m0 0l-3.5-3.5M17 8l-3.5 3.5M20 16H7m0 0l3.5-3.5M7 16l3.5 3.5"
-            />
-          </svg>
-        </button>
+        {/* Panah + arah kebalikan dibungkus supaya tetap satu baris saat
+            layar sempit (keduanya turun bersama, tidak terpisah). */}
+        <div className="flex items-center gap-1.5">
+          <button
+            type="button"
+            onClick={onPutar}
+            title="Putar arah rute"
+            aria-label={`Putar arah rute ${asal} - ${tujuan}`}
+            className="shrink-0 w-6 h-6 flex items-center justify-center rounded-full border border-gray-200 bg-white text-gray-600 hover:text-purple-700 hover:border-purple-300 transition-colors"
+          >
+            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M4 8h13m0 0l-3.5-3.5M17 8l-3.5 3.5M20 16H7m0 0l3.5-3.5M7 16l3.5 3.5"
+              />
+            </svg>
+          </button>
+          <span
+            key={`${tujuan}-${asal}`}
+            className="rute-geser text-[11px] sm:text-xs font-semibold text-gray-400 whitespace-nowrap"
+          >
+            {tujuan} &ndash; {asal}
+          </span>
+        </div>
       </div>
 
       {baris.length === 0 ? (
@@ -289,31 +300,25 @@ export default function JadwalKapalPage() {
             </p>
           </div>
 
-          {/* Ilustrasi kapal (model baru) + tombol Reset tampilan. */}
-          <div className="shrink-0 flex flex-col items-end gap-1.5">
-            <IkonKapal
-              ombak
-              judul="Ilustrasi kapal cepat LintasAir"
-              className="w-[100px] sm:w-[128px] h-auto drop-shadow-sm"
-            />
-            <button
-              type="button"
-              onClick={resetTampilan}
-              title="Kembalikan semua rute ke arah awal"
-              aria-label="Kembalikan semua rute ke arah awal"
-              className="flex items-center gap-1 rounded-full bg-white/10 border border-white/30 pl-2 pr-2.5 py-1 text-[11px] font-semibold text-white hover:bg-white/20 transition-colors"
-            >
-              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M4 8h13m0 0l-3.5-3.5M17 8l-3.5 3.5M20 16H7m0 0l3.5-3.5M7 16l3.5 3.5"
-                />
-              </svg>
-              Reset
-            </button>
-          </div>
+          {/* Tombol Reset tampilan (ilustrasi kapal di header dihapus atas
+              permintaan pemilik). */}
+          <button
+            type="button"
+            onClick={resetTampilan}
+            title="Kembalikan semua rute ke arah awal"
+            aria-label="Kembalikan semua rute ke arah awal"
+            className="shrink-0 flex items-center gap-1 rounded-full bg-white/10 border border-white/30 pl-2 pr-2.5 py-1 text-[11px] font-semibold text-white hover:bg-white/20 transition-colors"
+          >
+            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M4 8h13m0 0l-3.5-3.5M17 8l-3.5 3.5M20 16H7m0 0l3.5-3.5M7 16l3.5 3.5"
+              />
+            </svg>
+            Reset
+          </button>
         </div>
 
         {loading ? (
@@ -336,7 +341,7 @@ export default function JadwalKapalPage() {
           </div>
         ) : grup.length === 0 ? (
           <div className="bg-white rounded-2xl shadow-lg px-4 py-10 text-center">
-            <IkonKapal variant="garis" className="w-32 h-auto mx-auto mb-3 text-purple-300" />
+            <IkonKapal variant="garis" className="w-[70px] h-auto mx-auto mb-3 text-purple-300" />
             <p className="text-sm text-gray-600">Belum ada jadwal kapal untuk hari ini.</p>
             <p className="text-xs text-gray-400 mt-1">
               Jadwal muncul otomatis setelah pemilik kapal menambah rute di Manajemen Jadwal.
