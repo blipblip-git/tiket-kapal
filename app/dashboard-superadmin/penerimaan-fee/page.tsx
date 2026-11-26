@@ -89,8 +89,8 @@ function PenerimaanFeeContent() {
 
         <div className="flex justify-between items-center mb-6 bg-red-950 border border-red-800 p-5 rounded-xl">
           <div>
-            <h1 className="text-2xl font-bold">Penerimaan Fee</h1>
-            <p className="text-sm text-red-200">Fee platform dari semua penjualan offline (agen, loket, mobile, keberangkatan)</p>
+            <h1 className="text-2xl font-bold">Penerimaan Fee Real</h1>
+            <p className="text-sm text-red-200">Fee platform dari semua penjualan offline di database real (agen, loket, mobile, keberangkatan)</p>
           </div>
           <button onClick={() => router.push('/dashboard-superadmin')} className="text-sm bg-gray-800 text-white px-3 py-2 rounded hover:bg-gray-700 border border-gray-700 font-bold">
             &larr; Kembali
@@ -160,6 +160,17 @@ function PenerimaanFeeContent() {
             <div className="text-4xl mb-3">🗓️</div>
             <h2 className="text-lg font-bold text-white mb-1">Laporan Fee Bulanan</h2>
             <p className="text-xs text-red-200">Fee platform per tanggal &amp; kapal dalam 1 bulan.</p>
+          </button>
+
+          <button
+            onClick={() => router.push('/dashboard-superadmin/penerimaan-fee/demo')}
+            className="md:col-span-2 bg-amber-950 p-8 rounded-xl border border-amber-800 hover:bg-amber-900 transition text-left flex flex-col items-start h-44 justify-center"
+          >
+            <div className="text-4xl mb-3">🧪</div>
+            <h2 className="text-lg font-bold text-white mb-1">Penerimaan Fee Demo</h2>
+            <p className="text-xs text-amber-200">
+              Fee dari database demo. <span className="font-bold">SIMULASI — bukan pendapatan nyata.</span>
+            </p>
           </button>
         </div>
       </div>

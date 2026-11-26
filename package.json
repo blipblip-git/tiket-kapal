@@ -7,6 +7,7 @@
     "build": "next build",
     "start": "next start",
     "backup": "node scripts/backup-data.mjs",
+    "demo:verify": "node scripts/verify-demo-clean.mjs",
     "bersih:kursi": "node scripts/bersih-kursi.mjs",
     "lint": "eslint",
     "uji:header": "node scripts/uji-header.mjs"

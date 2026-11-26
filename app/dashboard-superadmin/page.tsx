@@ -72,7 +72,7 @@ export default function DashboardSuperadminPage() {
           >
             <div className="text-5xl mb-4 group-hover:scale-110 transition">🔑</div>
             <h2 className="text-xl font-bold text-white mb-2">Data Penyewa</h2>
-            <p className="text-sm text-gray-400">Kelola Pemilik Kapal yang menggunakan platform Anda.</p>
+            <p className="text-sm text-gray-400">Kelola penyewa real dan pantau daftar penyewa demo dari satu tempat.</p>
           </button>
 
           <button 
@@ -99,8 +99,8 @@ export default function DashboardSuperadminPage() {
             className="bg-red-950 p-8 rounded-xl shadow-lg hover:bg-red-900 transition border border-red-800 text-left flex flex-col items-start h-48 justify-center group md:col-span-2"
           >
             <div className="text-5xl mb-4 group-hover:scale-110 transition">💰</div>
-            <h2 className="text-xl font-bold text-white mb-2">Penerimaan Fee</h2>
-            <p className="text-sm text-red-200">Laporan Fee Platform (harian &amp; bulanan) dari semua penjualan offline — khusus Superadmin.</p>
+            <h2 className="text-xl font-bold text-white mb-2">Penerimaan Fee Real &amp; Demo</h2>
+            <p className="text-sm text-red-200">Laporan Fee Platform real (harian &amp; bulanan) dan fee demo simulasi — khusus Superadmin.</p>
           </button>
 
           {/* KHUSUS SUPERADMIN: Backup data semua tenant (1 file Excel) */}

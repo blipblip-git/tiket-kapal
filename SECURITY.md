@@ -199,6 +199,29 @@ dengan gambar. Sebelum perbaikan, halaman 704×668 adalah `890,67×938,67 pt`
 NIK & nama & HP utuh, pesan "harus 16 digit"; ditolak server ("Nomor HP tidak
 valid") → form tetap utuh juga.
 
+## Tahap 4 — batas penyewa katalog & kunci kursi (SQL SIAP, BELUM DIJALANKAN)
+
+`supabase/security-tahap4-rls.sql` menutup celah lintas penyewa:
+
+- **Baca katalog staf** (`kapal`, `jadwal`, `kursi`, `template_jadwal`,
+  `master_rute`, `pengaturan_sistem`) tidak lagi `using (true)`. Staf hanya
+  melihat baris penyewanya sendiri (plus baris global `operator_id NULL`);
+  Superadmin dan Syahbandar tetap lintas penyewa.
+- **Kunci kursi** (`kursi_pakai`): baca untuk kapal sendiri/Superadmin/Syahbandar,
+  tetapi insert/update/delete hanya untuk kapal yang `operator_id`-nya sama
+  dengan penyewa pemanggil. Kepemilikan dibaca dari prefix `kapal_id` pada
+  `keberangkatan_key`.
+- **Baris global** hanya Superadmin yang boleh mengubah/menghapus. Tanpa ini
+  trigger `fn_isi_operator` membuat penyewa bisa mengklaim baris platform
+  `pengaturan_sistem` saat UPDATE.
+
+Status 26 Nov 2026: SQL sudah diuji lokal dengan PGlite + skema tiruan dua
+penyewa (**41/41 pemeriksaan lulus**), tetapi **belum dijalankan ke database
+Supabase mana pun**. Jalankan manual di SQL Editor setelah urutan:
+`security-hardening` → `security-tahap2` → `security-tahap2b-grant` →
+`security-tahap3-publik` → `kursi-segmen` → `security-tahap4-rls`.
+Jalankan ulang tahap 4 kalau `security-tahap2`/`kursi-segmen` dijalankan ulang.
+
 ## Masih terbuka (belum diperbaiki)
 
 1. **Rate limit disimpan di memori proses** — tiap instance Vercel menghitung sendiri dan
@@ -212,6 +235,10 @@ valid") → form tetap utuh juga.
    Kalau nanti pindah ke nonce/hash, `script-src` bisa diperketat.
 5. **Nomor HP pembeli belum diverifikasi OTP** — batas pending per nomor sudah ada
    (Tahap 3d), tapi nomor palsu masih bisa dipakai berganti-ganti.
+6. **Etalase publik masih global** — beranda tidak mengirim `?operator=`,
+   `/jadwal-kapal` dan `/api/publik/jadwal-hari-ini` membaca jadwal semua operator
+   tanpa cek `aktif`. Tahap 4 hanya mengunci jalur `authenticated`; penyaringan
+   etalase publik perlu keputusan bisnis (siapa yang boleh tampil).
 
 ## Backup
 

@@ -43,16 +43,18 @@ export default function DataPenyewaMenuPage() {
             className="bg-gray-800 border border-gray-700 p-8 rounded-xl hover:bg-gray-750 transition text-left flex flex-col items-start h-48 justify-center shadow-lg group"
           >
             <div className="text-5xl mb-4 group-hover:scale-110 transition">🏢</div>
-            <h2 className="text-xl font-bold text-white mb-2">Daftar Penyewa</h2>
-            <p className="text-sm text-gray-400">Lihat daftar Pemilik Kapal, buat akun baru, dan atur kunci akses mereka.</p>
+            <h2 className="text-xl font-bold text-white mb-2">Daftar Penyewa Real</h2>
+            <p className="text-sm text-gray-400">Pemilik Kapal di database produksi. Buat akun, atur akses, dan kelola penyewa real.</p>
           </button>
 
-          {/* Kartu Cadangan (bisa diisi nanti) */}
-          <div className="bg-gray-800/50 border border-gray-700 border-dashed p-8 rounded-xl flex flex-col items-start h-48 justify-center">
-            <div className="text-5xl mb-4 opacity-50">📦</div>
-            <h2 className="text-xl font-bold text-gray-500 mb-2">Fitur Lain</h2>
-            <p className="text-sm text-gray-500">Segera hadir.</p>
-          </div>
+          <button
+            onClick={() => router.push('/dashboard-superadmin/penyewa/demo')}
+            className="bg-amber-950 border border-amber-800 p-8 rounded-xl hover:bg-amber-900 transition text-left flex flex-col items-start h-48 justify-center shadow-lg group"
+          >
+            <div className="text-5xl mb-4 group-hover:scale-110 transition">🧪</div>
+            <h2 className="text-xl font-bold text-white mb-2">Daftar Penyewa Demo</h2>
+            <p className="text-sm text-amber-200">Penyewa di environment demo. Dibaca dari database demo, bukan dari data real. Demo tidak punya Superadmin.</p>
+          </button>
 
         </div>
       </div>
