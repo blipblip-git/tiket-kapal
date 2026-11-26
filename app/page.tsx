@@ -4,6 +4,7 @@ import { useState, useEffect, useRef, Suspense } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { KOORDINAT_KOTA, RADIUS_DETEKSI_KM, jarakKm } from '@/lib/geo'
+import IkonKapal from '@/components/IkonKapal'
 
 // Cadangan kalau tabel master_kota belum bisa dibaca.
 type KotaRute = { nama_kota: string; singkatan: string }
@@ -218,7 +219,9 @@ function BerandaContent() {
   }
 
   return (
-    <div className="min-h-[100dvh] w-full bg-purple-700 flex flex-col items-center py-6 sm:py-8 px-3 sm:px-4 overflow-x-hidden">
+    <div
+      className="beranda-tetap w-full bg-purple-700 flex flex-col items-center justify-center gap-[clamp(6px,1.3vh,18px)] px-3 sm:px-4 overflow-hidden"
+    >
       
       <style dangerouslySetInnerHTML={{__html: `
         @keyframes heartbeat {
@@ -245,26 +248,69 @@ function BerandaContent() {
         .dot-delay-4 { animation-delay: 0.6s; }
         .dot-delay-5 { animation-delay: 0.8s; }
         .dot-delay-6 { animation-delay: 1.0s; }
+
+        /* Beranda satu layar: tidak boleh bergeser naik-turun. Kalau layar
+           sangat pendek (HP landscape), barulah boleh digulir agar tidak
+           ada isi yang terpotong. */
+        .beranda-tetap {
+          height: 100vh;   /* cadangan untuk browser lama */
+          height: 100dvh;  /* tinggi yang benar-benar terlihat di HP */
+          overscroll-behavior: none;
+        }
+        @supports not (height: 100dvh) {
+          .beranda-tetap {
+            justify-content: flex-start;
+            overflow-y: auto;
+          }
+        }
+        @media (max-height: 520px) {
+          .beranda-tetap {
+            justify-content: flex-start;
+            overflow-y: auto;
+            padding-top: 10px;
+            padding-bottom: 10px;
+          }
+        }
+
+        /* Tawaran "Pasang LintasAir" menempel di bawah. Sisakan ruang di
+           bawah beranda supaya kartu Jadwal Kapal tidak tertutup tombol itu.
+           Tinggi banner dikirim PwaInstall lewat --tinggi-banner-pasang. */
+        body:has([data-pwa-banner]) .beranda-tetap {
+          padding-bottom: calc(var(--tinggi-banner-pasang, 76px) + 12px);
+        }
+        @media (max-height: 600px) {
+          body:has([data-pwa-banner]) .beranda-tetap {
+            justify-content: flex-start;
+            overflow-y: auto;
+            padding-top: 8px;
+            padding-bottom: calc(var(--tinggi-banner-pasang, 76px) + 12px);
+          }
+          /* Layar pendek: tawaran pasang dibuat ringkas agar beranda tetap
+             muat satu layar tanpa perlu digulir. */
+          [data-pwa-banner] .pwa-catatan { display: none; }
+          [data-pwa-banner] .pwa-kotak { padding: 8px 10px; }
+          body:has([data-pwa-banner]) .beranda-tetap { gap: 4px; }
+        }
       `}} />
 
       <div 
         onClick={handleJudulKlik}
-        className="bg-white rounded-3xl shadow-lg w-full max-w-[340px] sm:max-w-sm py-5 sm:py-6 px-4 text-center mb-5 sm:mb-6 cursor-pointer select-none"
+        className="bg-white rounded-3xl shadow-lg w-full max-w-[340px] sm:max-w-sm py-[clamp(6px,1.5vh,18px)] px-4 text-center cursor-pointer select-none"
       >
-        <h1 className="text-3xl sm:text-4xl font-serif text-gray-900 tracking-wide">LintasAir</h1>
-        <div className="flex justify-center gap-1.5 mt-2 sm:mt-3">
-          <span className="w-3 h-3 sm:w-3.5 sm:h-3.5 rounded-full bg-red-500 dot-cenut dot-delay-1"></span>
-          <span className="w-3 h-3 sm:w-3.5 sm:h-3.5 rounded-full bg-yellow-400 dot-cenut dot-delay-2"></span>
-          <span className="w-3 h-3 sm:w-3.5 sm:h-3.5 rounded-full bg-green-500 dot-cenut dot-delay-3"></span>
-          <span className="w-3 h-3 sm:w-3.5 sm:h-3.5 rounded-full bg-blue-500 dot-cenut dot-delay-4"></span>
-          <span className="w-3 h-3 sm:w-3.5 sm:h-3.5 rounded-full bg-purple-500 dot-cenut dot-delay-5"></span>
-          <span className="w-3 h-3 sm:w-3.5 sm:h-3.5 rounded-full bg-pink-500 dot-cenut dot-delay-6"></span>
+        <h1 className="text-[clamp(24px,4.4vh,36px)] font-serif text-gray-900 tracking-wide">LintasAir</h1>
+        <div className="flex justify-center gap-[clamp(4px,0.8vh,8px)] mt-[clamp(4px,1vh,10px)]">
+          <span className="w-[clamp(9px,1.6vh,14px)] h-[clamp(9px,1.6vh,14px)] rounded-full bg-red-500 dot-cenut dot-delay-1"></span>
+          <span className="w-[clamp(9px,1.6vh,14px)] h-[clamp(9px,1.6vh,14px)] rounded-full bg-yellow-400 dot-cenut dot-delay-2"></span>
+          <span className="w-[clamp(9px,1.6vh,14px)] h-[clamp(9px,1.6vh,14px)] rounded-full bg-green-500 dot-cenut dot-delay-3"></span>
+          <span className="w-[clamp(9px,1.6vh,14px)] h-[clamp(9px,1.6vh,14px)] rounded-full bg-blue-500 dot-cenut dot-delay-4"></span>
+          <span className="w-[clamp(9px,1.6vh,14px)] h-[clamp(9px,1.6vh,14px)] rounded-full bg-purple-500 dot-cenut dot-delay-5"></span>
+          <span className="w-[clamp(9px,1.6vh,14px)] h-[clamp(9px,1.6vh,14px)] rounded-full bg-pink-500 dot-cenut dot-delay-6"></span>
         </div>
       </div>
 
-      <div className="bg-white rounded-3xl shadow-lg w-full max-w-[340px] sm:max-w-sm p-5 sm:p-6 relative">
-        <div className="relative flex items-center justify-center mb-5 sm:mb-6 min-h-[34px]">
-          <h2 className="text-lg sm:text-xl font-bold text-gray-900 text-center">Cari Tiket Speed</h2>
+      <div className="bg-white rounded-3xl shadow-lg w-full max-w-[340px] sm:max-w-sm p-[clamp(10px,2.2vh,22px)] relative">
+        <div className="relative flex items-center justify-center mb-[clamp(8px,1.8vh,20px)] min-h-[clamp(26px,4vh,34px)]">
+          <h2 className="text-[clamp(15px,2.5vh,20px)] font-bold text-gray-900 text-center">Cari Tiket Speed</h2>
           <button
             type="button"
             onClick={handleRefresh}
@@ -280,17 +326,17 @@ function BerandaContent() {
           </button>
         </div>
 
-        <form onSubmit={handleCari} className="space-y-3 sm:space-y-4">
+        <form onSubmit={handleCari} className="space-y-[clamp(4px,1.1vh,13px)]">
 
           {/* Blok "Dari" + "Ke" dibungkus satu wrapper: tombol tukar dipasang absolute
               supaya tidak menambah tinggi baris (jarak antar baris jadi seragam) dan
               lingkarannya pas di tengah antara kotak Dari dan kotak Ke. */}
           <div className="relative">
-            <div className="space-y-3 sm:space-y-4">
+            <div className="space-y-[clamp(4px,1.1vh,13px)]">
 
               <div>
-                <div className="flex items-center justify-between gap-2 mb-1">
-                  <label className="block text-sm font-medium text-gray-700">Dari</label>
+                <div className="flex items-center justify-between gap-2 mb-[clamp(2px,0.6vh,5px)]">
+                  <label className="block text-[clamp(11px,1.8vh,14px)] font-medium text-gray-700">Dari</label>
                   {deteksiLokasi && (
                     <span
                       title="Dari lokasi Anda saat ini (bisa diubah)"
@@ -304,18 +350,18 @@ function BerandaContent() {
                 <button
                   type="button"
                   onClick={() => setShowAsalModal(true)}
-                  className="w-full text-left border border-gray-300 rounded-lg px-3 sm:px-4 py-2.5 sm:py-3 text-sm sm:text-base text-gray-900 focus:ring-purple-500 focus:border-purple-500 bg-white"
+                  className="w-full text-left border border-gray-300 rounded-lg px-3 sm:px-4 py-[clamp(7px,1.5vh,12px)] text-[clamp(13px,2.1vh,16px)] text-gray-900 focus:ring-purple-500 focus:border-purple-500 bg-white"
                 >
                   {asal ? labelKota(asal) : '-- Pilih Kota --'}
                 </button>
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Ke</label>
+                <label className="block text-[clamp(11px,1.8vh,14px)] font-medium text-gray-700 mb-[clamp(2px,0.6vh,5px)]">Ke</label>
                 <button
                   type="button"
                   onClick={() => setShowTujuanModal(true)}
-                  className="w-full text-left border border-gray-300 rounded-lg px-3 sm:px-4 py-2.5 sm:py-3 text-sm sm:text-base text-gray-900 focus:ring-purple-500 focus:border-purple-500 bg-white"
+                  className="w-full text-left border border-gray-300 rounded-lg px-3 sm:px-4 py-[clamp(7px,1.5vh,12px)] text-[clamp(13px,2.1vh,16px)] text-gray-900 focus:ring-purple-500 focus:border-purple-500 bg-white"
                 >
                   {tujuan ? labelKota(tujuan) : '-- Pilih Kota --'}
                 </button>
@@ -323,13 +369,13 @@ function BerandaContent() {
 
             </div>
 
-            {/* top = 50% + 12px (setengah tinggi label "Ke": 20px + mb-1 4px) */}
+            {/* top = 50% + setengah tinggi label "Ke" (baris label + jarak di bawahnya) */}
             <button
               type="button"
               onClick={handleTukar}
               title="Tukar kota asal & tujuan"
               aria-label="Tukar kota asal dan tujuan"
-              className="absolute left-1/2 top-[calc(50%+12px)] -translate-x-1/2 -translate-y-1/2 z-10 flex items-center justify-center w-8 h-8 sm:w-9 sm:h-9 bg-white border border-gray-200 rounded-full shadow-md text-gray-600 hover:text-purple-600 transition-colors"
+              className="absolute left-1/2 top-[calc(50%_+_clamp(8px,1.2vh,12px))] -translate-x-1/2 -translate-y-1/2 z-10 flex items-center justify-center w-[clamp(28px,4.2vh,36px)] h-[clamp(28px,4.2vh,36px)] bg-white border border-gray-200 rounded-full shadow-md text-gray-600 hover:text-purple-600 transition-colors"
             >
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4" />
@@ -338,28 +384,28 @@ function BerandaContent() {
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Tanggal</label>
+            <label className="block text-[clamp(11px,1.8vh,14px)] font-medium text-gray-700 mb-[clamp(2px,0.6vh,5px)]">Tanggal</label>
             <input
               type="date"
               value={tanggal}
               onChange={(e) => setTanggal(e.target.value)}
-              className="w-full border border-gray-300 rounded-lg px-3 sm:px-4 py-2.5 sm:py-3 text-sm sm:text-base text-gray-900 focus:ring-purple-500 focus:border-purple-500 bg-white"
+              className="w-full border border-gray-300 rounded-lg px-3 sm:px-4 py-[clamp(7px,1.5vh,12px)] text-[clamp(13px,2.1vh,16px)] text-gray-900 focus:ring-purple-500 focus:border-purple-500 bg-white"
             />
           </div>
 
           <button
             type="submit"
-            className="w-full bg-purple-600 text-white py-2.5 sm:py-3 rounded-lg font-bold text-sm sm:text-base hover:bg-purple-700 shadow-md transition-colors"
+            className="w-full bg-purple-600 text-white py-[clamp(8px,1.5vh,12px)] rounded-lg font-bold text-[clamp(13px,2.1vh,16px)] hover:bg-purple-700 shadow-md transition-colors"
           >
             Cari Jadwal
           </button>
         </form>
 
-        <div className="mt-4 sm:mt-5 pt-4 border-t border-gray-100 text-center">
-          <p className="text-[11px] sm:text-xs text-gray-500 mb-2">Lupa atau belum cetak e-tiket?</p>
+        <div className="mt-[clamp(6px,1.5vh,18px)] pt-[clamp(6px,1.3vh,14px)] border-t border-gray-100 text-center">
+          <p className="text-[clamp(10px,1.7vh,12px)] text-gray-500 mb-[clamp(4px,1vh,8px)]">Lupa atau belum cetak e-tiket?</p>
           <button
             onClick={() => router.push('/cek-tiket')}
-            className="w-full bg-gray-50 text-gray-700 py-2 sm:py-2.5 rounded-lg font-medium text-xs sm:text-sm border border-gray-200 hover:bg-gray-100 transition-colors"
+            className="w-full bg-gray-50 text-gray-700 py-[clamp(6px,1.3vh,10px)] rounded-lg font-medium text-[clamp(11px,1.8vh,14px)] border border-gray-200 hover:bg-gray-100 transition-colors"
           >
             Cek Transaksi / Tiket Anda
           </button>
@@ -370,25 +416,18 @@ function BerandaContent() {
       <button
         type="button"
         onClick={() => router.push('/jadwal-kapal')}
-        className="mt-4 sm:mt-5 bg-white rounded-3xl shadow-lg w-full max-w-[340px] sm:max-w-sm px-5 py-4 flex items-center gap-3 text-left hover:shadow-xl transition-shadow"
+        className="bg-white rounded-3xl shadow-lg w-full max-w-[340px] sm:max-w-sm px-[clamp(14px,4vw,20px)] py-[clamp(6px,1.4vh,14px)] flex items-center gap-[clamp(8px,1.4vh,12px)] text-left hover:shadow-xl transition-shadow"
       >
-        <span className="shrink-0 w-11 h-11 rounded-2xl bg-purple-100 text-purple-700 flex items-center justify-center">
-          <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={2}
-              d="M3 14l1.5 4.5A2 2 0 006.4 20h11.2a2 2 0 001.9-1.5L21 14M5 14V9a1 1 0 011-1h12a1 1 0 011 1v5M9 8V5h6v3M12 2v3"
-            />
-          </svg>
+        <span className="shrink-0 w-[clamp(52px,8vh,64px)] h-[clamp(30px,4.6vh,38px)] rounded-xl bg-purple-100 flex items-center justify-center overflow-hidden px-1">
+          <IkonKapal className="w-full h-auto" />
         </span>
         <span className="min-w-0 flex-1">
-          <span className="block text-sm sm:text-base font-bold text-gray-900">Jadwal Kapal</span>
-          <span className="block text-[11px] sm:text-xs text-gray-500">
+          <span className="block text-[clamp(13px,2.2vh,16px)] font-bold text-gray-900">Jadwal Kapal</span>
+          <span className="block text-[clamp(10px,1.7vh,12px)] text-gray-500">
             Semua rute &amp; jam keberangkatan hari ini
           </span>
         </span>
-        <svg className="w-5 h-5 text-gray-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <svg className="w-[clamp(18px,3vh,20px)] h-[clamp(18px,3vh,20px)] text-gray-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
         </svg>
       </button>

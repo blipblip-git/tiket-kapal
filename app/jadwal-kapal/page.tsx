@@ -9,6 +9,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { fetchPublik } from '@/lib/publikFetch'
 import { formatTanggalPanjang } from '@/lib/hari'
+import IkonKapal from '@/components/IkonKapal'
 
 type Jadwal = {
   id: string
@@ -65,9 +66,17 @@ function buatGrup(rute: Rute[]): Grup[] {
   )
 }
 
-function KartuRute({ grup, sekarang }: { grup: Grup; sekarang: number }) {
-  const [dibalik, setDibalik] = useState(false)
-
+function KartuRute({
+  grup,
+  sekarang,
+  dibalik,
+  onPutar
+}: {
+  grup: Grup
+  sekarang: number
+  dibalik: boolean
+  onPutar: () => void
+}) {
   const utama = grup.arah[0]
   const asal = dibalik ? utama.tujuan : utama.asal
   const tujuan = dibalik ? utama.asal : utama.tujuan
@@ -82,12 +91,18 @@ function KartuRute({ grup, sekarang }: { grup: Grup; sekarang: number }) {
   return (
     <div className="bg-white rounded-2xl shadow-lg overflow-hidden">
       <div className="flex items-center justify-between gap-2 px-4 py-3 border-b border-gray-100 bg-gray-50">
-        <h2 className="text-sm sm:text-base font-bold text-gray-900 min-w-0 truncate">
-          Rute {asal} - {tujuan}
+        {/* Label "Rute" tidak dipakai lagi: cukup nama kota asal - tujuan.
+            key ikut berubah saat diputar supaya teks lama bergeser ke kiri
+            dan teks baru masuk, jadi arah baru langsung terlihat. */}
+        <h2
+          key={`${asal}-${tujuan}`}
+          className="rute-geser text-sm sm:text-base font-bold text-gray-900 min-w-0 truncate"
+        >
+          {asal} &ndash; {tujuan}
         </h2>
         <button
           type="button"
-          onClick={() => setDibalik((v) => !v)}
+          onClick={onPutar}
           title="Putar arah rute"
           aria-label="Putar arah rute"
           className="shrink-0 w-8 h-8 flex items-center justify-center rounded-full border border-gray-200 bg-white text-gray-600 hover:text-purple-700 hover:border-purple-300 transition-colors"
@@ -97,7 +112,7 @@ function KartuRute({ grup, sekarang }: { grup: Grup; sekarang: number }) {
               strokeLinecap="round"
               strokeLinejoin="round"
               strokeWidth={2}
-              d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4"
+              d="M4 8h13m0 0l-3.5-3.5M17 8l-3.5 3.5M20 16H7m0 0l3.5-3.5M7 16l3.5 3.5"
             />
           </svg>
         </button>
@@ -152,6 +167,9 @@ export default function JadwalKapalPage() {
   const [error, setError] = useState('')
   const [sekarang, setSekarang] = useState(0)
   const [diperbarui, setDiperbarui] = useState('')
+  // Arah rute yang sedang diputar. Disimpan di halaman (bukan di kartu) supaya
+  // tombol Reset di kanan atas bisa mengembalikan SEMUA kartu ke arah awal.
+  const [dibalik, setDibalik] = useState<Record<string, boolean>>({})
 
   // Ambil data mentah (tanpa setState) supaya bisa dipakai effect & tombol.
   const ambilData = useCallback(async () => {
@@ -221,8 +239,37 @@ export default function JadwalKapalPage() {
 
   const grup = buatGrup(rute)
 
+  // Tombol kanan atas: kembalikan tampilan ke kondisi awal (semua arah rute
+  // seperti pertama dibuka), lalu ambil data terbaru dan gulir ke atas.
+  const resetTampilan = useCallback(() => {
+    setDibalik({})
+    muat()
+    if (typeof window !== 'undefined') {
+      window.scrollTo({ top: 0, behavior: 'smooth' })
+    }
+  }, [muat])
+
+  const putarArah = (kunci: string) =>
+    setDibalik((peta) => ({ ...peta, [kunci]: !peta[kunci] }))
+
   return (
     <div className="min-h-[100dvh] w-full bg-purple-700 py-6 px-3 sm:px-4">
+      {/* Animasi teks rute: saat arah diputar, nama kota bergeser masuk dari
+          kanan ke kiri supaya perubahan arah langsung terlihat. */}
+      <style
+        dangerouslySetInnerHTML={{
+          __html: `
+            @keyframes rute-geser-masuk {
+              from { opacity: 0; transform: translateX(14px); }
+              to   { opacity: 1; transform: translateX(0); }
+            }
+            .rute-geser { animation: rute-geser-masuk 0.28s ease-out; }
+            @media (prefers-reduced-motion: reduce) {
+              .rute-geser { animation: none; }
+            }
+          `
+        }}
+      />
       <div className="w-full max-w-xl mx-auto">
 
         <div className="flex items-start justify-between gap-3 mb-5">
@@ -241,22 +288,32 @@ export default function JadwalKapalPage() {
               {tanggal ? formatTanggalPanjang(tanggal) : 'Memuat tanggal…'}
             </p>
           </div>
-          <button
-            type="button"
-            onClick={() => muat()}
-            title="Muat ulang jadwal"
-            aria-label="Muat ulang jadwal"
-            className="shrink-0 w-9 h-9 flex items-center justify-center rounded-full bg-white/10 border border-white/30 text-white hover:bg-white/20 transition-colors"
-          >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M4 4v6h6M20 20v-6h-6M20 8a8 8 0 00-14.9-3M4 16a8 8 0 0014.9 3"
-              />
-            </svg>
-          </button>
+
+          {/* Ilustrasi kapal (model baru) + tombol Reset tampilan. */}
+          <div className="shrink-0 flex flex-col items-end gap-1.5">
+            <IkonKapal
+              ombak
+              judul="Ilustrasi kapal cepat LintasAir"
+              className="w-[100px] sm:w-[128px] h-auto drop-shadow-sm"
+            />
+            <button
+              type="button"
+              onClick={resetTampilan}
+              title="Kembalikan semua rute ke arah awal"
+              aria-label="Kembalikan semua rute ke arah awal"
+              className="flex items-center gap-1 rounded-full bg-white/10 border border-white/30 pl-2 pr-2.5 py-1 text-[11px] font-semibold text-white hover:bg-white/20 transition-colors"
+            >
+              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M4 8h13m0 0l-3.5-3.5M17 8l-3.5 3.5M20 16H7m0 0l3.5-3.5M7 16l3.5 3.5"
+                />
+              </svg>
+              Reset
+            </button>
+          </div>
         </div>
 
         {loading ? (
@@ -279,6 +336,7 @@ export default function JadwalKapalPage() {
           </div>
         ) : grup.length === 0 ? (
           <div className="bg-white rounded-2xl shadow-lg px-4 py-10 text-center">
+            <IkonKapal variant="garis" className="w-32 h-auto mx-auto mb-3 text-purple-300" />
             <p className="text-sm text-gray-600">Belum ada jadwal kapal untuk hari ini.</p>
             <p className="text-xs text-gray-400 mt-1">
               Jadwal muncul otomatis setelah pemilik kapal menambah rute di Manajemen Jadwal.
@@ -287,7 +345,13 @@ export default function JadwalKapalPage() {
         ) : (
           <div className="space-y-4">
             {grup.map((g) => (
-              <KartuRute key={g.kunci} grup={g} sekarang={sekarang} />
+              <KartuRute
+                key={g.kunci}
+                grup={g}
+                sekarang={sekarang}
+                dibalik={!!dibalik[g.kunci]}
+                onPutar={() => putarArah(g.kunci)}
+              />
             ))}
           </div>
         )}

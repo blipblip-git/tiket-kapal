@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import Image from 'next/image'
 import { usePathname } from 'next/navigation'
 
@@ -19,6 +19,7 @@ export default function PwaInstall() {
   const [tawaran, setTawaran] = useState<EventInstal | null>(null)
   const [sudahTerpasang, setSudahTerpasang] = useState(true)
   const [ditolak, setDitolak] = useState(true)
+  const bannerRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     // Daftarkan service worker: ini yang membuat aplikasi bisa dipasang dan
@@ -54,6 +55,31 @@ export default function PwaInstall() {
     }
   }, [])
 
+  // Umumkan tinggi tawaran ke CSS lewat variabel --tinggi-banner-pasang.
+  // Dipakai beranda satu layar supaya kartu paling bawah tidak tertutup.
+  const tampil = !sudahTerpasang && !ditolak && Boolean(tawaran) && HALAMAN_TAWAR_PASANG.includes(pathname)
+
+  useEffect(() => {
+    const el = bannerRef.current
+    const akar = document.documentElement
+    if (!tampil || !el) {
+      akar.style.removeProperty('--tinggi-banner-pasang')
+      return
+    }
+    const atur = () => {
+      akar.style.setProperty('--tinggi-banner-pasang', `${el.offsetHeight}px`)
+    }
+    atur()
+    const pengamat = new ResizeObserver(atur)
+    pengamat.observe(el)
+    window.addEventListener('resize', atur)
+    return () => {
+      pengamat.disconnect()
+      window.removeEventListener('resize', atur)
+      akar.style.removeProperty('--tinggi-banner-pasang')
+    }
+  }, [tampil])
+
   if (sudahTerpasang || ditolak || !tawaran || !HALAMAN_TAWAR_PASANG.includes(pathname)) {
     return null
   }
@@ -72,8 +98,8 @@ export default function PwaInstall() {
   }
 
   return (
-    <div className="fixed inset-x-3 bottom-3 z-50 sm:inset-x-auto sm:right-4 sm:w-80">
-      <div className="flex items-center gap-3 rounded-2xl bg-gradient-to-r from-purple-700 to-violet-600 p-3 text-white shadow-xl ring-1 ring-black/10">
+    <div ref={bannerRef} data-pwa-banner className="fixed inset-x-3 bottom-3 z-50 sm:inset-x-auto sm:right-4 sm:w-80">
+      <div className="pwa-kotak flex items-center gap-3 rounded-2xl bg-gradient-to-r from-purple-700 to-violet-600 p-3 text-white shadow-xl ring-1 ring-black/10">
         <Image
           src="/images/icon-192.png"
           alt="LintasAir"
@@ -83,7 +109,7 @@ export default function PwaInstall() {
         />
         <div className="min-w-0 flex-1">
           <p className="text-sm font-semibold leading-tight">Pasang LintasAir</p>
-          <p className="text-[11px] leading-tight text-purple-100">Buka lebih cepat, layar penuh</p>
+          <p className="pwa-catatan text-[11px] leading-tight text-purple-100">Buka lebih cepat, layar penuh</p>
         </div>
         <button
           type="button"
