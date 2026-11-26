@@ -14,7 +14,7 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase, type Profile } from '@/lib/supabase'
-import { fieldPasswordBaru } from '@/lib/password'
+import { fieldPasswordBaru, cocokkanPassword } from '@/lib/password'
 import { validasiNomorHpUnik, pesanGagalSimpanAkun } from '@/lib/validasiAkun'
 import { normalisasiNomorHp } from '@/lib/nomorHp'
 
@@ -87,6 +87,17 @@ export default function AdminSyahbandarPage() {
     setAkun((data || []) as Profile[])
   }
 
+  // Login Syahbandar HANYA memakai password, jadi password itulah identitas
+  // akunnya. Kalau dua akun memakai password sama, server tidak bisa menentukan
+  // akun mana yang dipakai dan login ditolak. Cegah di sini sebelum disimpan.
+  async function akunPemakaiPassword(password: string, kecualiId?: string): Promise<Profile | null> {
+    for (const p of akun) {
+      if (p.id === kecualiId) continue
+      if (await cocokkanPassword(password, p.password_hash)) return p
+    }
+    return null
+  }
+
   async function toggleAktif(target: Profile) {
     const aksiBaru = !target.aktif
     const konfirmasi = aksiBaru
@@ -127,7 +138,24 @@ export default function AdminSyahbandarPage() {
       return
     }
 
+    if (inputPass.length < 6) {
+      setPesan({ tipe: 'err', teks: 'Password minimal 6 karakter.' })
+      return
+    }
+
     setModalLoading(true)
+
+    // Password harus unik: login syahbandar hanya memakai password.
+    const pemakai = await akunPemakaiPassword(inputPass)
+    if (pemakai) {
+      setModalLoading(false)
+      setPesan({
+        tipe: 'err',
+        teks: `Password itu sudah dipakai akun ${pemakai.nama}. Login Syahbandar hanya memakai password, jadi password tiap akun harus berbeda.`
+      })
+      return
+    }
+
     const cekNomor = await validasiNomorHpUnik(inputHp)
     if (!cekNomor.ok) {
       setModalLoading(false)
@@ -184,6 +212,24 @@ export default function AdminSyahbandarPage() {
       return
     }
 
+    if (editPass) {
+      if (editPass.length < 6) {
+        setEditLoading(false)
+        setPesan({ tipe: 'err', teks: 'Password minimal 6 karakter.' })
+        return
+      }
+
+      const pemakai = await akunPemakaiPassword(editPass, id)
+      if (pemakai) {
+        setEditLoading(false)
+        setPesan({
+          tipe: 'err',
+          teks: `Password itu sudah dipakai akun ${pemakai.nama}. Gunakan password berbeda — login Syahbandar hanya memakai password.`
+        })
+        return
+      }
+    }
+
     const updateData: Record<string, unknown> = {
       nama: editNama.trim(),
       nomor_hp: normalisasiNomorHp(editHp),
@@ -221,7 +267,7 @@ export default function AdminSyahbandarPage() {
     if (noHpMurni.startsWith('0')) noHpMurni = '62' + noHpMurni.slice(1)
 
     // Password TIDAK pernah dikirim lewat chat. Sampaikan langsung/lisan.
-    const isi = `Halo ${p.nama}, ini pesan dari Admin.\n\nAkun Syahbandar Anda sudah siap.\nLogin: ${URL_LOGIN}\nNo HP: ${p.nomor_hp || '-'}\nInstansi: ${p.unit || '-'}\n\nPassword TIDAK dikirim lewat chat demi keamanan. Minta Admin mereset password bila lupa.`
+    const isi = `Halo ${p.nama}, ini pesan dari Admin.\n\nAkun Syahbandar Anda sudah siap.\nBuka: ${URL_LOGIN}\nInstansi: ${p.unit || '-'}\n\nCukup masukkan PASSWORD akun Syahbandar Anda (tanpa nomor HP/email). Password TIDAK dikirim lewat chat demi keamanan — minta Admin mereset bila lupa.`
     window.open(`https://wa.me/${noHpMurni}?text=${encodeURIComponent(isi)}`, '_blank')
   }
 
@@ -241,7 +287,7 @@ export default function AdminSyahbandarPage() {
               </span>
             </h1>
             <p className="text-sm text-gray-500 mt-1">
-              Satu akun berlaku untuk semua daerah. Login lewat halaman Login (tab Syahbandar), bukan lewat menu ini.
+              Satu akun berlaku untuk semua daerah. Login lewat halaman Login (tab Syahbandar) hanya dengan password — tanpa nomor HP/email.
             </p>
           </div>
           <div className="flex gap-2 w-full md:w-auto">
@@ -361,7 +407,7 @@ export default function AdminSyahbandarPage() {
 
               <label className="block text-sm font-medium text-gray-700 mb-1">Password</label>
               <input type="text" value={inputPass} onChange={(e) => setInputPass(e.target.value)} className="w-full border rounded px-3 py-2 mb-1 text-gray-900" required />
-              <p className="text-[11px] text-gray-500 mb-4">Catat password ini dan serahkan langsung ke petugas syahbandar.</p>
+              <p className="text-[11px] text-gray-500 mb-4">Login Syahbandar hanya memakai password, jadi password tiap akun harus berbeda. Catat dan serahkan langsung ke petugas syahbandar.</p>
 
               <div className="flex justify-end gap-2">
                 <button type="button" onClick={() => setModalTambah(false)} className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded">Batal</button>

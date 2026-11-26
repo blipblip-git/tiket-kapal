@@ -28,6 +28,12 @@ function LoginContent() {
   const [showPassword, setShowPassword] = useState(false)
 
   async function prosesLogin() {
+    // Tab Syahbandar hanya memakai password — tidak ada nomor HP/email.
+    if (tab === 'syahbandar' && !password) {
+      setPesan('Password wajib diisi.')
+      return
+    }
+
     setLoading(true)
     setPesan('Memeriksa data...')
 
@@ -38,10 +44,13 @@ function LoginContent() {
       const response = await fetch('/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          identifier: inputLogin,
-          password
-        })
+        // Syahbandar: server mencari akun dari password (mode 'syahbandar').
+        // Petugas/agen: tetap nomor HP/email + password.
+        body: JSON.stringify(
+          tab === 'syahbandar'
+            ? { mode: 'syahbandar', password }
+            : { identifier: inputLogin, password }
+        )
       })
 
       const hasil = await response.json()
@@ -119,7 +128,7 @@ function LoginContent() {
     void prosesLogin()
   }
 
-  const labelIdentitas = tab === 'syahbandar' ? 'Nomor HP / Email Syahbandar' : 'Nomor HP / Email'
+  // Tab Syahbandar tidak memakai nomor HP/email: cukup password akun.
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-100 p-4">
@@ -136,8 +145,12 @@ function LoginContent() {
           </div>
 
           <form onSubmit={handleLogin} className="p-6" autoComplete="off">
-            <label className="block mb-2 text-sm font-medium text-gray-900">{labelIdentitas}</label>
-            <input type="text" name="operator_hp_no_autofill" value={noHp} onChange={(e) => setNoHp(e.target.value)} className="w-full border rounded px-3 py-2 mb-4 text-gray-900 focus:ring-blue-500 focus:border-blue-500" required autoComplete="off" />
+            {tab === 'operator' && (
+              <>
+                <label className="block mb-2 text-sm font-medium text-gray-900">Nomor HP / Email</label>
+                <input type="text" name="operator_hp_no_autofill" value={noHp} onChange={(e) => setNoHp(e.target.value)} className="w-full border rounded px-3 py-2 mb-4 text-gray-900 focus:ring-blue-500 focus:border-blue-500" required autoComplete="off" />
+              </>
+            )}
 
             <label className="block mb-2 text-sm font-medium text-gray-900">Password</label>
             <div className="relative mb-4">
@@ -149,7 +162,7 @@ function LoginContent() {
 
             {tab === 'syahbandar' && (
               <p className="mb-4 text-[11px] leading-snug text-gray-500">
-                Akun syahbandar diberikan oleh Admin. Password tidak dikirim lewat chat — minta reset ke Admin bila lupa.
+                Masuk hanya dengan password akun Syahbandar (tanpa nomor HP/email). Password tidak dikirim lewat chat — minta reset ke Admin bila lupa.
               </p>
             )}
 

@@ -72,4 +72,52 @@ export async function fieldPasswordBaru(password: string): Promise<Record<string
   return { password_plain: password }
 }
 
+// Verifikasi password terhadap hash yang tersimpan.
+// Dipakai halaman Pusat Kontrol → Akun Syahbandar untuk memastikan password
+// antar akun Syahbandar tidak kembar: login Syahbandar HANYA memakai password,
+// jadi password itulah identitas akunnya.
+export async function cocokkanPassword(
+  password: string,
+  hash: string | null | undefined
+): Promise<boolean> {
+  if (!password || !hash) return false
+
+  const bagian = hash.split('$')
+  if (bagian.length !== 4 || bagian[0] !== PASSWORD_HASH_PREFIX) return false
+
+  const iterasi = Number(bagian[1])
+  if (!Number.isFinite(iterasi) || iterasi < 1000) return false
+  if (typeof crypto === 'undefined' || !crypto.subtle) return false
+
+  try {
+    const salt = Uint8Array.from(atob(bagian[2]), (c) => c.charCodeAt(0))
+    const harapan = Uint8Array.from(atob(bagian[3]), (c) => c.charCodeAt(0))
+    if (harapan.length === 0) return false
+
+    const key = await crypto.subtle.importKey(
+      'raw',
+      new TextEncoder().encode(password),
+      'PBKDF2',
+      false,
+      ['deriveBits']
+    )
+
+    const bits = new Uint8Array(
+      await crypto.subtle.deriveBits(
+        { name: 'PBKDF2', salt, iterations: iterasi, hash: 'SHA-256' },
+        key,
+        harapan.length * 8
+      )
+    )
+
+    if (bits.length !== harapan.length) return false
+
+    let beda = 0
+    for (let i = 0; i < bits.length; i++) beda |= bits[i] ^ harapan[i]
+    return beda === 0
+  } catch {
+    return false
+  }
+}
+
 export const PASSWORD_MASK = '••••••••'

@@ -2,6 +2,11 @@
 // Login Petugas / Agen / Admin Utama diproses di SERVER:
 // - password dicek terhadap hash (password_plain lama dimigrasi otomatis saat login)
 // - browser tidak lagi membaca kolom password dari tabel profiles
+//
+// Mode 'syahbandar' (portal manifest): TANPA nomor HP/email — password akun itu
+// sendiri yang menjadi kunci masuk. Konsekuensinya password antar akun
+// syahbandar wajib berbeda (dijaga di Pusat Kontrol → Akun Syahbandar), dan
+// percobaan login dibatasi per IP.
 
 import { NextResponse } from 'next/server'
 import { buatClientAdmin, pesanServiceKeyKosong } from '@/lib/serverAuth'
@@ -107,29 +112,88 @@ async function cariProfil(
   return { profiles: [], adaKolomHash: false, error: errorTerakhir }
 }
 
+// Kandidat login syahbandar: SEMUA akun ber-role syahbandar (aktif maupun
+// tidak, supaya akun nonaktif tetap dapat pesan yang jelas). Login syahbandar
+// tidak membawa nomor HP/email, jadi password-lah yang menentukan akun mana
+// yang dipakai — karena itu password antar akun syahbandar wajib berbeda.
+async function cariKandidatSyahbandar(
+  admin: SupabaseClient
+): Promise<{ profiles: ProfilLogin[]; adaKolomHash: boolean; error: string | null }> {
+  const pilihanKolom = [KOLOM_LENGKAP, KOLOM_TANPA_HASH, KOLOM_TANPA_PLAIN, KOLOM_DASAR]
+  let errorTerakhir: string | null = null
+
+  for (const pilihan of pilihanKolom) {
+    const { data, error } = await admin
+      .from('profiles')
+      .select(pilihan)
+      .eq('role', 'syahbandar')
+      .limit(200)
+
+    if (!error) {
+      return {
+        profiles: (data as unknown as ProfilLogin[] | null) ?? [],
+        adaKolomHash: pilihan.includes('password_hash'),
+        error: null
+      }
+    }
+
+    const masalahKolom =
+      kolomPasswordHashBelumAda(error) ||
+      /password_plain/i.test(error.message || '') ||
+      /does not exist/i.test(error.message || '')
+
+    if (!masalahKolom) {
+      return { profiles: [], adaKolomHash: false, error: error.message }
+    }
+
+    errorTerakhir = error.message
+  }
+
+  return { profiles: [], adaKolomHash: false, error: errorTerakhir }
+}
+
 export async function POST(request: Request) {
   const admin = buatClientAdmin()
   if (!admin) return pesanServiceKeyKosong()
 
-  let body: { identifier?: unknown; login?: unknown; password?: unknown }
+  let body: { identifier?: unknown; login?: unknown; password?: unknown; mode?: unknown }
   try {
     body = await request.json()
   } catch {
     return NextResponse.json({ error: 'Format permintaan tidak valid.' }, { status: 400 })
   }
 
-  const identifier = String(body.identifier ?? body.login ?? '').trim()
+  // mode 'syahbandar' = portal syahbandar hanya memakai PASSWORD (tanpa nomor
+  // HP/email). Mode lain (petugas/agen/admin) tetap nomor HP/email + password.
+  const mode = String(body.mode ?? '').trim().toLowerCase()
+  const loginSyahbandar = mode === 'syahbandar'
+
+  const identifier = loginSyahbandar ? '' : String(body.identifier ?? body.login ?? '').trim()
   const password = String(body.password ?? '')
 
-  if (!identifier || !password) {
-    return NextResponse.json({ error: 'Nomor HP/Email dan password wajib diisi.' }, { status: 400 })
+  if (loginSyahbandar) {
+    if (!password) {
+      return NextResponse.json({ error: 'Password Syahbandar wajib diisi.' }, { status: 400 })
+    }
+    if (password.length < 6) {
+      return NextResponse.json({ error: 'Password minimal 6 karakter.' }, { status: 400 })
+    }
+    if (password.length > 200) {
+      return NextResponse.json({ error: 'Password tidak valid.' }, { status: 400 })
+    }
+  } else {
+    if (!identifier || !password) {
+      return NextResponse.json({ error: 'Nomor HP/Email dan password wajib diisi.' }, { status: 400 })
+    }
+
+    if (identifier.length > 120 || password.length > 200) {
+      return NextResponse.json({ error: 'Nomor HP/Email atau password tidak valid.' }, { status: 400 })
+    }
   }
 
-  if (identifier.length > 120 || password.length > 200) {
-    return NextResponse.json({ error: 'Nomor HP/Email atau password tidak valid.' }, { status: 400 })
-  }
-
-  const kunci = kunciPercobaan(request, identifier)
+  // Tanpa nomor HP, kunci pembatas percobaan hanya IP (tetap dibatasi supaya
+  // password tidak bisa ditebak berulang-ulang).
+  const kunci = kunciPercobaan(request, loginSyahbandar ? 'syahbandar' : identifier)
   if (kenaLimit(kunci)) {
     return NextResponse.json({
       error: 'Terlalu banyak percobaan login. Tunggu 10 menit lalu coba lagi.'
@@ -137,47 +201,102 @@ export async function POST(request: Request) {
   }
 
   try {
-    // Nomor HP disimpan dalam bentuk baku 08..., tetapi input pengguna boleh
-    // memakai +62/62/spasi. Query tetap dicoba dengan bentuk asli untuk data lama.
-    const identifierHp = !identifier.includes('@') && nomorHpValid(identifier)
-      ? normalisasiNomorHp(identifier)
-      : ''
+    // Profil bisa datang dari dua pintu: password saja (syahbandar) atau
+    // nomor HP/email + password (petugas/agen/admin).
+    let profil: ProfilLogin | null = null
+    let adaKolomHash = false
 
-    // Cari berdasarkan email dulu, lalu nomor HP (tanpa menyisipkan input ke filter PostgREST).
-    let hasil = await cariProfil(admin, 'email', identifier)
-    if (hasil.profiles.length === 0 && !hasil.error) {
-      hasil = await cariProfil(admin, 'nomor_hp', identifier)
+    if (loginSyahbandar) {
+      const hasilSyahbandar = await cariKandidatSyahbandar(admin)
+
+      if (hasilSyahbandar.error) {
+        return NextResponse.json({
+          error: 'Gagal memeriksa akun Syahbandar: ' + hasilSyahbandar.error
+        }, { status: 500 })
+      }
+
+      if (hasilSyahbandar.profiles.length === 0) {
+        catatGagal(kunci)
+        return NextResponse.json({
+          error: 'Belum ada akun Syahbandar. Minta Admin membuatkannya di Pusat Kontrol → Akun Syahbandar.'
+        }, { status: 401 })
+      }
+
+      adaKolomHash = hasilSyahbandar.adaKolomHash
+
+      const cocokSyahbandar = hasilSyahbandar.profiles.filter((p) => {
+        const hashTersimpan = p.password_hash || null
+        return hashTersimpan
+          ? verifyPassword(password, hashTersimpan)
+          : verifyPassword(password, p.password_plain)
+      })
+
+      if (cocokSyahbandar.length === 0) {
+        catatGagal(kunci)
+        return NextResponse.json({ error: 'Password Syahbandar salah.' }, { status: 401 })
+      }
+
+      // Password kembar = tidak jelas akun mana yang dipakai. Tolak, jangan
+      // menebak, supaya tidak ada yang masuk sebagai akun orang lain.
+      if (cocokSyahbandar.length > 1) {
+        return NextResponse.json({
+          error: 'Password ini dipakai lebih dari satu akun Syahbandar. Minta Admin mengganti password supaya setiap akun berbeda.',
+          kode: 'password_ganda'
+        }, { status: 409 })
+      }
+
+      profil = cocokSyahbandar[0]
+    } else {
+      // Nomor HP disimpan dalam bentuk baku 08..., tetapi input pengguna boleh
+      // memakai +62/62/spasi. Query tetap dicoba dengan bentuk asli untuk data lama.
+      const identifierHp = !identifier.includes('@') && nomorHpValid(identifier)
+        ? normalisasiNomorHp(identifier)
+        : ''
+
+      // Cari berdasarkan email dulu, lalu nomor HP (tanpa menyisipkan input ke filter PostgREST).
+      let hasil = await cariProfil(admin, 'email', identifier)
+      if (hasil.profiles.length === 0 && !hasil.error) {
+        hasil = await cariProfil(admin, 'nomor_hp', identifier)
+      }
+      if (hasil.profiles.length === 0 && !hasil.error && identifierHp && identifierHp !== identifier) {
+        hasil = await cariProfil(admin, 'nomor_hp', identifierHp)
+      }
+
+      if (hasil.error) {
+        return NextResponse.json({ error: 'Gagal memeriksa akun: ' + hasil.error }, { status: 500 })
+      }
+
+      // Cocokkan password ke semua kandidat. Kalau ada lebih dari satu akun yang
+      // cocok, data nomor HP sedang ganda: tolak, jangan beri pilihan akun.
+      const cocokPassword = hasil.profiles.filter((p) => {
+        const hashTersimpan = p.password_hash || null
+        return hashTersimpan
+          ? verifyPassword(password, hashTersimpan)
+          : verifyPassword(password, p.password_plain)
+      })
+
+      if (cocokPassword.length === 0) {
+        catatGagal(kunci)
+        return NextResponse.json({ error: 'Nomor HP/Email atau password salah.' }, { status: 401 })
+      }
+
+      if (cocokPassword.length > 1) {
+        return NextResponse.json({
+          error: 'Nomor HP ini terdaftar pada lebih dari satu akun. Satu nomor HP hanya boleh untuk satu login. Hubungi Admin Utama agar salah satu akun diganti nomor HP-nya.',
+          kode: 'nomor_hp_ganda'
+        }, { status: 409 })
+      }
+
+      profil = cocokPassword[0]
+      adaKolomHash = hasil.adaKolomHash
     }
-    if (hasil.profiles.length === 0 && !hasil.error && identifierHp && identifierHp !== identifier) {
-      hasil = await cariProfil(admin, 'nomor_hp', identifierHp)
+
+    // Semua cabang di atas sudah menolak kalau akun tidak ketemu; ini penjaga
+    // supaya TypeScript tahu profil tidak kosong.
+    if (!profil) {
+      return NextResponse.json({ error: 'Akun tidak ditemukan.' }, { status: 401 })
     }
 
-    if (hasil.error) {
-      return NextResponse.json({ error: 'Gagal memeriksa akun: ' + hasil.error }, { status: 500 })
-    }
-
-    // Cocokkan password ke semua kandidat. Kalau ada lebih dari satu akun yang
-    // cocok, data nomor HP sedang ganda: tolak, jangan beri pilihan akun.
-    const cocokPassword = hasil.profiles.filter((p) => {
-      const hash = p.password_hash || null
-      return hash
-        ? verifyPassword(password, hash)
-        : verifyPassword(password, p.password_plain)
-    })
-
-    if (cocokPassword.length === 0) {
-      catatGagal(kunci)
-      return NextResponse.json({ error: 'Nomor HP/Email atau password salah.' }, { status: 401 })
-    }
-
-    if (cocokPassword.length > 1) {
-      return NextResponse.json({
-        error: 'Nomor HP ini terdaftar pada lebih dari satu akun. Satu nomor HP hanya boleh untuk satu login. Hubungi Admin Utama agar salah satu akun diganti nomor HP-nya.',
-        kode: 'nomor_hp_ganda'
-      }, { status: 409 })
-    }
-
-    const profil = cocokPassword[0]
     const hash = profil.password_hash || null
 
     if (profil.aktif === false) {
@@ -258,7 +377,7 @@ export async function POST(request: Request) {
     await admin.from('profiles').update({ sesi_aktif: true }).eq('id', profil.id)
 
     // Migrasi otomatis akun lama: plaintext -> hash, lalu hapus plaintext-nya.
-    if (!hash && hasil.adaKolomHash && profil.password_plain) {
+    if (!hash && adaKolomHash && profil.password_plain) {
       const hashBaru = hashPasswordServer(password)
       const { error: errorMigrasi } = await admin
         .from('profiles')
