@@ -181,6 +181,14 @@ Aturan implementasi:
    komplain "kenapa ditagih lebih dari harga tiket".
 5. Biaya layanan **tidak pernah** memotong hak pemilik/platform; ia hanya
    menutup MDR gateway (lihat §2).
+6. **Informasi, bukan pemaksaan.** Daftar ini hanya memberi tahu besaran biaya;
+   keputusan kanal 100% milik pembeli dan tidak mengunci apa pun — ia masih bisa
+   memilih metode lain atau membatalkan. Di mode simulasi (tanpa gateway) tidak
+   ada rupiah biaya layanan yang benar-benar ditarik: `pembayaran.jumlah` tetap
+   sebesar `jadwal.harga`. Kode kanal yang diklik hanya dicatat sebagai jejak di
+   `pembayaran.referensi` (`kanal:<kode>`) untuk analitik, bukan penentu harga.
+   Biaya baru ikut ditagihkan saat provider aktif, lewat `catatPembayaran()`
+   (§7) yang membuat tagihan sebesar `dasar + biaya layanan`.
 
 ## 6. Struktur kode (adapter)
 

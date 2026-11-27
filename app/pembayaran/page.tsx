@@ -30,6 +30,28 @@ type MetodeBayar = {
 
 const rp = (nilai: number) => 'Rp ' + Math.max(0, Math.round(nilai)).toLocaleString('id-ID')
 
+/**
+ * Tulisan layar pembayaran mengikuti kanal yang dipilih pembeli. Tanpa gateway
+ * semuanya masih simulasi, tapi minimal tidak menyesatkan (pilih Alfamart
+ * jangan ditampilkan QR).
+ */
+function labelKanal(tipe: string): { judul: string; baris: [string, string] } {
+  switch (tipe) {
+    case 'qris':
+      return { judul: 'Scan QR ini untuk membayar (mode simulasi)', baris: ['QR Code', '(simulasi)'] }
+    case 'va':
+      return { judul: 'Nomor Virtual Account (mode simulasi)', baris: ['Nomor VA', '(simulasi)'] }
+    case 'retail':
+      return { judul: 'Bayar di kasir Alfamart / Indomaret (mode simulasi)', baris: ['Kode Bayar', '(simulasi)'] }
+    case 'ewallet':
+      return { judul: 'Buka aplikasi e-wallet pilihanmu (mode simulasi)', baris: ['E-Wallet', '(simulasi)'] }
+    case 'manual':
+      return { judul: 'Transfer ke rekening platform (mode simulasi)', baris: ['Instruksi', 'Transfer'] }
+    default:
+      return { judul: 'Ikuti instruksi pembayaran (mode simulasi)', baris: ['Instruksi', '(simulasi)'] }
+  }
+}
+
 function LayarMemuat({ teks }: { teks: string }) {
   return (
     <div className="min-h-[100dvh] bg-gray-50 flex flex-col items-center justify-center">
@@ -193,7 +215,9 @@ function PembayaranContent() {
       // izin mengubah status pesanan/kursi, jadi tidak bisa memalsukan lunas.
       const response = await fetchPublik('/api/publik/bayar', {
         method: 'POST',
-        body: JSON.stringify({ ids })
+        // `metode` hanya dicatat sebagai pilihan pembeli (tidak mengubah harga:
+        // biaya layanan tidak ditagihkan/dipotong di mode simulasi).
+        body: JSON.stringify({ ids, metode: metodePilih?.kode || null })
       })
 
       const hasil = await response.json()
@@ -214,6 +238,8 @@ function PembayaranContent() {
 
   const jumlahDewasa = pesananList.filter(p => !p.is_balita).length
   const totalHarga = detail.harga * jumlahDewasa
+  // Teks instruksi mengikuti kanal yang dipilih (semua masih simulasi).
+  const kanal = labelKanal(metodePilih?.tipe || '')
 
   return (
     <div className="h-[100dvh] w-full bg-gray-100 flex flex-col overflow-hidden">
@@ -274,9 +300,9 @@ function PembayaranContent() {
             <div className="bg-white p-4 md:p-5 rounded-lg shadow-sm border border-gray-200">
               <h2 className="font-bold text-gray-900 text-sm md:text-base">Pilih Metode Pembayaran</h2>
               <p className="text-[11px] md:text-xs text-gray-600 mt-1 mb-3">
-                Harga tiket tetap sama. Yang berbeda hanya <b>biaya layanan</b> (biaya
-                kanal pembayaran) yang ditambahkan ke total. Nominal di bawah sudah
-                termasuk biaya tersebut — tidak ada biaya tersembunyi.
+                Ini <b>hanya informasi biaya layanan</b> tiap kanal. Kanal tetap kamu
+                yang pilih dan bisa berubah kapan saja sebelum membayar — harga tiket
+                dan hak pemilik kapal tidak berubah sedikit pun.
               </p>
 
               {memuatMetode && (
@@ -358,10 +384,14 @@ function PembayaranContent() {
                   </p>
                 </div>
               )}
-              <p className="text-xs md:text-sm text-gray-600 mb-2 md:mb-3">Scan QR ini untuk membayar (mode simulasi)</p>
+              <p className="text-xs md:text-sm text-gray-600 mb-2 md:mb-3">{kanal.judul}</p>
               
               <div className="bg-gray-50 w-32 h-32 md:w-48 md:h-48 mx-auto flex items-center justify-center rounded-lg border-2 border-dashed border-gray-300">
-                <span className="text-gray-400 text-xs md:text-sm font-medium text-center">QR Code<br />(simulasi)</span>
+                <span className="text-gray-400 text-xs md:text-sm font-medium text-center">
+                  {kanal.baris[0]}
+                  <br />
+                  {kanal.baris[1]}
+                </span>
               </div>
               
               <p className="text-[10px] md:text-xs text-red-600 font-bold mt-2 md:mt-3 bg-red-50 inline-block px-3 py-1 rounded-full">
@@ -416,7 +446,7 @@ function PembayaranContent() {
           <div className="bg-white w-full md:max-w-sm rounded-t-2xl md:rounded-xl p-4 md:p-5 shadow-xl text-gray-900">
             <h3 className="font-bold text-base md:text-lg">Konfirmasi Pembayaran</h3>
             <p className="text-[11px] md:text-xs text-gray-600 mt-0.5 mb-3">
-              Periksa biaya layanan sebelum lanjut. Harga tiket tidak berubah.
+              Ringkasan biaya — keputusan metode tetap milikmu, belum ada dana yang ditarik.
             </p>
 
             <div className="text-[11px] md:text-sm space-y-1.5 border-t border-gray-200 pt-3">
@@ -444,6 +474,10 @@ function PembayaranContent() {
               {metodePilih.manual
                 ? 'Transfer manual: kirim sesuai nominal + kode bayar, lalu tunggu verifikasi admin.'
                 : 'Pembayaran diverifikasi otomatis oleh gateway; e-tiket terbit setelah dana diterima.'}
+            </p>
+            <p className="text-[10px] md:text-xs text-gray-400 mt-1">
+              Biaya layanan ditanggung pembeli dan tidak memotong hak pemilik kapal.
+              Kamu masih bisa ganti metode lewat tombol di bawah.
             </p>
 
             <button

@@ -1,6 +1,11 @@
 // app/api/publik/bayar/route.ts
 // Pembayaran ONLINE (mode simulasi) diproses di server supaya pengunjung tidak
 // perlu hak tulis ke tabel pesanan / kursi / pembayaran.
+//
+// Catatan penting: `metode` yang dikirim halaman pembayaran HANYA dicatat sebagai
+// pilihan pembeli (kolom `pembayaran.referensi`). Biaya layanan tidak pernah
+// dihitung di sini dan tidak mengubah nominal yang dibayar — biaya layanan baru
+// ditagihkan lewat tagihan gateway saat provider aktif (lihat lib/payment).
 
 import { NextResponse } from 'next/server'
 import { buatClientAdmin, pesanServiceKeyKosong } from '@/lib/serverAuth'
@@ -13,6 +18,12 @@ const JENDELA = 10 * 60 * 1000
 function ambilIds(body: any): string[] {
   const ids = Array.isArray(body?.ids) ? body.ids : []
   return [...new Set(ids.map((x: any) => String(x)).filter((x: string) => /^[0-9a-f-]{36}$/i.test(x)))] as string[]
+}
+
+/** Kode kanal pilihan pembeli — hanya untuk catatan, bukan penentu harga. */
+function ambilMetode(body: any): string | null {
+  const kode = typeof body?.metode === 'string' ? body.metode.trim().toLowerCase() : ''
+  return /^[a-z0-9_]{2,40}$/.test(kode) ? kode : null
 }
 
 export async function POST(request: Request) {
@@ -35,6 +46,7 @@ export async function POST(request: Request) {
   }
 
   const ids = ambilIds(body)
+  const metodePilihan = ambilMetode(body)
   if (ids.length === 0 || ids.length > 20) {
     return NextResponse.json({ error: 'Daftar pesanan tidak valid.' }, { status: 400 })
   }
@@ -113,6 +125,9 @@ export async function POST(request: Request) {
           metode: 'simulasi_online',
           jumlah: harga,
           status: 'sukses',
+          // Hanya jejak pilihan pembeli (mis. "kanal:qris"). Tidak memengaruhi
+          // nominal: biaya layanan tidak ditagihkan di mode simulasi.
+          referensi: metodePilihan ? `kanal:${metodePilihan}` : null,
           waktu_bayar: waktuBayar
         }))
       )
