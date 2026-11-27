@@ -1,0 +1,47 @@
+#!/bin/sh
+# .githooks/pre-commit
+# Menahan commit yang membawa kunci/token rahasia (Supabase service role,
+# API key, password, private key) sebelum masuk ke GitHub.
+#
+# Pasang sekali per komputer:
+#   git config core.hooksPath .githooks
+#
+# Fail-open: kalau gitleaks belum terpasang, commit tetap jalan (hanya
+# memberi peringatan) supaya tidak menghalangi pekerjaan.
+
+if ! command -v gitleaks >/dev/null 2>&1; then
+  echo "[pre-commit] gitleaks belum terpasang — pemeriksaan rahasia DILEWATI."
+  echo "             Cara pasang ada di docs/SECURITY.md (sekali saja)."
+  exit 0
+fi
+
+# gitleaks >= 8.19 memakai subperintah 'git'; versi lama memakai 'protect'.
+if gitleaks git --help >/dev/null 2>&1; then
+  PERIKSA="gitleaks git --staged --redact --no-banner"
+else
+  PERIKSA="gitleaks protect --staged --redact --no-banner"
+fi
+
+if sh -c "$PERIKSA"; then
+  exit 0
+fi
+
+cat <<'PESAN'
+
+  ────────────────────────────────────────────────────────────────
+  Commit DIBATALKAN: ada nilai yang terlihat seperti kunci rahasia.
+
+  Yang harus dilakukan:
+   1. Hapus nilai itu dari file yang di-commit (pindahkan ke .env.* lokal,
+      file .env* sudah di-gitignore).
+   2. Kalau nilai itu SUDAH sempat ter-commit sebelumnya, anggap bocor:
+      rotasi kuncinya di dashboard Supabase / gateway pembayaran.
+   3. Kalau yakin itu bukan rahasia (misal contoh tulisan), tambahkan
+      pengecualian di .gitleaks.toml.
+
+  Cek manual seluruh isi repo + history:
+     npm run secret:scan
+  ────────────────────────────────────────────────────────────────
+
+PESAN
+exit 1

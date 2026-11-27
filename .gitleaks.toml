@@ -1,0 +1,22 @@
+# .gitleaks.toml
+# Aturan deteksi rahasia: pakai bawaan gitleaks, tambah pengecualian untuk
+# teks contoh (placeholder) supaya tidak "alarm palsu" terus.
+#
+# Jalankan manual:  npm run secret:scan
+# Otomatis saat commit: lihat .githooks/pre-commit + docs/SECURITY.md
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Nilai contoh/placeholder di dokumentasi, bukan kredensial asli"
+paths = [
+  '''^\.env\.example$'''
+]
+regexes = [
+  '''anon-key-dari-supabase''',
+  '''service-role-key-dari-supabase''',
+  '''service-role-key-project-demo''',
+  '''ganti-dengan-string-acak-panjang''',
+  '''xxxx+'''
+]

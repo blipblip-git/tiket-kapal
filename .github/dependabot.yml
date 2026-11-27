@@ -1,0 +1,51 @@
+# .github/dependabot.yml
+# Pemberitahuan + PR otomatis untuk dependency yang punya celah keamanan
+# atau versi baru. Tidak ada beban ke website: ini bot GitHub, bukan kode
+# yang ikut dibundel.
+#
+# Hasilnya: Dependabot membuka PR sendiri (gratis, tanpa token/tagihan).
+# Kalau hijau di `npm run build`, cukup klik Merge.
+
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: "/"
+    schedule:
+      interval: weekly
+      day: monday
+      time: "07:00"
+      timezone: "Asia/Jakarta"
+    open-pull-requests-limit: 5
+    labels:
+      - dependabot
+    commit-message:
+      prefix: deps
+    # Patch + minor digabung jadi SATU PR supaya tidak banjir.
+    # Major tetap PR sendiri karena biasanya perlu diperiksa manual.
+    groups:
+      patch-dan-minor:
+        patterns:
+          - "*"
+        update-types:
+          - minor
+          - patch
+    ignore:
+      # Rombak besar React/Next harus diputuskan manual, bukan di-merge otomatis.
+      - dependency-name: next
+        update-types: ["version-update:semver-major"]
+      - dependency-name: react
+        update-types: ["version-update:semver-major"]
+      - dependency-name: react-dom
+        update-types: ["version-update:semver-major"]
+      - dependency-name: eslint-config-next
+        update-types: ["version-update:semver-major"]
+
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: monthly
+    open-pull-requests-limit: 3
+    labels:
+      - dependabot
+    commit-message:
+      prefix: ci

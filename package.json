@@ -10,7 +10,9 @@
     "demo:verify": "node scripts/verify-demo-clean.mjs",
     "bersih:kursi": "node scripts/bersih-kursi.mjs",
     "lint": "eslint",
-    "uji:header": "node scripts/uji-header.mjs"
+    "uji:header": "node scripts/uji-header.mjs",
+    "secret:scan": "gitleaks git . --redact --no-banner",
+    "secret:scan:staged": "gitleaks git . --staged --redact --no-banner"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.117.3",
