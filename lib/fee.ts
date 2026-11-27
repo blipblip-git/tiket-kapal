@@ -156,8 +156,9 @@ export async function ambilTarifFee(): Promise<TarifFee> {
   const lama = angkaFee(baris.fee_platform)
   if (!pakaiKanal) return { offline: lama, online: lama }
 
-  const offline = angkaFee(baris.fee_offline, lama)
-  const online = angkaFee(baris.fee_online, offline)
+  // Kolom sudah ada -> nilainya otoritatif (0 = memang gratis, bukan "belum diatur").
+  const offline = Math.max(0, Math.round(Number(baris.fee_offline) || 0))
+  const online = Math.max(0, Math.round(Number(baris.fee_online) || 0))
   return { offline, online }
 }
 

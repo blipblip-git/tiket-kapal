@@ -31,6 +31,11 @@ set fee_offline = fee_platform
 where fee_offline = 0
   and fee_platform > 0;
 
+-- Kalau tabel belum punya baris sama sekali, buat satu baris awal.
+insert into public.pengaturan_platform (fee_offline, fee_online, fee_platform, updated_by)
+select 3000, 5000, 3000, 'migrasi fee kanal'
+where not exists (select 1 from public.pengaturan_platform);
+
 -- 3) Rapikan label kanal lama -> 3 kanal saja: petugas / agen / online.
 update public.pesanan
 set kanal = 'petugas'

@@ -80,11 +80,8 @@ export async function GET(request: Request) {
 
     if (!errPengaturan && pengaturan) {
       const baris = pengaturan as BarisPengaturan
-      const offline = Number(baris.fee_offline)
-      const online = Number(baris.fee_online)
-      const lama = Number(baris.fee_platform || 0)
-      feeOffline = Number.isFinite(offline) && offline > 0 ? Math.round(offline) : Math.max(0, Math.round(lama) || 0)
-      feeOnline = Number.isFinite(online) && online > 0 ? Math.round(online) : feeOffline
+      feeOffline = Math.max(0, Math.round(Number(baris.fee_offline) || 0))
+      feeOnline = Math.max(0, Math.round(Number(baris.fee_online) || 0))
     } else {
       // Kolom fee_offline/fee_online belum ada -> pakai kolom lama.
       const { data: lama } = await demo

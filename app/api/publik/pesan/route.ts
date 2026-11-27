@@ -191,12 +191,9 @@ export async function POST(request: Request) {
       .maybeSingle()
 
     if (!errOnline) {
+      // Kolom fee_online sudah ada -> nilainya otoritatif (0 = gratis).
       const baris = (platformOnline || {}) as any
-      const tarifOnline = Number(baris.fee_online)
-      feePlatform =
-        Number.isFinite(tarifOnline) && tarifOnline > 0
-          ? Math.round(tarifOnline)
-          : Math.max(0, Math.round(Number(baris.fee_platform || 0)))
+      feePlatform = Math.max(0, Math.round(Number(baris.fee_online) || 0))
     } else {
       const { data: platformLama } = await admin
         .from('pengaturan_platform')
