@@ -97,6 +97,52 @@ export function rincianTagihan(dasar: number, tarif: TarifMetode): RincianTagiha
   }
 }
 
+/** Ringkasan satu metode untuk daftar pilihan di halaman checkout. */
+export type RingkasanMetode = {
+  kode: string
+  nama: string
+  tipe: string
+  /** Biaya layanan yang DITAMBAHKAN ke total (sudah gross-up). */
+  biayaLayanan: number
+  /** Yang benar-benar dibayar pembeli = dasar + biayaLayanan. */
+  total: number
+  settlementHari: number | null
+  /** Transfer manual: biaya 0 dan diverifikasi admin. */
+  manual: boolean
+}
+
+/**
+ * Daftar biaya semua metode untuk satu nominal dasar.
+ * Dipakai halaman checkout supaya pembeli bisa membandingkan sebelum memilih,
+ * dan API publik supaya angkanya tidak dihitung di browser (tarif bisa berubah).
+ */
+export function ringkasMetode(dasar: number, daftar: TarifMetode[]): RingkasanMetode[] {
+  const dasarAman = Math.max(0, Math.round(angkaAman(dasar)))
+  return daftar.map((tarif) => {
+    const biayaLayanan = hitungBiayaLayanan(dasarAman, tarif)
+    return {
+      kode: tarif.kode,
+      nama: tarif.nama || tarif.kode,
+      tipe: tarif.tipe,
+      biayaLayanan,
+      total: dasarAman + biayaLayanan,
+      settlementHari: tarif.settlementHari ?? null,
+      manual: tarif.tipe === 'manual',
+    }
+  })
+}
+
+/**
+ * Kode metode paling murah, untuk badge "Termurah".
+ * Transfer manual (biaya 0) sengaja tidak diikutkan: nominalnya paling rendah
+ * tetapi tidak otomatis terbit dan harus diverifikasi admin.
+ */
+export function kodeTermurah(daftar: RingkasanMetode[]): string | null {
+  const kandidat = daftar.filter((m) => !m.manual)
+  if (kandidat.length === 0) return null
+  return kandidat.reduce((murah, kini) => (kini.total < murah.total ? kini : murah)).kode
+}
+
 /** Baris tabel `metode_bayar` -> TarifMetode (dipakai server & client). */
 export function tarifDariBaris(baris: Record<string, unknown> | null | undefined): TarifMetode {
   const b = baris || {}

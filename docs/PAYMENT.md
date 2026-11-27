@@ -151,17 +151,49 @@ Alur pencairan:
    status wadah berubah `ditransfer` → `selesai`. Gagal transfer = `dibatalkan`,
    wadah bisa masuk batch berikutnya.
 
+## 5. Pengingat biaya layanan di checkout
+
+Sebelum pembeli memilih metode, halaman `/pembayaran` wajib memperlihatkan
+**biaya layanan tiap kanal** (bukan hanya metode yang dipilih), karena selisihnya
+besar: QRIS ±0,7% gross-up, VA Rp4.000, retail Rp5.000, e-wallet ±1,5%.
+
+Contoh tampilan (dasar 150.000):
+
+| Kanal | Biaya layanan | Total dibayar |
+|---|---|---|
+| QRIS (H+2) | 1.058 | 151.058 |
+| Virtual Account (H+2) | 4.000 | 154.000 |
+| E-Wallet (H+3) | 2.285 | 152.285 |
+| Alfamart / Indomaret (H+3) | 5.000 | 155.000 |
+| Transfer manual | 0 | 150.000 |
+
+Aturan implementasi:
+
+1. Angka dihitung **server** lewat `GET /api/publik/metode?pesanan=<ids>` →
+   `ringkasMetode()`. Browser tidak menghitung sendiri karena tarif `metode_bayar`
+   bisa diubah Superadmin kapan saja.
+2. `dasar` = `jadwal.harga` × jumlah penumpang dewasa (balita tidak dihitung),
+   diambil dari database — bukan dari query string — supaya tidak bisa diakali.
+3. Badge **TERMURAH** diberikan ke total terkecil **kecuali** transfer manual
+   (biayanya 0 tetapi harus diverifikasi admin, jadi tidak otomatis terbit).
+4. Setelah metode diklik, muncul popup konfirmasi berisi `harga tiket + biaya
+   layanan = total dibayar`, baru pembeli boleh lanjut. Tujuannya menghindari
+   komplain "kenapa ditagih lebih dari harga tiket".
+5. Biaya layanan **tidak pernah** memotong hak pemilik/platform; ia hanya
+   menutup MDR gateway (lihat §2).
+
 ## 6. Struktur kode (adapter)
 
 | File | Isi |
 |---|---|
 | `lib/payment/types.ts` | Kontrak `PaymentProvider` (buat tagihan, cek status) dan `PayoutProvider` (kirim dana, cek status) |
-| `lib/payment/tarif.ts` | Rumus biaya layanan (gross-up), tarif bawaan, konversi baris DB |
+| `lib/payment/tarif.ts` | Rumus biaya layanan (gross-up), tarif bawaan, `ringkasMetode()`/`kodeTermurah()` untuk daftar biaya per kanal |
 | `lib/payment/index.ts` | Registry: `ambilPaymentProvider()`, `ambilPayoutProvider()` dari env |
 | `lib/payment/providers/manual.ts` | Provider pembayaran manual (instruksi transfer/QRIS statis) |
 | `lib/payment/providers/manual-payout.ts` | Payout manual (admin transfer, catat bukti) |
 | `lib/payment/layanan.ts` | "paymentService": tulis `tagihan`, `tagihan_split`, update `pesanan.tagihan_id` |
 | `lib/payment/wadah.ts` | Wadah kapal: kode bayar berawalan kode kapal, rekap `v_wadah_kapal`, tutup wadah, siapkan transfer per PT |
+| `app/api/publik/metode/route.ts` | Daftar metode aktif + biaya layanan per kanal untuk popup checkout (dihitung server) |
 
 Menambah gateway = buat satu file baru di `providers/` lalu daftarkan di
 `index.ts`. Alur penjualan, closing kapal, dan laporan tidak disentuh.

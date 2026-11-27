@@ -17,6 +17,19 @@ type Detail = {
   harga: number
 }
 
+/** Satu baris dari /api/publik/metode (biaya layanan per kanal). */
+type MetodeBayar = {
+  kode: string
+  nama: string
+  tipe: string
+  biayaLayanan: number
+  total: number
+  settlementHari: number | null
+  manual: boolean
+}
+
+const rp = (nilai: number) => 'Rp ' + Math.max(0, Math.round(nilai)).toLocaleString('id-ID')
+
 function LayarMemuat({ teks }: { teks: string }) {
   return (
     <div className="min-h-[100dvh] bg-gray-50 flex flex-col items-center justify-center">
@@ -47,6 +60,14 @@ function PembayaranContent() {
   const [error, setError] = useState('')
   const [sedangBayar, setSedangBayar] = useState(false)
   const [step, setStep] = useState<'pilih' | 'qris'>('pilih')
+
+  // Biaya layanan per metode (dari server) + metode yang sedang dikonfirmasi.
+  const [metode, setMetode] = useState<MetodeBayar[]>([])
+  const [termurah, setTermurah] = useState<string | null>(null)
+  const [dasar, setDasar] = useState<number | null>(null)
+  const [memuatMetode, setMemuatMetode] = useState(true)
+  const [metodePilih, setMetodePilih] = useState<MetodeBayar | null>(null)
+  const [konfirmasi, setKonfirmasi] = useState(false)
 
   const pesananIds = pesananParam ? pesananParam.split(',').filter(Boolean) : []
 
@@ -99,6 +120,40 @@ function PembayaranContent() {
     }
 
     fetchData()
+  }, [pesananIds.join(',')]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Biaya layanan tiap metode dihitung SERVER (tarif bisa diubah Superadmin,
+  // jadi jangan disalin ke browser). Nominal dasar juga dari server.
+  useEffect(() => {
+    if (pesananIds.length === 0) {
+      setMemuatMetode(false)
+      return
+    }
+
+    let dibatalkan = false
+    setMemuatMetode(true)
+
+    fetchPublik(`/api/publik/metode?pesanan=${encodeURIComponent(pesananIds.join(','))}`)
+      .then((res) => res.json())
+      .then((hasil) => {
+        if (dibatalkan) return
+        if (Array.isArray(hasil?.metode) && hasil.metode.length > 0) {
+          setMetode(hasil.metode as MetodeBayar[])
+          setTermurah(typeof hasil.termurah === 'string' ? hasil.termurah : null)
+          if (typeof hasil.dasar === 'number') setDasar(hasil.dasar)
+        }
+      })
+      .catch(() => {
+        // Daftar biaya gagal dimuat: halaman tetap bisa dipakai lewat tombol
+        // cadangan (tanpa rincian biaya), jangan sampai pembeli terhenti.
+      })
+      .finally(() => {
+        if (!dibatalkan) setMemuatMetode(false)
+      })
+
+    return () => {
+      dibatalkan = true
+    }
   }, [pesananIds.join(',')]) // eslint-disable-line react-hooks/exhaustive-deps
 
   async function handleBatal() {
@@ -207,28 +262,102 @@ function PembayaranContent() {
             <hr className="my-2 md:my-3 border-gray-200" />
             
             <div className="flex justify-between items-center">
-              <span className="font-bold text-sm md:text-base text-gray-900">Total Bayar</span>
+              <span className="font-bold text-sm md:text-base text-gray-900">Harga Tiket</span>
               <span className="font-bold text-blue-600 text-base md:text-lg">Rp {totalHarga.toLocaleString('id-ID')}</span>
             </div>
+            <p className="text-[10px] md:text-xs text-gray-500 mt-1 text-right">
+              Belum termasuk biaya layanan — lihat daftar di bawah.
+            </p>
           </div>
 
           {step === 'pilih' && (
             <div className="bg-white p-4 md:p-5 rounded-lg shadow-sm border border-gray-200">
-              <h2 className="font-bold text-gray-900 mb-3 text-sm md:text-base">Pilih Metode Pembayaran</h2>
-              <button
-                onClick={() => setStep('qris')}
-                className="w-full bg-blue-600 text-white py-3 rounded-lg hover:bg-blue-700 font-medium text-left px-4 transition-colors shadow-sm"
-              >
-                <span className="block text-sm md:text-base">💳 Transfer / QRIS (Online)</span>
-                <span className="block text-[10px] md:text-xs font-normal mt-0.5 opacity-90">
-                  Bayar dari rumah lewat HP. E-tiket langsung terbit.
-                </span>
-              </button>
+              <h2 className="font-bold text-gray-900 text-sm md:text-base">Pilih Metode Pembayaran</h2>
+              <p className="text-[11px] md:text-xs text-gray-600 mt-1 mb-3">
+                Harga tiket tetap sama. Yang berbeda hanya <b>biaya layanan</b> (biaya
+                kanal pembayaran) yang ditambahkan ke total. Nominal di bawah sudah
+                termasuk biaya tersebut — tidak ada biaya tersembunyi.
+              </p>
+
+              {memuatMetode && (
+                <p className="text-xs text-gray-500 py-4 text-center">Menghitung biaya layanan...</p>
+              )}
+
+              {!memuatMetode && metode.length > 0 && (
+                <div className="space-y-2">
+                  {metode.map((m) => {
+                    const termurahIni = termurah === m.kode
+                    return (
+                      <button
+                        key={m.kode}
+                        onClick={() => { setMetodePilih(m); setKonfirmasi(true) }}
+                        className={`w-full text-left px-3 py-2.5 md:py-3 rounded-lg border transition-colors bg-white text-gray-900 ${
+                          termurahIni ? 'border-green-500 hover:bg-green-50' : 'border-gray-200 hover:border-blue-400 hover:bg-blue-50'
+                        }`}
+                      >
+                        <span className="flex items-start justify-between gap-3">
+                          <span className="min-w-0">
+                            <span className="block text-xs md:text-sm font-semibold">
+                              {m.nama}
+                              {termurahIni && (
+                                <span className="ml-1.5 align-middle text-[9px] md:text-[10px] font-bold text-green-700 bg-green-100 px-1.5 py-0.5 rounded">
+                                  TERMURAH
+                                </span>
+                              )}
+                            </span>
+                            <span className="block text-[10px] md:text-xs text-gray-500 mt-0.5">
+                              {m.manual
+                                ? 'Diverifikasi admin'
+                                : m.settlementHari != null
+                                  ? `Dana cair H+${m.settlementHari}`
+                                  : 'Tanpa biaya layanan'}
+                            </span>
+                          </span>
+                          <span className="text-right whitespace-nowrap">
+                            <span className={`block text-[10px] md:text-xs ${m.biayaLayanan > 0 ? 'text-orange-600' : 'text-green-600'}`}>
+                              {m.biayaLayanan > 0 ? `+ ${rp(m.biayaLayanan)}` : 'Gratis biaya'}
+                            </span>
+                            <span className="block text-xs md:text-sm font-bold">{rp(m.total)}</span>
+                          </span>
+                        </span>
+                      </button>
+                    )
+                  })}
+                </div>
+              )}
+
+              {!memuatMetode && metode.length === 0 && (
+                <button
+                  onClick={() => setStep('qris')}
+                  className="w-full bg-blue-600 text-white py-3 rounded-lg hover:bg-blue-700 font-medium text-left px-4 transition-colors shadow-sm"
+                >
+                  <span className="block text-sm md:text-base">💳 Transfer / QRIS (Online)</span>
+                  <span className="block text-[10px] md:text-xs font-normal mt-0.5 opacity-90">
+                    Bayar dari rumah lewat HP. E-tiket langsung terbit.
+                  </span>
+                </button>
+              )}
+
+              <p className="text-[10px] md:text-xs text-gray-500 mt-3">
+                Total = {rp(dasar ?? totalHarga)} (harga tiket) + biaya layanan metode yang dipilih.
+              </p>
             </div>
           )}
 
           {step === 'qris' && (
             <div className="bg-white p-4 md:p-5 rounded-lg shadow-sm text-center text-gray-900 border border-gray-200">
+              {metodePilih && (
+                <div className="mb-2 md:mb-3">
+                  <p className="text-xs md:text-sm font-semibold">{metodePilih.nama}</p>
+                  <p className="text-[11px] md:text-xs text-gray-600">
+                    {rp(metodePilih.total - metodePilih.biayaLayanan)} + biaya layanan{' '}
+                    {metodePilih.biayaLayanan > 0 ? rp(metodePilih.biayaLayanan) : 'gratis'}
+                  </p>
+                  <p className="text-sm md:text-base font-bold text-blue-600 mt-0.5">
+                    Total: {rp(metodePilih.total)}
+                  </p>
+                </div>
+              )}
               <p className="text-xs md:text-sm text-gray-600 mb-2 md:mb-3">Scan QR ini untuk membayar (mode simulasi)</p>
               
               <div className="bg-gray-50 w-32 h-32 md:w-48 md:h-48 mx-auto flex items-center justify-center rounded-lg border-2 border-dashed border-gray-300">
@@ -256,7 +385,9 @@ function PembayaranContent() {
                 disabled={sedangBayar}
                 className="w-full bg-green-600 text-white py-3 rounded-lg hover:bg-green-700 disabled:bg-gray-400 font-bold text-sm md:text-base shadow-md transition-colors"
               >
-                {sedangBayar ? 'Memproses...' : `✓ Saya Sudah Bayar (${jumlahDewasa} tiket)`}
+                {sedangBayar
+                  ? 'Memproses...'
+                  : `✓ Saya Sudah Bayar${metodePilih ? ' ' + rp(metodePilih.total) : ` (${jumlahDewasa} tiket)`}`}
               </button>
 
               <button
@@ -278,6 +409,58 @@ function PembayaranContent() {
 
         </div>
       </div>
+
+      {/* Popup pengingat: total yang dibayar SUDAH termasuk biaya layanan. */}
+      {konfirmasi && metodePilih && (
+        <div className="fixed inset-0 z-50 bg-black/50 flex items-end md:items-center justify-center md:p-4">
+          <div className="bg-white w-full md:max-w-sm rounded-t-2xl md:rounded-xl p-4 md:p-5 shadow-xl text-gray-900">
+            <h3 className="font-bold text-base md:text-lg">Konfirmasi Pembayaran</h3>
+            <p className="text-[11px] md:text-xs text-gray-600 mt-0.5 mb-3">
+              Periksa biaya layanan sebelum lanjut. Harga tiket tidak berubah.
+            </p>
+
+            <div className="text-[11px] md:text-sm space-y-1.5 border-t border-gray-200 pt-3">
+              <div className="flex justify-between">
+                <span className="text-gray-600">Metode</span>
+                <span className="font-medium text-right">{metodePilih.nama}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-gray-600">Harga tiket</span>
+                <span className="font-medium">{rp(metodePilih.total - metodePilih.biayaLayanan)}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-gray-600">Biaya layanan</span>
+                <span className={`font-medium ${metodePilih.biayaLayanan > 0 ? 'text-orange-600' : 'text-green-600'}`}>
+                  {metodePilih.biayaLayanan > 0 ? rp(metodePilih.biayaLayanan) : 'Gratis'}
+                </span>
+              </div>
+              <div className="flex justify-between border-t border-gray-200 pt-1.5">
+                <span className="font-bold">Total dibayar</span>
+                <span className="font-bold text-blue-600">{rp(metodePilih.total)}</span>
+              </div>
+            </div>
+
+            <p className="text-[10px] md:text-xs text-gray-500 mt-3">
+              {metodePilih.manual
+                ? 'Transfer manual: kirim sesuai nominal + kode bayar, lalu tunggu verifikasi admin.'
+                : 'Pembayaran diverifikasi otomatis oleh gateway; e-tiket terbit setelah dana diterima.'}
+            </p>
+
+            <button
+              onClick={() => { setStep('qris'); setKonfirmasi(false) }}
+              className="w-full mt-4 bg-blue-600 text-white py-3 rounded-lg hover:bg-blue-700 font-bold text-sm md:text-base shadow-sm transition-colors"
+            >
+              Lanjut Bayar {rp(metodePilih.total)}
+            </button>
+            <button
+              onClick={() => setKonfirmasi(false)}
+              className="w-full mt-1 text-gray-600 py-2 text-xs md:text-sm hover:underline font-medium"
+            >
+              Pilih metode lain
+            </button>
+          </div>
+        </div>
+      )}
 
     </div>
   )
