@@ -95,11 +95,63 @@ Catatan penting dari tabel di atas:
 | Syarat | Rekening pemilik saja | Pemilik jadi sub-merchant/beneficiary (KTP/NIB, verifikasi) |
 | Refund | Tarik balik dari pemilik (sulit) | Reverse split |
 
-**Rekomendasi:** mulai dari **disbursement manual + batch harian** (sesuai tools
-yang sudah ada), lalu pindah ke **split payment** setelah pemilik kapal setuju dan
-akun gateway siap. Struktur kode sudah disiapkan untuk keduanya.
+**Rekomendasi:** disbursement manual dengan **batch per closing kapal**, bukan per
+tiket dan bukan "batch harian pukul 00:00". Baik disbursement maupun split payment
+sama-sama menunggu closing: uang baru boleh keluar setelah jadwal kapal ditutup,
+karena sebelum keberangkatan masih mungkin ada refund/pindah jadwal. Split payment
+per transaksi karena itu **tidak dipakai** — gateway hanya boleh menagih, pencairan
+tetap per closing.
 
-## 5. Struktur kode (adapter)
+## 4A. Aturan identitas: kapal untuk transaksi, PT untuk transfer
+
+Keputusan operasional (dari pemilik): setiap tiket yang dibayar transfer **tidak
+dicairkan per tiket**. Dana menunggu closing sesuai jadwal masing-masing kapal.
+
+| Lapisan | Gunanya | Kunci di database |
+|---|---|---|
+| **Kapal** | wadah transaksi & closing; nama kapal jadi identitas yang dibaca admin | `tagihan.kapal_id` + snapshot `kode_kapal`, `nama_kapal` |
+| **PT / penyewa** | penerima transfer; nama harus sama dengan nama rekening | `tagihan.operator_id` (`profiles.role = admin_utama`) + snapshot `nama_pt` |
+
+Jadi identifikasi pesanan memakai **nama kapal** (karena closing ikut jadwal kapal),
+tetapi uangnya ditransfer ke **PT yang terdaftar**. Satu PT boleh punya beberapa
+kapal: wadahnya tetap terpisah per kapal, transfernya digabung satu kali.
+
+Pengaman supaya tidak tertukar/tercampur (`supabase/wadah-kapal.sql`):
+
+1. `tagihan.kapal_id` wajib satu operator dengan `tagihan.operator_id` — trigger
+   `trg_cek_tagihan_kapal` **menolak** tagihan yang menempel ke kapal PT lain.
+2. `kode_kapal`, `nama_kapal`, `nama_pt` di-*snapshot* saat transaksi, jadi laporan
+   lama tidak berubah kalau nama kapal/PT diganti.
+3. `closing_kapal` unik per `(kapal_id, tanggal)` — satu wadah per kapal per closing,
+   tidak bisa dobel.
+4. `transfer_pemilik_item.closing_kapal_id` unik — satu wadah hanya bisa masuk satu
+   batch transfer, jadi tidak mungkin dibayar dua kali.
+
+Kode bayar membawa identitas kapal: `SDW-261127-K7Q2` (kode kapal + tanggal WITA +
+4 karakter acak). Instruksi transfer manual juga menyebut nama kapal & PT dan
+mewajibkan kode itu diisi di berita transfer, sehingga rekonsiliasi bisa dilakukan
+hanya dari mutasi bank.
+
+Contoh: PT Sadewa punya kapal *Sadewa Jaya* (SAD) dan *Sadewa 02* (SAD2).
+
+```
+Closing 27 Nov:
+  SAD  -> wadah 140.000 (pemilik) + 10.000 (platform)
+  SAD2 -> wadah 185.000 (pemilik) + 15.000 (platform)
+Transfer ke PT Sadewa: 1 batch = 325.000 (2 kapal, 1x biaya transfer)
+```
+
+Alur pencairan:
+
+1. Jadwal kapal ditutup (semua tiket sudah `paid`), admin memanggil
+   `tutupWadahKapal()` → baris `closing_kapal` berisi angka final wadah itu.
+2. Setelah semua kapal satu PT ditutup untuk periode tersebut, admin memanggil
+   `siapkanTransferPemilik()` → **satu** baris `transfer_pemilik` + item per kapal.
+3. Admin transfer sesuai nominal, unggah bukti (`tandaiTransferPemilik()`),
+   status wadah berubah `ditransfer` → `selesai`. Gagal transfer = `dibatalkan`,
+   wadah bisa masuk batch berikutnya.
+
+## 6. Struktur kode (adapter)
 
 | File | Isi |
 |---|---|
@@ -108,7 +160,8 @@ akun gateway siap. Struktur kode sudah disiapkan untuk keduanya.
 | `lib/payment/index.ts` | Registry: `ambilPaymentProvider()`, `ambilPayoutProvider()` dari env |
 | `lib/payment/providers/manual.ts` | Provider pembayaran manual (instruksi transfer/QRIS statis) |
 | `lib/payment/providers/manual-payout.ts` | Payout manual (admin transfer, catat bukti) |
-| `lib/payment/layanan.ts` | "paymentService": tulis `tagihan`, `tagihan_split`, update `pesanan.pembayaran_id` |
+| `lib/payment/layanan.ts` | "paymentService": tulis `tagihan`, `tagihan_split`, update `pesanan.tagihan_id` |
+| `lib/payment/wadah.ts` | Wadah kapal: kode bayar berawalan kode kapal, rekap `v_wadah_kapal`, tutup wadah, siapkan transfer per PT |
 
 Menambah gateway = buat satu file baru di `providers/` lalu daftarkan di
 `index.ts`. Alur penjualan, closing kapal, dan laporan tidak disentuh.
@@ -117,18 +170,30 @@ Env terkait (lihat `.env.example`): `PAYMENT_PROVIDER`, `PAYOUT_PROVIDER`,
 `PAYMENT_MODE`, `MANUAL_BANK_INFO`, `MANUAL_QRIS_URL`, `IPAYMU_VA`,
 `IPAYMU_API_KEY`, `PAYMENT_WEBHOOK_SECRET`.
 
-## 6. Skema database (`supabase/tagihan-online.sql`)
+## 7. Skema database (`supabase/tagihan-online.sql` + `supabase/wadah-kapal.sql`)
 
 - `metode_bayar` — daftar kanal + tarif biaya layanan (boleh dibaca publik untuk
   checkout). Sudah diisi QRIS/VA/retail/e-wallet/transfer manual.
 - `tagihan` — satu tagihan: `dasar`, `biaya_layanan`, `total_tagih`,
   `mdr_estimasi`, `mdr_aktual`, `status`, `pg_provider`, `pg_ref`, `pg_payload`.
+  Ditambah wadah: `kapal_id`, `jadwal_id`, snapshot `kode_kapal`/`nama_kapal`/`nama_pt`,
+  dan `closing_kapal_id`.
 - `tagihan_split` — pembagian per tagihan: `penerima_tipe` (pemilik/platform/
   agen), `nominal`, `status` (menunggu → ditahan → dikirim → selesai), `metode_kirim`
   (split_gateway | disbursement | transfer_manual), `bukti_url`.
 - `rekening_penerima` — rekening pemilik: bank/e-wallet, `status` (draft →
   dokumen_lengkap → verifikasi → aktif), `pg_beneficiary_id`, `dokumen` (jsonb).
 - `pesanan` — tambahan `tagihan_id`, `total_bayar`, `biaya_layanan`.
+- `kapal.kode` — kode pendek unik per PT (awalan kode bayar), diisi otomatis dari
+  nama kapal untuk data lama.
+- `closing_kapal` — angka final satu kapal pada satu tanggal: `bagian_pemilik`,
+  `bagian_platform`, `bagian_agen`, `total_mdr`, plus `status`
+  (terbuka → dihitung → ditransfer → selesai/dibatalkan) dan `bukti_url`.
+- `transfer_pemilik` + `transfer_pemilik_item` — satu batch transfer per PT untuk
+  periode tertentu; item menyimpan rincian per kapal. Nomor rekening & nama
+  rekening di-*snapshot* di header.
+- View `v_wadah_kapal` (per kapal per tanggal) dan `v_wadah_pemilik` (per PT per
+  tanggal) untuk halaman rekap.
 
 > Tabel lama `pembayaran` (tunai/QRIS loket: `pesanan_id`, `metode`, `jumlah`,
 > `referensi`) tetap dipakai dan **tidak diubah**. Tabel baru sengaja dinamai
@@ -138,7 +203,12 @@ RLS: tarif publik boleh dibaca; `tagihan`/`tagihan_split` hanya admin
 penyewa + penerima dana + superadmin; `rekening_penerima` hanya pemiliknya.
 Semua penulisan lewat server (service role).
 
-## 7. Alur transaksi (setelah gateway aktif)
+Urutan migrasi (wajib berurutan): `supabase/fee-kanal.sql` →
+`supabase/tagihan-online.sql` → `supabase/wadah-kapal.sql`. Berkas terakhir
+menambah kolom wadah + trigger validasi, jadi butuh tabel `tagihan` dan `kapal`
+yang sudah ada. Semuanya idempoten (aman dijalankan ulang).
+
+## 8. Alur transaksi (setelah gateway aktif)
 
 1. Pembeli memilih jadwal + kursi + metode bayar → server menghitung
    `rincianTagihan()` (dasar, biaya layanan, total).
@@ -147,12 +217,16 @@ Semua penulisan lewat server (service role).
 3. Tiket tetap `pending`. Kursi terkunci sesuai `expired_at`.
 4. Gateway mengirim webhook → `tandaiLunas()` mengubah tagihan jadi `paid` dan
    split jadi `ditahan`. Baru setelah itu tiket dicetak/di-boarding.
-5. Split gateway: dana pemilik langsung masuk rekeningnya (`selesai`). Disbursement:
-   admin mencairkan batch harian lewat `cairkanSplit()` + upload bukti.
+5. **Pencairan per closing, bukan per tiket.** Setelah jadwal kapal ditutup:
+   `tutupWadahKapal()` mengunci angka wadah → setelah semua kapal PT itu ditutup,
+   `siapkanTransferPemilik()` membuat satu batch → admin transfer + unggah bukti
+   (`tandaiTransferPemilik()`). Split gateway (kalau nanti dipakai) hanya
+   mengubah *cara* memindahkan dana, **bukan** waktu pencairan.
 6. Refund: buat baris `refund`, balikkan split (reverse split / tarik dari saldo
-   pemilik), tiket dibatalkan.
+   pemilik), tiket dibatalkan. Kalau wadah sudah ditutup, koreksi dilakukan di
+   batch transfer berikutnya (wadah lama tidak diedit).
 
-## 8. Alur onboarding pemilik kapal
+## 9. Alur onboarding pemilik kapal
 
 **Tahap A — sekarang (tanpa gateway, disbursement manual):**
 1. Kesepakatan tertulis: harga dasar per rute, fee platform (3.000 offline /
@@ -171,16 +245,16 @@ Semua penulisan lewat server (service role).
 3. Uji 1 transaksi kecil (mis. Rp10.000) → pastikan dana masuk ke rekening pemilik.
 4. Baru split rule diaktifkan untuk operasional harian.
 
-## 9. Roadmap
+## 10. Roadmap
 
 | Fase | Isi | Butuh gateway? |
 |---|---|---|
 | 0 (sekarang) | Skema DB, adapter, rumus biaya layanan, dokumen ini | Tidak |
-| 1 | Checkout online memakai `catatPembayaran()` + halaman verifikasi admin + pencairan manual | Tidak |
+| 1 | Checkout online memakai `catatPembayaran()` (+ `kapalId`/`jadwalId`) + halaman verifikasi admin + **wadah closing & transfer per PT** | Tidak |
 | 2 | Adapter iPaymu (QRIS/VA/retail/e-wallet) + webhook + rekonsiliasi | Ya |
 | 3 | Split payment otomatis (iPaymu split / Midtrans Iris untuk payout) | Ya + verifikasi beneficiary |
 
-## 10. Pertanyaan wajib ke gateway (saat mendaftar)
+## 11. Pertanyaan wajib ke gateway (saat mendaftar)
 
 1. Apakah **split payment** tersedia untuk akun ini? Penerima harus punya akun
    iPaymu sendiri, atau cukup rekening bank? Berapa maksimal penerima?
@@ -193,11 +267,14 @@ Semua penulisan lewat server (service role).
 6. Refund & chargeback: siapa yang menanggung MDR, berapa lama dana kembali?
 7. Apakah tarif di situs sudah termasuk PPN?
 
-## 11. Dampak ke laporan
+## 12. Dampak ke laporan
 
 - `rekap-bagi-hasil` / `-kapal` harus membaca `tagihan_split` (nominal nyata)
   ketika sudah ada, dan tetap memakai snapshot `fee_platform` untuk data lama.
-- `backup-data` menambah tabel `tagihan`, `tagihan_split`,
-  `rekening_penerima`, `metode_bayar`.
+- Rekap berbasis wadah membaca `v_wadah_kapal` (per kapal) dan `v_wadah_pemilik`
+  (per PT). Angka transfer diambil dari `closing_kapal`/`transfer_pemilik`, bukan
+  dihitung ulang dari split, supaya yang ditransfer = yang dihitung saat closing.
+- `backup-data` menambah tabel `tagihan`, `tagihan_split`, `closing_kapal`,
+  `transfer_pemilik`, `transfer_pemilik_item`, `rekening_penerima`, `metode_bayar`.
 - Biaya layanan **bukan** pendapatan platform: catat sebagai pass-through
   (masuk dan keluar dengan nominal sama), supaya laba tidak terlihat menggelembung.

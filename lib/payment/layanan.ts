@@ -10,21 +10,49 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import { ambilPaymentProvider, ambilPayoutProvider } from './index'
 import { rincianTagihan, tarifBawaan, tarifDariBaris, type TarifMetode } from './tarif'
 import type { PenerimaDana, RekeningTujuan, Tagihan } from './types'
+import { buatKodeBayarWadah } from './wadah'
 
-const ALFABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
-
-function kodeAcak(panjang = 6): string {
-  const buf = new Uint8Array(panjang)
-  if (typeof crypto !== 'undefined' && crypto.getRandomValues) {
-    crypto.getRandomValues(buf)
-  } else {
-    for (let i = 0; i < panjang; i++) buf[i] = Math.floor(Math.random() * 256)
-  }
-  return Array.from(buf).map((b) => ALFABET[b % ALFABET.length]).join('')
+/**
+ * Kode bayar membawa identitas KAPAL (mis. SDW-261127-K7Q2), supaya mutasi
+ * bank bisa dibaca pemiliknya tanpa membuka aplikasi. Tanpa kapal, dipakai
+ * awalan BYR (tagihan tanpa kapal, mis. biaya tambahan).
+ */
+export function buatKodeBayar(namaAtauKodeKapal?: string | null): string {
+  return buatKodeBayarWadah(namaAtauKodeKapal || 'BYR')
 }
 
-export function buatKodeBayar(): string {
-  return `BYR-${Date.now().toString(36).toUpperCase()}-${kodeAcak(4)}`
+/** Pastikan kode bayar belum dipakai (random 4 char bisa bertabrakan). */
+async function kodeBayarBebas(admin: SupabaseClient, kapal: string | null | undefined): Promise<string> {
+  for (let usaha = 0; usaha < 5; usaha++) {
+    const kode = buatKodeBayar(kapal)
+    const { data, error } = await admin.from('tagihan').select('id').eq('kode_bayar', kode).maybeSingle()
+    if (error) throw new Error(`Gagal memeriksa kode bayar: ${error.message}`)
+    if (!data) return kode
+  }
+  throw new Error('Gagal membuat kode bayar unik setelah 5 percobaan.')
+}
+
+/**
+ * Rekening bank aktif milik satu PT. Dipakai supaya saat closing admin tidak
+ * perlu mencari rekening lagi: baris pembagian dana sudah menunjuk rekening.
+ */
+export async function rekeningAktifPemilik(
+  admin: SupabaseClient,
+  pemilikId: string | null | undefined
+): Promise<string | null> {
+  if (!pemilikId) return null
+  const { data, error } = await admin
+    .from('rekening_penerima')
+    .select('id')
+    .eq('pemilik_id', pemilikId)
+    .eq('status', 'aktif')
+    .eq('tipe', 'bank')
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle()
+
+  if (error) return null
+  return data ? String((data as { id: string }).id) : null
 }
 
 /** Tarif metode dari tabel metode_bayar; kalau belum ada, pakai tarif bawaan. */
@@ -61,6 +89,16 @@ export type OpsiCatatPembayaran = {
   metodeKode: string
   /** Tiket yang dicakup satu tagihan (boleh lebih dari satu). */
   pesananIds: string[]
+  /**
+   * Kapal pemilik tiket. WAJIB untuk penjualan online: inilah wadah transaksi
+   * yang menentukan closing & laporan. Snapshot kode/nama kapal disimpan.
+   */
+  kapalId?: string | null
+  jadwalId?: string | null
+  kodeKapal?: string | null
+  namaKapal?: string | null
+  /** Nama PT pemilik (profiles.nama_perusahaan); kalau kosong diisi trigger. */
+  namaPt?: string | null
   /** Hak pemilik + fee platform untuk SEMUA tiket di tagihan ini. */
   dasar: number
   /** Pembagian dana; jumlahnya WAJIB sama dengan `dasar`. */
@@ -100,13 +138,19 @@ export async function catatPembayaran(
   }
 
   const provider = ambilPaymentProvider()
-  const kodeBayar = buatKodeBayar()
+  // Awalan kode bayar = kode kapal, jadi dana tidak mungkin "nyasar" tanpa
+  // jejak: dari mutasi bank langsung kelihatan kapal pemiliknya.
+  const kodeBayar = await kodeBayarBebas(admin, opsi.kodeKapal || opsi.namaKapal)
   const expiredMenit = Math.max(5, opsi.expiredMenit || 60)
   const expiredAt = new Date(Date.now() + expiredMenit * 60 * 1000).toISOString()
 
   const tagihan = await provider.buatTagihan({
     kodeBayar,
     operatorId: opsi.operatorId || null,
+    kapalId: opsi.kapalId || null,
+    kodeKapal: opsi.kodeKapal || null,
+    namaKapal: opsi.namaKapal || null,
+    namaPt: opsi.namaPt || null,
     metodeKode: opsi.metodeKode,
     jumlahTiket,
     dasar: rincian.dasar,
@@ -123,6 +167,13 @@ export async function catatPembayaran(
     .insert({
       operator_id: opsi.operatorId || null,
       kode_bayar: kodeBayar,
+      // Wadah transaksi: kapal + jadwal + snapshot nama (tidak bisa tercampur,
+      // trigger DB menolak kalau kapal bukan milik PT di operator_id).
+      kapal_id: opsi.kapalId || null,
+      jadwal_id: opsi.jadwalId || null,
+      kode_kapal: opsi.kodeKapal || null,
+      nama_kapal: opsi.namaKapal || null,
+      nama_pt: opsi.namaPt || null,
       pg_provider: provider.kode,
       pg_mode: (process.env.PAYMENT_MODE || 'sandbox').trim().toLowerCase(),
       metode_kode: opsi.metodeKode,
@@ -145,17 +196,23 @@ export async function catatPembayaran(
   }
 
   const metodeKirim = provider.otomatis ? 'disbursement' : 'transfer_manual'
-  const barisSplit = opsi.penerima
-    .filter((p) => Math.round(p.nominal) > 0)
-    .map((p) => ({
+  const barisSplit: Array<Record<string, unknown>> = []
+  for (const p of opsi.penerima) {
+    const nominal = Math.round(p.nominal)
+    if (nominal <= 0) continue
+    barisSplit.push({
       tagihan_id: pembayaran.id,
       penerima_tipe: p.tipe,
       penerima_id: p.id || null,
       nama_penerima: p.nama || null,
-      nominal: Math.round(p.nominal),
+      nominal,
       status: 'menunggu',
       metode_kirim: metodeKirim,
-    }))
+      // Pemilik: tunjuk rekening aktif PT-nya sekarang, jadi saat closing
+      // tidak ada lagi pencarian manual yang bisa salah rekening.
+      rekening_id: p.tipe === 'pemilik' ? await rekeningAktifPemilik(admin, p.id) : null,
+    })
+  }
 
   if (barisSplit.length > 0) {
     const { error: errSplit } = await admin.from('tagihan_split').insert(barisSplit)

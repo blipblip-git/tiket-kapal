@@ -9,7 +9,7 @@
 export type StatusPembayaran = 'pending' | 'paid' | 'expired' | 'gagal' | 'refund'
 
 export type PenerimaDana = {
-  /** pemilik = pemilik kapal (operator), platform = kita, agen = penjual agen. */
+  /** pemilik = pemilik kapal (PT/operator), platform = kita, agen = penjual agen. */
   tipe: 'pemilik' | 'platform' | 'agen'
   /** profiles.id pemilik/agen; null untuk platform. */
   id?: string | null
@@ -21,6 +21,14 @@ export type PermintaanTagihan = {
   /** Kode internal kita (unik). Dikirim ke gateway sebagai reference/merchantRef. */
   kodeBayar: string
   operatorId?: string | null
+  /**
+   * Wadah transaksi. Kapal menentukan closing & laporan, PT menentukan
+   * penerima transfer. Gateway hanya butuh nama untuk deskripsi.
+   */
+  kapalId?: string | null
+  kodeKapal?: string | null
+  namaKapal?: string | null
+  namaPt?: string | null
   metodeKode: string
   jumlahTiket: number
   /** Hak pemilik + fee platform, TANPA biaya layanan. */

@@ -8,13 +8,19 @@
 
 import type { HasilCekStatus, PaymentProvider, PermintaanTagihan, Tagihan } from '../types'
 
-function instruksiManual(total: number, kodeBayar: string): string {
+function instruksiManual(permintaan: PermintaanTagihan): string {
   const bank = (process.env.MANUAL_BANK_INFO || '').trim()
   const qris = (process.env.MANUAL_QRIS_URL || '').trim()
+  const pemilik = [permintaan.namaKapal, permintaan.namaPt ? `PT ${permintaan.namaPt}` : '']
+    .filter(Boolean)
+    .join(' — ')
+
   const baris = [
-    `Total yang harus dibayar: Rp ${total.toLocaleString('id-ID')}`,
-    `Kode bayar: ${kodeBayar}`,
+    `Total yang harus dibayar: Rp ${permintaan.total.toLocaleString('id-ID')}`,
+    `Kode bayar: ${permintaan.kodeBayar}`,
   ]
+  if (pemilik) baris.push(`Untuk: ${pemilik}`)
+  baris.push('', 'Berita transfer WAJIB memakai kode bayar di atas supaya dana tidak tertukar.')
   if (bank) baris.push('', 'Transfer bank:', bank)
   if (qris) baris.push('', `QRIS statis: ${qris}`)
   baris.push('', 'Tiket diterbitkan setelah pembayaran diverifikasi petugas/admin.')
@@ -30,7 +36,7 @@ export const paymentManual: PaymentProvider = {
       kodeBayar: permintaan.kodeBayar,
       total: permintaan.total,
       metodeKode: permintaan.metodeKode,
-      instruksi: instruksiManual(permintaan.total, permintaan.kodeBayar),
+      instruksi: instruksiManual(permintaan),
       pgRef: null,
       raw: { mode: 'manual' },
     }
