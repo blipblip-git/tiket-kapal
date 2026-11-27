@@ -323,14 +323,15 @@ function LoketJualContent() {
       const jamTransaksi = getJamTransaksi(sekarang)
       const grupId = generateUuid()
       
-      let kanalPesanan = 'loket'
-      if (profile.role === 'petugas_mobile') kanalPesanan = 'mobile'
-      if (profile.role === 'terminal_keberangkatan') kanalPesanan = 'keberangkatan'
+      // Semua akun staf (petugas loket/mobile/keberangkatan) memakai satu kanal:
+      // 'petugas'. Label lama ('loket','mobile','keberangkatan') hanya dipakai
+      // untuk membaca data historis.
+      const kanalPesanan = 'petugas'
 
       const identitasPenjual = profile.nomor_hp || profile.email || profile.nama
 
-      // Fee dibekukan saat menjual (fee penjual + fee platform).
-      const feeSnapshot = await snapshotFee(profile)
+      // Fee dibekukan saat menjual (fee platform offline + fee agen bila ada).
+      const feeSnapshot = await snapshotFee(profile, kanalPesanan)
 
       const pesananData: any[] = []
       const kunciList: { nomor_kursi: string; pesanan_id: string }[] = []

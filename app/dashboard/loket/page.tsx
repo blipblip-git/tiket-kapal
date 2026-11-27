@@ -225,7 +225,7 @@ export default function DashboardLoketPage() {
     const { data: p, error: errP } = await supabase
       .from('pesanan')
       .select('id, nama_penumpang, kode_tiket, nomor_hp, jadwal_id, kursi_id, waktu_pesan, grup_transaksi_id')
-      .eq('kanal', 'loket')
+      .in('kanal', ['petugas', 'loket', 'mobile', 'keberangkatan'])
       .eq('status', 'pending')
       .order('waktu_pesan', { ascending: true })
 

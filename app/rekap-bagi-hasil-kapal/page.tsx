@@ -3,6 +3,7 @@
 import { useEffect, useState, Suspense } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase, getProfile, getOperatorSession, type Profile } from '@/lib/supabase'
+import { ambilTarifFee, feePesananAda, feePlatformBaris } from '@/lib/fee'
 
 type LaporanBulanan = {
   bulan: string
@@ -40,7 +41,8 @@ function RekapBagiHasilKapalContent() {
 
   const [printMode, setPrintMode] = useState<'harian' | 'jam' | 'semua'>('semua')
 
-  const FEE_PER_TIKET = 3000
+  // Fee tidak lagi angka tetap: mengikuti snapshot fee_platform per tiket
+  // (offline 3.000 / online 5.000, tidak pernah dijumlah).
 
   const getWaktuWITA = () => {
     const now = new Date();
@@ -83,10 +85,19 @@ function RekapBagiHasilKapalContent() {
 
   async function fetchLaporanBulanan(p: Profile) {
     const operatorId = p.operator_id || p.id
+    const tarif = await ambilTarifFee()
+    const pakaiSnapshot = await feePesananAda()
+    const kolom = [
+      'id, is_balita, kanal',
+      pakaiSnapshot ? 'fee_platform' : '',
+      'jadwal:jadwal_id(tanggal, operator_id)'
+    ]
+      .filter(Boolean)
+      .join(', ')
 
     const { data: pesananData, error: errPesanan } = await supabase
       .from('pesanan')
-      .select('id, is_balita, jadwal:jadwal_id(tanggal, operator_id)')
+      .select(kolom)
       .eq('status', 'paid')
       .eq('jadwal.operator_id', operatorId) // KUNCI MULTI-TENANT
 
@@ -109,15 +120,22 @@ function RekapBagiHasilKapalContent() {
         const bulan = tgl.substring(0, 7)
 
         if (!groupedByMonth[bulan]) {
-          groupedByMonth[bulan] = { bulan, total_tiket: 0, fee_per_tiket: FEE_PER_TIKET, total_fee: 0 }
+          groupedByMonth[bulan] = { bulan, total_tiket: 0, fee_per_tiket: 0, total_fee: 0 }
         }
 
         groupedByMonth[bulan].total_tiket += 1
-        groupedByMonth[bulan].total_fee += FEE_PER_TIKET
+        groupedByMonth[bulan].total_fee += feePlatformBaris(pItem, tarif)
       })
     }
 
-    const laporanArray = Object.values(groupedByMonth).sort((a, b) => b.bulan.localeCompare(a.bulan))
+    const laporanArray = Object.values(groupedByMonth)
+      .map((b) => ({
+        ...b,
+        // Fee per tiket bisa beda (offline/online) -> tampilkan rata-rata,
+        // total tetap dihitung dari snapshot masing-masing tiket.
+        fee_per_tiket: b.total_tiket > 0 ? Math.round(b.total_fee / b.total_tiket) : 0
+      }))
+      .sort((a, b) => b.bulan.localeCompare(a.bulan))
     setLaporanBulanan(laporanArray)
   }
 
@@ -127,10 +145,15 @@ function RekapBagiHasilKapalContent() {
     setTanggalDipilih(null)
 
     const operatorId = profile.operator_id || profile.id
+    const tarif = await ambilTarifFee()
+    const pakaiSnapshot = await feePesananAda()
+    const kolom = ['id, is_balita, kanal', pakaiSnapshot ? 'fee_platform' : '', 'jadwal:jadwal_id(tanggal)']
+      .filter(Boolean)
+      .join(', ')
 
     const { data: pesananData } = await supabase
       .from('pesanan')
-      .select('id, is_balita, jadwal:jadwal_id(tanggal)')
+      .select(kolom)
       .eq('status', 'paid')
       .eq('jadwal.operator_id', operatorId) // KUNCI MULTI-TENANT
 
@@ -143,7 +166,7 @@ function RekapBagiHasilKapalContent() {
     for (let i = 1; i <= lastDay; i++) {
       const tglStr = `${bulan}-${String(i).padStart(2, '0')}`
       if (tglStr <= batasTanggal) {
-        groupedByDate[tglStr] = { tanggal: tglStr, total_tiket: 0, fee_per_tiket: FEE_PER_TIKET, total_fee: 0 }
+        groupedByDate[tglStr] = { tanggal: tglStr, total_tiket: 0, fee_per_tiket: 0, total_fee: 0 }
       }
     }
 
@@ -155,12 +178,17 @@ function RekapBagiHasilKapalContent() {
 
         if (tgl.startsWith(bulan) && groupedByDate[tgl]) {
           groupedByDate[tgl].total_tiket += 1
-          groupedByDate[tgl].total_fee += FEE_PER_TIKET
+          groupedByDate[tgl].total_fee += feePlatformBaris(p, tarif)
         }
       })
     }
 
-    const laporanArray = Object.values(groupedByDate).sort((a, b) => a.tanggal.localeCompare(b.tanggal))
+    const laporanArray = Object.values(groupedByDate)
+      .map((b) => ({
+        ...b,
+        fee_per_tiket: b.total_tiket > 0 ? Math.round(b.total_fee / b.total_tiket) : 0
+      }))
+      .sort((a, b) => a.tanggal.localeCompare(b.tanggal))
     setLaporanHarian(laporanArray)
   }
 
@@ -169,6 +197,8 @@ function RekapBagiHasilKapalContent() {
     setTanggalDipilih(tanggal)
     
     const operatorId = profile.operator_id || profile.id
+    const tarif = await ambilTarifFee()
+    const pakaiSnapshot = await feePesananAda()
 
     const { data: templateData } = await supabase
       .from('template_jadwal')
@@ -176,9 +206,17 @@ function RekapBagiHasilKapalContent() {
       .eq('aktif', true)
       .eq('operator_id', operatorId) // KUNCI MULTI-TENANT
 
+    const kolomPesanan = [
+      'id, is_balita, kanal',
+      pakaiSnapshot ? 'fee_platform' : '',
+      'jadwal:jadwal_id(jam_berangkat, tanggal, rute_asal, rute_tujuan)'
+    ]
+      .filter(Boolean)
+      .join(', ')
+
     const { data: pesananData } = await supabase
       .from('pesanan')
-      .select('id, is_balita, jadwal:jadwal_id(jam_berangkat, tanggal, rute_asal, rute_tujuan)')
+      .select(kolomPesanan)
       .eq('status', 'paid')
       .eq('jadwal.operator_id', operatorId) // KUNCI MULTI-TENANT
 
@@ -191,7 +229,7 @@ function RekapBagiHasilKapalContent() {
         const key = `${jam}|${rute}`
         
         if (!grouped[key]) {
-          grouped[key] = { jam, rute, total_tiket: 0, fee_per_tiket: FEE_PER_TIKET, total_fee: 0 }
+          grouped[key] = { jam, rute, total_tiket: 0, fee_per_tiket: 0, total_fee: 0 }
         }
       })
     }
@@ -206,18 +244,23 @@ function RekapBagiHasilKapalContent() {
         const key = `${jam}|${rute}`
 
         if (!grouped[key]) {
-          grouped[key] = { jam, rute, total_tiket: 0, fee_per_tiket: FEE_PER_TIKET, total_fee: 0 }
+          grouped[key] = { jam, rute, total_tiket: 0, fee_per_tiket: 0, total_fee: 0 }
         }
         
         grouped[key].total_tiket += 1
-        grouped[key].total_fee += FEE_PER_TIKET
+        grouped[key].total_fee += feePlatformBaris(p, tarif)
       })
     }
 
-    const rincianArray = Object.values(grouped).sort((a, b) => {
-      if (a.jam !== b.jam) return a.jam.localeCompare(b.jam)
-      return a.rute.localeCompare(b.rute)
-    })
+    const rincianArray = Object.values(grouped)
+      .map((b) => ({
+        ...b,
+        fee_per_tiket: b.total_tiket > 0 ? Math.round(b.total_fee / b.total_tiket) : 0
+      }))
+      .sort((a, b) => {
+        if (a.jam !== b.jam) return a.jam.localeCompare(b.jam)
+        return a.rute.localeCompare(b.rute)
+      })
     
     setRincianAktif(rincianArray)
   }

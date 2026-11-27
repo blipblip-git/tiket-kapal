@@ -306,7 +306,7 @@ function LoketJualAgenContent() {
       const identitasPenjual = profile.nomor_hp || profile.email
 
       // Fee dibekukan saat menjual (fee agen per tiket + fee platform).
-      const feeSnapshot = await snapshotFee(profile)
+      const feeSnapshot = await snapshotFee(profile, 'agen')
 
       const pesananData: any[] = []
       const kunciList: { nomor_kursi: string; pesanan_id: string }[] = []

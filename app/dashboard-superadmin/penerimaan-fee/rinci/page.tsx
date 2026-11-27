@@ -16,6 +16,7 @@ function RinciPlatformContent() {
   const operatorParam = searchParams.get('operator') || ''
   const jamParam = searchParams.get('jam') || ''
   const kapalParam = searchParams.get('kapal') || ''
+  const kanal: 'offline' | 'online' = searchParams.get('kanal') === 'online' ? 'online' : 'offline'
 
   const [siap, setSiap] = useState(false)
   const [loading, setLoading] = useState(true)
@@ -51,7 +52,8 @@ function RinciPlatformContent() {
         tanggal: tanggalParam,
         operatorId: operatorParam || undefined,
         jam: jamParam,
-        kapal: kapalParam
+        kapal: kapalParam,
+        kanal
       })
       if (hasil.error) {
         setError(hasil.error)
@@ -62,9 +64,9 @@ function RinciPlatformContent() {
       setLoading(false)
     }
     fetchData()
-  }, [siap, tanggalParam, operatorParam, jamParam, kapalParam])
+  }, [siap, tanggalParam, operatorParam, jamParam, kapalParam, kanal])
 
-  const kembali = () => router.push(`/dashboard-superadmin/penerimaan-fee/harian?tanggal=${tanggalParam}`)
+  const kembali = () => router.push(`/dashboard-superadmin/penerimaan-fee/harian?tanggal=${tanggalParam}&kanal=${kanal}`)
 
   if (loading) return <p className="p-6 text-center text-gray-400 bg-gray-900 min-h-screen">Memuat...</p>
   if (error) return <p className="p-6 text-center text-red-500 bg-gray-900 min-h-screen">{error}</p>

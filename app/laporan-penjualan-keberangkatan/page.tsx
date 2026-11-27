@@ -72,7 +72,8 @@ export default function LaporanPenjualanKeberangkatanPage() {
         pembayaran:pembayaran (metode)
       `)
       .eq('status', 'paid')
-      .eq('kanal', 'keberangkatan')
+      // 'petugas' = kanal baru untuk semua akun staf; 'keberangkatan' = data lama.
+      .in('kanal', ['petugas', 'keberangkatan'])
       .ilike('petugas_jual', `%${identitasPenjual}%`)
       .order('created_at', { ascending: true })
 

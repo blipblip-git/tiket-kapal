@@ -11,7 +11,7 @@ import {
   catatAudit,
   type Profile
 } from '@/lib/supabase'
-import { ambilFeePlatform, feePesananAda } from '@/lib/fee'
+import { ambilTarifFee, feePesananAda, feePlatformBaris } from '@/lib/fee'
 
 // Supabase membatasi maksimal 1000 baris per permintaan → wajib ambil bertahap.
 const UKURAN_HALAMAN = 1000
@@ -342,10 +342,10 @@ async function ambilDataPlatform(lapor?: (pesan: string) => void) {
   )
 
   lapor?.('Menghitung total fee platform...')
-  const feeBerlaku = await ambilFeePlatform()
+  const tarif = await ambilTarifFee()
   const pakaiSnapshot = await feePesananAda()
   const kolom = [
-    'id',
+    'id, kanal',
     pakaiSnapshot ? 'fee_platform' : '',
     'jadwal:jadwal_id (tanggal, operator_id, kapal_id, kapal:kapal_id(nama, operator_id))'
   ]
@@ -367,16 +367,15 @@ async function ambilDataPlatform(lapor?: (pesan: string) => void) {
     const kunci = `${bulan}|${nama}`
     if (!peta.has(kunci)) peta.set(kunci, { bulan, nama, tiket: 0, fee: 0 })
     const baris = peta.get(kunci)!
-    const snapshot = Number(p.fee_platform || 0)
     baris.tiket += 1
-    baris.fee += snapshot > 0 ? snapshot : feeBerlaku
+    baris.fee += feePlatformBaris(p, tarif)
   })
 
   const feeBulanan = [...peta.values()].sort(
     (a, b) => a.bulan.localeCompare(b.bulan) || a.nama.localeCompare(b.nama)
   )
 
-  return { tenant, namaTenant, masterKota, masterRute, feeBulanan, feeBerlaku }
+  return { tenant, namaTenant, masterKota, masterRute, feeBulanan, feeBerlaku: tarif.offline, feeOnline: tarif.online }
 }
 
 type DataPlatform = Awaited<ReturnType<typeof ambilDataPlatform>>
@@ -409,10 +408,11 @@ function buatBarisPlatform(data: DataPlatform): Record<string, Record<string, un
       'Total Fee Platform': f.fee
     })),
     'Pengaturan Platform': [
-      { Keterangan: 'Fee Platform per Tiket', Nilai: data.feeBerlaku },
+      { Keterangan: 'Fee Platform Offline per Tiket', Nilai: data.feeBerlaku },
+      { Keterangan: 'Fee Platform Online per Tiket', Nilai: data.feeOnline },
       {
         Keterangan: 'Dasar Perhitungan',
-        Nilai: 'Semua tiket berstatus paid (offline & online). Nilai snapshot per tiket dipakai bila ada; kalau kosong memakai fee yang berlaku sekarang.'
+        Nilai: 'Semua tiket berstatus paid (petugas/agen/online). Tarif dipilih sesuai kanal dan tidak dijumlah. Nilai snapshot per tiket dipakai bila ada; kalau kosong memakai tarif yang berlaku sekarang.'
       }
     ]
   }

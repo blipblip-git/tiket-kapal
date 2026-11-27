@@ -487,28 +487,42 @@ create trigger trg_platform_jaga before insert or update on public.pengaturan_pl
 create or replace function public.fn_fee_snapshot() returns trigger
 language plpgsql security definer set search_path = public as $$
 declare
+  fee_off  bigint := 0;
+  fee_on   bigint := 0;
   fee_plat bigint := 0;
-  fee_agt bigint := 0;
-  penjual text := lower(btrim(coalesce(new.petugas_jual, '')));
-  hp text := regexp_replace(coalesce(new.petugas_jual, ''), '\D', '', 'g');
+  fee_agt  bigint := 0;
+  kanal    text := lower(btrim(coalesce(new.kanal, '')));
+  penjual  text := lower(btrim(coalesce(new.petugas_jual, '')));
+  hp       text := regexp_replace(coalesce(new.petugas_jual, ''), '\D', '', 'g');
 begin
   begin
-    select coalesce(fee_platform, 0) into fee_plat
+    -- fee_offline/fee_online ditambahkan oleh supabase/fee-kanal.sql.
+    select coalesce(fee_offline, fee_platform, 0), coalesce(fee_online, 0)
+      into fee_off, fee_on
     from public.pengaturan_platform
     order by updated_at desc nulls last
     limit 1;
   exception when others then
-    fee_plat := 0;
+    fee_off := 0;
+    fee_on  := 0;
   end;
 
-  if penjual <> '' then
-    select coalesce(fee, 0) into fee_agt
-    from public.profiles
-    where (
-      (penjual <> '' and lower(coalesce(email, '')) = penjual)
-      or (hp <> '' and regexp_replace(coalesce(nomor_hp, ''), '\D', '', 'g') = hp)
-    )
-    limit 1;
+  if kanal = 'online' then
+    -- ONLINE: hanya tarif online, tanpa fee agen/offline (tidak dijumlah).
+    fee_plat := coalesce(fee_on, 0);
+    fee_agt  := 0;
+  else
+    -- OFFLINE: tarif offline + fee agen (hanya penjualan kanal 'agen').
+    fee_plat := coalesce(fee_off, 0);
+    if kanal = 'agen' and penjual <> '' then
+      select coalesce(fee, 0) into fee_agt
+      from public.profiles
+      where (
+        (penjual <> '' and lower(coalesce(email, '')) = penjual)
+        or (hp <> '' and regexp_replace(coalesce(nomor_hp, ''), '\D', '', 'g') = hp)
+      )
+      limit 1;
+    end if;
   end if;
 
   new.fee_platform := coalesce(fee_plat, 0);

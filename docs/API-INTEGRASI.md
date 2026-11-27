@@ -10,7 +10,7 @@ x-api-key: la_live_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 - Kunci dibuat **Superadmin platform** (bukan tenant), disimpan sebagai hash SHA-256.
 - Kunci terikat 1 tenant (`operator_id`). Hanya bisa melihat/menjual jadwal milik tenant itu.
 - Harga **selalu** diambil dari database (`jadwal.harga`) — body request tidak bisa
-  menurunkan/menaikkan harga. Kanal dipaksa `online` (kena fee platform).
+  menurunkan/menaikkan harga. Kanal dipaksa `online` (kena fee online, bukan fee offline).
 - NIK disamarkan (`****************1234`) di dashboard, nomor HP dipakai untuk cek tiket.
 - Pesanan `sudah_dibayar:false` kedaluwarsa **15 menit**; setelah itu buat pesanan baru.
 - Balasan error selalu `{ "error": "..." }` dengan status 400/401/403/404/500.

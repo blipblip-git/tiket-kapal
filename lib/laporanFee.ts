@@ -8,7 +8,8 @@ import { supabase, type Profile } from './supabase'
 import { ambilOperatorKapal, pemilikJadwal, idOperator } from './tenant'
 import {
   KANAL_FEE_PLATFORM,
-  ambilFeePlatform,
+  KANAL_OFFLINE,
+  ambilTarifFee,
   feePesananAda,
   feeProfil,
   kodeUntukLokasi,
@@ -368,6 +369,8 @@ export type HasilLaporanPlatform = {
   totalFee: number
   /** Fee platform yang berlaku sekarang (dipakai transaksi lama tanpa snapshot). */
   feeBerlaku: number
+  /** Tarif online yang berlaku sekarang (tidak pernah dijumlah dengan offline). */
+  feeOnline: number
   error?: string
 }
 
@@ -377,12 +380,21 @@ export async function muatLaporanFeePlatform(opts: {
   bulan?: string
   /** Batasi ke 1 penyewa (dipakai Admin Utama). Kosong/undefined = semua penyewa. */
   operatorId?: string | null
-  /** 'offline' = kanal agen/loket/mobile/keberangkatan/petugas, 'online' = web. */
+  /** 'offline' = kanal petugas/agen (label lama ikut), 'online' = web. */
   kanal?: 'offline' | 'online'
 }): Promise<HasilLaporanPlatform> {
   const { mode, tanggal, bulan, operatorId, kanal } = opts
-  const feeBerlaku = await ambilFeePlatform()
-  const kosong: HasilLaporanPlatform = { blok: [], totalTiket: 0, totalFee: 0, feeBerlaku }
+  const tarif = await ambilTarifFee()
+  const feeOffline = tarif.offline
+  const feeOnline = tarif.online
+  const feeBerlaku = kanal === 'online' ? feeOnline : feeOffline
+  const kosong: HasilLaporanPlatform = {
+    blok: [],
+    totalTiket: 0,
+    totalFee: 0,
+    feeBerlaku,
+    feeOnline
+  }
 
   const pakaiSnapshot = await feePesananAda()
   const kolom = [
@@ -411,7 +423,7 @@ export async function muatLaporanFeePlatform(opts: {
   }
 
   const { data, error } = await query
-  if (error) return { ...kosong, error: 'Gagal memuat penjualan offline: ' + error.message }
+  if (error) return { ...kosong, error: 'Gagal memuat penjualan: ' + error.message }
 
   const petaOperatorKapal = await ambilOperatorKapal(
     ((data || []) as unknown as BarisPesananFee[]).map((p) => p.jadwal?.kapal_id)
@@ -450,7 +462,9 @@ export async function muatLaporanFeePlatform(opts: {
     const jam = String(jadwal.jam_berangkat || '00:00').slice(0, 5)
     const kapal = String(jadwal.kapal?.nama || 'Kapal').trim() || 'Kapal'
     const snapshot = Number(pesanan.fee_platform || 0)
-    const feeBaris = snapshot > 0 ? Math.round(snapshot) : feeBerlaku
+    // Tanpa snapshot (tiket lama): pakai tarif sesuai kanal tiket itu.
+    const cadangan = String(pesanan.kanal || '').toLowerCase() === 'online' ? feeOnline : feeOffline
+    const feeBaris = snapshot > 0 ? Math.round(snapshot) : cadangan
 
     const kunci = mode === 'harian' ? `${jam}|${kapal}` : `${jadwal.tanggal}|${kapal}`
     let baris = blok.baris.find((b) => b.kunci === kunci)
@@ -479,7 +493,8 @@ export async function muatLaporanFeePlatform(opts: {
     blok,
     totalTiket: blok.reduce((sum, b) => sum + b.tiket, 0),
     totalFee: blok.reduce((sum, b) => sum + b.total, 0),
-    feeBerlaku
+    feeBerlaku,
+    feeOnline
   }
 }
 
@@ -498,9 +513,11 @@ export async function muatRincianPlatform(opts: {
   operatorId?: string
   jam?: string
   kapal?: string
+  /** 'offline' = petugas/agen, 'online' = web. Kosong = semua kanal. */
+  kanal?: 'offline' | 'online'
 }): Promise<{ baris: RincianPlatform[]; error?: string }> {
-  const { tanggal, operatorId, jam, kapal } = opts
-  const feeBerlaku = await ambilFeePlatform()
+  const { tanggal, operatorId, jam, kapal, kanal } = opts
+  const tarif = await ambilTarifFee()
   const pakaiSnapshot = await feePesananAda()
   const kolom = [
     'id, is_balita, kanal, petugas_jual',
@@ -510,11 +527,14 @@ export async function muatRincianPlatform(opts: {
     .filter(Boolean)
     .join(', ')
 
+  const daftarKanal =
+    kanal === 'online' ? ['online'] : kanal === 'offline' ? [...KANAL_OFFLINE] : [...KANAL_FEE_PLATFORM]
+
   const { data, error } = await supabase
     .from('pesanan')
     .select(kolom)
     .eq('status', 'paid')
-    .in('kanal', [...KANAL_FEE_PLATFORM])
+    .in('kanal', daftarKanal)
     .eq('jadwal.tanggal', tanggal)
 
   if (error) return { baris: [], error: 'Gagal memuat rincian: ' + error.message }
@@ -536,7 +556,8 @@ export async function muatRincianPlatform(opts: {
 
     const penjual = String(pesanan.petugas_jual || 'Tanpa penjual').trim()
     const snapshot = Number(pesanan.fee_platform || 0)
-    const feeBaris = snapshot > 0 ? Math.round(snapshot) : feeBerlaku
+    const cadangan = String(pesanan.kanal || '').toLowerCase() === 'online' ? tarif.online : tarif.offline
+    const feeBaris = snapshot > 0 ? Math.round(snapshot) : cadangan
     const kunci = `${jamPesanan}|${namaKapal}|${penjual}`
 
     let baris = peta.get(kunci)

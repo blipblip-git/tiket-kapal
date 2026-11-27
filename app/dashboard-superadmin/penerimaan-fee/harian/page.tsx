@@ -19,6 +19,7 @@ function FeePlatformHarianContent() {
   const searchParams = useSearchParams()
   const tanggalParam = searchParams.get('tanggal') || ''
   const tanggalAktif = tanggalParam || tanggalHariIni()
+  const kanal: 'offline' | 'online' = searchParams.get('kanal') === 'online' ? 'online' : 'offline'
 
   const [siap, setSiap] = useState(false)
   const [loading, setLoading] = useState(true)
@@ -45,13 +46,13 @@ function FeePlatformHarianContent() {
       if (!siap) return
       setLoading(true)
       setError('')
-      const data = await muatLaporanFeePlatform({ mode: 'harian', tanggal: tanggalAktif })
+      const data = await muatLaporanFeePlatform({ mode: 'harian', tanggal: tanggalAktif, kanal })
       if (data.error) setError(data.error)
       setHasil(data.error ? null : data)
       setLoading(false)
     }
     fetchData()
-  }, [siap, tanggalAktif])
+  }, [siap, tanggalAktif, kanal])
 
   if (loading && !hasil) return <p className="p-6 text-center text-gray-400 bg-gray-900 min-h-screen">Memuat...</p>
   if (error) return <p className="p-6 text-center text-red-500 bg-gray-900 min-h-screen">{error}</p>
@@ -72,7 +73,9 @@ function FeePlatformHarianContent() {
         <div className="flex justify-between items-start gap-2 mb-4 bg-red-950 border border-red-800 p-4 rounded-xl print-hidden">
           <div>
             <h1 className="text-xl font-bold">Fee Platform Harian</h1>
-            <p className="text-sm text-red-200">{formatTanggalPendek(tanggalAktif)} &bull; semua penyewa</p>
+            <p className="text-sm text-red-200">
+              {formatTanggalPendek(tanggalAktif)} &bull; semua penyewa &bull; {kanal === 'online' ? 'Online (web)' : 'Offline (petugas/agen)'}
+            </p>
           </div>
           <div className="flex gap-2">
             <button onClick={() => setTimeout(() => window.print(), 100)} className="bg-red-600 hover:bg-red-700 text-white px-3 py-2 rounded text-sm font-bold">🖨️ Cetak</button>
@@ -81,11 +84,25 @@ function FeePlatformHarianContent() {
         </div>
 
         <div className="bg-gray-800 border border-gray-700 p-3 rounded mb-4 flex flex-wrap items-center gap-3 print-hidden">
+          <div className="flex rounded-md overflow-hidden border border-gray-600">
+            <button
+              onClick={() => router.replace(`/dashboard-superadmin/penerimaan-fee/harian?tanggal=${tanggalAktif}&kanal=offline`)}
+              className={`px-3 py-1.5 text-xs font-bold ${kanal === 'offline' ? 'bg-red-600 text-white' : 'bg-gray-900 text-gray-300 hover:bg-gray-700'}`}
+            >
+              Offline
+            </button>
+            <button
+              onClick={() => router.replace(`/dashboard-superadmin/penerimaan-fee/harian?tanggal=${tanggalAktif}&kanal=online`)}
+              className={`px-3 py-1.5 text-xs font-bold ${kanal === 'online' ? 'bg-red-600 text-white' : 'bg-gray-900 text-gray-300 hover:bg-gray-700'}`}
+            >
+              Online
+            </button>
+          </div>
           <label className="text-sm font-medium text-gray-300">Tanggal:</label>
           <input
             type="date"
             value={tanggalAktif}
-            onChange={(e) => router.replace(`/dashboard-superadmin/penerimaan-fee/harian?tanggal=${e.target.value}`)}
+            onChange={(e) => router.replace(`/dashboard-superadmin/penerimaan-fee/harian?tanggal=${e.target.value}&kanal=${kanal}`)}
             className="border border-gray-600 bg-gray-900 text-white rounded px-2 py-1 text-sm"
           />
           <span className="text-xs text-gray-400 ml-auto">Fee berlaku: {formatRupiah(hasil?.feeBerlaku || 0)} / tiket</span>
@@ -93,7 +110,7 @@ function FeePlatformHarianContent() {
 
         {(hasil?.blok.length || 0) === 0 && (
           <div className="bg-gray-800 border border-gray-700 rounded-xl p-8 text-center">
-            <p className="text-sm text-gray-300">Belum ada penjualan offline pada tanggal ini.</p>
+            <p className="text-sm text-gray-300">Belum ada penjualan {kanal === 'online' ? 'online' : 'offline'} pada tanggal ini.</p>
           </div>
         )}
 
@@ -130,7 +147,7 @@ function FeePlatformHarianContent() {
                       <td className="px-2 py-1.5 text-right font-bold text-white print:text-black">{formatRupiah(baris.total)}</td>
                       <td className="px-2 py-1.5 text-center print-hidden">
                         <button
-                          onClick={() => router.push(`/dashboard-superadmin/penerimaan-fee/rinci?tanggal=${tanggalAktif}&operator=${encodeURIComponent(blok.operatorId)}&jam=${encodeURIComponent(baris.jam)}&kapal=${encodeURIComponent(baris.kapal)}`)}
+                          onClick={() => router.push(`/dashboard-superadmin/penerimaan-fee/rinci?tanggal=${tanggalAktif}&kanal=${kanal}&operator=${encodeURIComponent(blok.operatorId)}&jam=${encodeURIComponent(baris.jam)}&kapal=${encodeURIComponent(baris.kapal)}`)}
                           className="bg-red-600 hover:bg-red-700 text-white px-2 py-1 rounded text-[10px] md:text-xs font-bold"
                         >
                           RINCI

@@ -25,6 +25,8 @@ type RingkasPenyewa = {
 
 type BarisPengaturan = {
   fee_platform?: number | null
+  fee_offline?: number | null
+  fee_online?: number | null
 }
 
 type BarisKapal = {
@@ -67,18 +69,35 @@ export async function GET(request: Request) {
     const bulan = parseBulan(bulanDiminta) ? bulanDiminta : bulanSekarang()
     const tanggalList = daftarTanggalBulan(bulan)
 
-    let feeBerlaku = 0
-    const { data: pengaturan } = await demo
+    let feeOffline = 0
+    let feeOnline = 0
+    const { data: pengaturan, error: errPengaturan } = await demo
       .from('pengaturan_platform')
-      .select('fee_platform')
+      .select('fee_offline, fee_online, fee_platform')
       .order('updated_at', { ascending: false })
       .limit(1)
       .maybeSingle()
 
-    if (pengaturan) {
-      const nilai = Number((pengaturan as BarisPengaturan).fee_platform || 0)
-      if (Number.isFinite(nilai) && nilai > 0) feeBerlaku = Math.round(nilai)
+    if (!errPengaturan && pengaturan) {
+      const baris = pengaturan as BarisPengaturan
+      const offline = Number(baris.fee_offline)
+      const online = Number(baris.fee_online)
+      const lama = Number(baris.fee_platform || 0)
+      feeOffline = Number.isFinite(offline) && offline > 0 ? Math.round(offline) : Math.max(0, Math.round(lama) || 0)
+      feeOnline = Number.isFinite(online) && online > 0 ? Math.round(online) : feeOffline
+    } else {
+      // Kolom fee_offline/fee_online belum ada -> pakai kolom lama.
+      const { data: lama } = await demo
+        .from('pengaturan_platform')
+        .select('fee_platform')
+        .order('updated_at', { ascending: false })
+        .limit(1)
+        .maybeSingle()
+      const nilai = Number((lama as BarisPengaturan)?.fee_platform || 0)
+      if (Number.isFinite(nilai) && nilai > 0) feeOffline = Math.round(nilai)
+      feeOnline = feeOffline
     }
+    const feeBerlaku = feeOffline
 
     const kolomDasar = [
       'id, is_balita, kanal',
@@ -155,7 +174,8 @@ export async function GET(request: Request) {
 
       const ringkas = peta.get(pemilik)!
       const snapshot = Number(pesanan.fee_platform || 0)
-      const feeBaris = snapshot > 0 ? Math.round(snapshot) : feeBerlaku
+      const cadangan = String(pesanan.kanal || '').toLowerCase() === 'online' ? feeOnline : feeOffline
+      const feeBaris = snapshot > 0 ? Math.round(snapshot) : cadangan
 
       ringkas.tiket += 1
       ringkas.total += feeBaris
@@ -168,6 +188,7 @@ export async function GET(request: Request) {
     return NextResponse.json({
       bulan,
       feeBerlaku,
+      feeOnline,
       pakaiSnapshot,
       totalTiket: daftar.reduce((sum, p) => sum + p.tiket, 0),
       totalFee: daftar.reduce((sum, p) => sum + p.total, 0),

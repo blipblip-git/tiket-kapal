@@ -14,6 +14,7 @@ function FeePlatformBulananContent() {
   const searchParams = useSearchParams()
   const bulanParam = searchParams.get('bulan') || ''
   const bulanAktif = parseBulan(bulanParam) ? bulanParam : bulanSekarang()
+  const kanal: 'offline' | 'online' = searchParams.get('kanal') === 'online' ? 'online' : 'offline'
   const infoBulan = parseBulan(bulanAktif)
   const tahunAktif = infoBulan ? infoBulan.tahun : new Date().getFullYear()
   const nomorBulanAktif = infoBulan ? infoBulan.bulan : new Date().getMonth() + 1
@@ -43,17 +44,17 @@ function FeePlatformBulananContent() {
       if (!siap) return
       setLoading(true)
       setError('')
-      const data = await muatLaporanFeePlatform({ mode: 'bulanan', bulan: bulanAktif })
+      const data = await muatLaporanFeePlatform({ mode: 'bulanan', bulan: bulanAktif, kanal })
       if (data.error) setError(data.error)
       setHasil(data.error ? null : data)
       setLoading(false)
     }
     fetchData()
-  }, [siap, bulanAktif])
+  }, [siap, bulanAktif, kanal])
 
   const gantiBulan = (nomorBulan: number, tahun: number) => {
     const bulanBaru = `${tahun}-${String(nomorBulan).padStart(2, '0')}`
-    router.replace(`/dashboard-superadmin/penerimaan-fee/bulanan?bulan=${bulanBaru}`)
+    router.replace(`/dashboard-superadmin/penerimaan-fee/bulanan?bulan=${bulanBaru}&kanal=${kanal}`)
   }
 
   if (loading && !hasil) return <p className="p-6 text-center text-gray-400 bg-gray-900 min-h-screen">Memuat...</p>
@@ -77,7 +78,9 @@ function FeePlatformBulananContent() {
         <div className="flex justify-between items-start gap-2 mb-4 bg-red-950 border border-red-800 p-4 rounded-xl print-hidden">
           <div>
             <h1 className="text-xl font-bold">Fee Platform Bulanan</h1>
-            <p className="text-sm text-red-200">{labelBulan(bulanAktif)} &bull; semua penyewa</p>
+            <p className="text-sm text-red-200">
+              {labelBulan(bulanAktif)} &bull; semua penyewa &bull; {kanal === 'online' ? 'Online (web)' : 'Offline (petugas/agen)'}
+            </p>
           </div>
           <div className="flex gap-2">
             <button onClick={() => setTimeout(() => window.print(), 100)} className="bg-red-600 hover:bg-red-700 text-white px-3 py-2 rounded text-sm font-bold">🖨️ Cetak</button>
@@ -86,6 +89,20 @@ function FeePlatformBulananContent() {
         </div>
 
         <div className="bg-gray-800 border border-gray-700 p-3 rounded mb-4 flex flex-wrap items-center gap-3 print-hidden">
+          <div className="flex rounded-md overflow-hidden border border-gray-600">
+            <button
+              onClick={() => router.replace(`/dashboard-superadmin/penerimaan-fee/bulanan?bulan=${bulanAktif}&kanal=offline`)}
+              className={`px-3 py-1.5 text-xs font-bold ${kanal === 'offline' ? 'bg-red-600 text-white' : 'bg-gray-900 text-gray-300 hover:bg-gray-700'}`}
+            >
+              Offline
+            </button>
+            <button
+              onClick={() => router.replace(`/dashboard-superadmin/penerimaan-fee/bulanan?bulan=${bulanAktif}&kanal=online`)}
+              className={`px-3 py-1.5 text-xs font-bold ${kanal === 'online' ? 'bg-red-600 text-white' : 'bg-gray-900 text-gray-300 hover:bg-gray-700'}`}
+            >
+              Online
+            </button>
+          </div>
           <label className="text-sm font-medium text-gray-300">Periode:</label>
           <select value={nomorBulanAktif} onChange={(e) => gantiBulan(Number(e.target.value), tahunAktif)} className="border border-gray-600 bg-gray-900 text-white rounded px-2 py-1 text-sm">
             {NAMA_BULAN.map((nama, idx) => (
@@ -102,7 +119,7 @@ function FeePlatformBulananContent() {
 
         {(hasil?.blok.length || 0) === 0 && (
           <div className="bg-gray-800 border border-gray-700 rounded-xl p-8 text-center">
-            <p className="text-sm text-gray-300">Belum ada penjualan offline pada bulan ini.</p>
+            <p className="text-sm text-gray-300">Belum ada penjualan {kanal === 'online' ? 'online' : 'offline'} pada bulan ini.</p>
           </div>
         )}
 

@@ -179,15 +179,33 @@ export async function POST(request: Request) {
     const nomorKursiDari = new Map<string, string>()
     for (const k of kursiData as any[]) nomorKursiDari.set(String(k.id), String(k.nomor_kursi ?? ''))
 
-    // Fee platform diambil dari server (kalau tabel/kolom belum ada -> 0).
+    // Fee ONLINE diambil dari server: pakai tarif fee_online (bukan fee_offline)
+    // supaya pemilik tidak kena 3.000 + 5.000. Kalau kolom baru belum ada,
+    // pakai kolom lama fee_platform.
     let feePlatform = 0
-    const { data: platform } = await admin
+    const { data: platformOnline, error: errOnline } = await admin
       .from('pengaturan_platform')
-      .select('fee_platform')
+      .select('fee_online, fee_platform')
       .order('updated_at', { ascending: false })
       .limit(1)
       .maybeSingle()
-    feePlatform = Math.max(0, Math.round(Number((platform as any)?.fee_platform || 0)))
+
+    if (!errOnline) {
+      const baris = (platformOnline || {}) as any
+      const tarifOnline = Number(baris.fee_online)
+      feePlatform =
+        Number.isFinite(tarifOnline) && tarifOnline > 0
+          ? Math.round(tarifOnline)
+          : Math.max(0, Math.round(Number(baris.fee_platform || 0)))
+    } else {
+      const { data: platformLama } = await admin
+        .from('pengaturan_platform')
+        .select('fee_platform')
+        .order('updated_at', { ascending: false })
+        .limit(1)
+        .maybeSingle()
+      feePlatform = Math.max(0, Math.round(Number((platformLama as any)?.fee_platform || 0)))
+    }
 
     const { error: errFee } = await admin.from('pesanan').select('fee_platform').limit(1)
     const adaKolomFee = !errFee

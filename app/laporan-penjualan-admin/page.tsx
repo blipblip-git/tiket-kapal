@@ -208,7 +208,7 @@ function LaporanPenjualanAdminContent() {
     kartu: [
       {
         label: 'Laporan Fee Offline',
-        deskripsi: 'Fee platform dari penjualan agen, loket, mobile, dan petugas',
+        deskripsi: 'Fee platform dari penjualan petugas (semua akun staf) dan agen',
         color: WARNA_FEE[0],
         link: '/laporan-fee-platform?kanal=offline&mode=harian'
       },

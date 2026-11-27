@@ -3,7 +3,7 @@
 // app/laporan-fee-platform/page.tsx
 // Laporan Fee PLATFORM untuk Admin Utama (penyewa sendiri) / Superadmin (semua).
 // Dibuka dari 2 kartu di /laporan-penjualan-admin?menu=fee:platform:
-//   ?kanal=offline  -> penjualan lewat agen/loket/mobile/keberangkatan/petugas
+//   ?kanal=offline  -> penjualan lewat petugas/agen (label lama tetap dibaca)
 //   ?kanal=online   -> penjualan web (kanal 'online')
 // Mode Harian / Bulanan bisa diganti di dalam halaman ini.
 import { Suspense, useEffect, useState } from 'react'
@@ -104,7 +104,7 @@ function LaporanFeePlatformContent() {
           <div>
             <h1 className="text-xl font-bold text-gray-900">Laporan Fee Platform {judulKanal}</h1>
             <p className="text-sm text-gray-600">
-              {periodeLabel} &bull; {kanal === 'online' ? 'penjualan online (web)' : 'penjualan offline (agen/loket/petugas)'}
+              {periodeLabel} &bull; {kanal === 'online' ? 'penjualan online (web)' : 'penjualan offline (petugas/agen)'}
               {profile.role === 'superadmin' ? ' • semua penyewa' : ''}
             </p>
           </div>
