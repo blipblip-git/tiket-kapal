@@ -6,7 +6,7 @@ import { supabase, getOperatorSession } from '@/lib/supabase'
 import { ambilPesananPublik, type PesananPublik } from '@/lib/publikPesanan'
 import QRCode from 'qrcode'
 import { tangkapGambarTiket } from '@/lib/gambarTiket'
-import { simpanTiketKePdf } from '@/lib/pdfTiket'
+import { buatBlobPdfTiket, unduhBlob } from '@/lib/pdfTiket'
 
 type Detail = {
   rute_asal: string
@@ -157,6 +157,16 @@ function EtiketPublikContent() {
   // Kuncinya kode_tiket supaya tiap tiket punya gambar sendiri.
   const [gambarTiket, setGambarTiket] = useState<Record<string, string>>({})
   const [activeTiketIndex, setActiveTiketIndex] = useState(0)
+
+  // Hasil tombol "Simpan Etiket". Disimpan supaya di HP/tablet pembeli bisa
+  // langsung membuka atau mengirim berkasnya - bukan cuma membaca pesan
+  // "sudah tersimpan" sambil bingung file-nya ada di mana.
+  const [hasilPdf, setHasilPdf] = useState<{
+    nama: string
+    url: string
+    file: File
+    bisaBagikan: boolean
+  } | null>(null)
 
   const [renderData, setRenderData] = useState<TiketLengkap | null>(null)
   const renderRef = useRef<HTMLDivElement>(null)
@@ -357,15 +367,56 @@ function EtiketPublikContent() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [detail, tiketList])
 
+  function tutupHasilPdf() {
+    if (hasilPdf) URL.revokeObjectURL(hasilPdf.url)
+    setHasilPdf(null)
+  }
+
+  function bukaHasilPdf() {
+    if (!hasilPdf) return
+    // Tab baru: penampil PDF bawaan browser punya tombol unduh + bagikan
+    // sendiri, jadi pembeli tidak perlu mencari berkas di folder mana pun.
+    window.open(hasilPdf.url, '_blank', 'noopener')
+  }
+
+  async function kirimHasilPdf() {
+    if (!hasilPdf) return
+    try {
+      await navigator.share({ files: [hasilPdf.file], title: `E-Tiket ${hasilPdf.nama}` })
+    } catch (err) {
+      // Lembar berbagi ditutup pengguna bukan kegagalan.
+      if ((err as Error)?.name !== 'AbortError') {
+        setPesanShare('Perangkat ini belum bisa membagikan langsung. Pakai tombol Buka PDF, lalu kirim dari penampil PDF.')
+      }
+    }
+  }
+
   async function simpanPdfSatu(t: TiketLengkap) {
+    tutupHasilPdf()
     setPesanShare('Menyiapkan etiket...')
     try {
       const dataUrl = await tangkapDariRender(t)
       const namaDepan = t.pesanan.nama_penumpang.split(' ')[0] || 'Tiket'
-      await simpanTiketKePdf(dataUrl, `${namaDepan}-${t.pesanan.kode_tiket}.pdf`)
-      setPesanShare('Etiket berhasil disimpan. Silakan cek folder Unduhan/File di HP Anda.')
+      const nama = `${namaDepan}-${t.pesanan.kode_tiket}.pdf`
+
+      // Sekali bangun saja: Blob yang sama dipakai untuk mengunduh, dibuka di
+      // tab baru, dan dikirim lewat lembar berbagi.
+      const blob = await buatBlobPdfTiket(dataUrl)
+      const file = new File([blob], nama, { type: 'application/pdf' })
+      unduhBlob(blob, nama)
+
+      setHasilPdf({
+        nama,
+        url: URL.createObjectURL(blob),
+        file,
+        bisaBagikan:
+          typeof navigator !== 'undefined' &&
+          typeof navigator.canShare === 'function' &&
+          navigator.canShare({ files: [file] })
+      })
+      setPesanShare('')
     } catch (err) {
-      console.error('Gagal membuat PDF:', err)
+      console.error('Gagal menyimpan etiket:', err)
       setPesanShare('Gagal menyimpan etiket.')
     }
   }
@@ -492,6 +543,53 @@ function EtiketPublikContent() {
 
       <div className="flex-shrink-0 bg-white border-t border-gray-200 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)] z-20 print-hidden relative">
         <div className="max-w-md mx-auto px-3 py-2 md:px-4 md:py-3 space-y-2">
+          {/* Setelah berkas dibuat: tampilkan nama + tempat berkasnya di HP/tablet
+              (folder Unduhan, bukan Galeri) dan jalan pintas buka/kirim. */}
+          {hasilPdf && (
+            <div className="rounded-md border border-blue-200 bg-blue-50 p-2.5 space-y-2">
+              <p className="text-[11px] md:text-xs font-bold text-gray-900 text-center break-all">
+                Tersimpan: {hasilPdf.nama}
+              </p>
+              <p className="text-[10px] md:text-[11px] text-gray-700 text-center leading-snug">
+                Di HP/tablet PDF tidak masuk Galeri. Filenya ada di aplikasi Files / File
+                Manager &rarr; folder Unduhan. Atau buka / kirim langsung di sini.
+              </p>
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  onClick={bukaHasilPdf}
+                  className="bg-white text-blue-700 border border-blue-300 py-2 rounded-md hover:bg-blue-100 text-[11px] md:text-sm font-bold transition-colors"
+                >
+                  Buka PDF
+                </button>
+
+                {hasilPdf.bisaBagikan ? (
+                  <button
+                    onClick={kirimHasilPdf}
+                    className="bg-green-600 text-white py-2 rounded-md hover:bg-green-700 text-[11px] md:text-sm font-bold transition-colors"
+                  >
+                    Kirim WA/Telegram
+                  </button>
+                ) : (
+                  <button
+                    onClick={tutupHasilPdf}
+                    className="bg-white text-gray-600 border border-gray-300 py-2 rounded-md hover:bg-gray-50 text-[11px] md:text-sm font-bold transition-colors"
+                  >
+                    Tutup
+                  </button>
+                )}
+              </div>
+
+              {hasilPdf.bisaBagikan && (
+                <button
+                  onClick={tutupHasilPdf}
+                  className="w-full text-[10px] text-gray-500 underline"
+                >
+                  Tutup
+                </button>
+              )}
+            </div>
+          )}
+
           {/* Cukup SATU tombol: simpan etiket sebagai file (PDF) yang langsung
               terunduh sekali klik — tidak perlu tekan & tahan gambar. */}
           <button
@@ -501,9 +599,11 @@ function EtiketPublikContent() {
             Simpan Etiket
           </button>
 
-          <p className="text-[10px] md:text-[11px] text-gray-500 text-center leading-snug">
-            File tersimpan di folder Unduhan/File.
-          </p>
+          {!hasilPdf && (
+            <p className="text-[10px] md:text-[11px] text-gray-500 text-center leading-snug">
+              File tersimpan di folder Unduhan/File.
+            </p>
+          )}
         </div>
       </div>
 
