@@ -60,11 +60,11 @@ SUPABASE_SERVICE_ROLE_KEY=...
 NEXT_PUBLIC_SITE_URL=https://demo.lintasair.com
 NEXT_PUBLIC_INDEXABLE=false
 DEMO_MODE=true
-
-# Khusus demo: buka pintu Superadmin (untuk membuat beberapa akun penyewa /
-# pemilik kapal yang mau mencoba demo). Kosongkan / hapus untuk mengunci lagi.
-DEMO_SUPERADMIN=true
 ```
+
+Demo **tidak punya env Superadmin** dan tidak punya akun Superadmin. Akun
+pemilik kapal demo dibuat dari Superadmin REAL (lihat bagian "Membuat penyewa
+demo dari Superadmin REAL").
 
 Jangan mengisi `DEMO_SUPABASE_URL` di deployment demo dengan URL real.
 
@@ -247,7 +247,7 @@ DEMO_SUPABASE_SERVICE_ROLE_KEY=... npm run demo:verify
 # HASIL: BERSIH — tidak ada data operasional di demo.
 ```
 
-Hasil uji build mode DEMO (27 Nov 2026, tanpa `DEMO_SUPERADMIN`):
+Hasil uji build mode DEMO (27 Nov 2026, tanpa membuka pintu Superadmin):
 
 | Permintaan | Hasil |
 |---|---|
@@ -381,8 +381,7 @@ Langkahnya:
 3. **Deployments → Redeploy** supaya env baru ikut terpakai. `DEMO_MODE` dibaca
    saat build, jadi tanpa redeploy penanda DEMO tidak akan muncul.
 4. Cek hasilnya: halaman utama menampilkan strip kuning "Demo — data simulasi",
-   dan `/superadmin` harus 404 "tidak tersedia di lingkungan demo" (kecuali
-   `DEMO_SUPERADMIN=true` sengaja dipasang).
+   dan `/superadmin` harus 404 "tidak tersedia di lingkungan demo".
 5. Kalau strip DEMO tidak muncul padahal env sudah diisi: build-nya lama, redeploy
    ulang. Kalau yang muncul error `[DEMO] ... menunjuk ke project Supabase REAL`,
    berarti `NEXT_PUBLIC_SUPABASE_URL` masih URL real — itu pengaman bekerja,
@@ -402,13 +401,11 @@ Langkahnya:
 Deploy demo memakai **isi folder lokal** (bukan commit GitHub), supaya perubahan
 yang belum di-commit tetap bisa dilihat pemilik. Build berjalan di Vercel; file
 `.env*` lokal tidak ikut ter-upload (masuk `.gitignore`), env produksi dibaca
-dari dashboard Vercel (11 variabel sudah diisi untuk Production/Preview/Development,
-termasuk `DEMO_SUPERADMIN=true`).
+dari dashboard Vercel (10 variabel sudah diisi untuk Production/Preview/Development).
 
 Setelah CNAME aktif, cek `https://demo.lintasair.com`: strip kuning DEMO muncul,
-klik 3x judul "LintasAir" tidak menuju `/login`, pintu 3x tombol "Cari Tiket"
-tidak membuka `/superadmin`, dan `/superadmin` **bisa** dibuka hanya selama
-`DEMO_SUPERADMIN=true` dipasang.
+klik 3x judul "LintasAir" menuju `/login` petugas, pintu 3x tombol "Cari Tiket"
+**tidak** membuka `/superadmin`, dan `/superadmin` **selalu** 404.
 
 **Catatan data:** per 28 Nov 2026 database demo masih kosong untuk data
 operasional (`kapal`, `jadwal`, `master_rute`, `kursi` = 0 baris), jadi hasil
