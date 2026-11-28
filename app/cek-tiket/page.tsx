@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useRef, Suspense } from 'react'
+import { useState, Suspense } from 'react'
 import { cariTiketPublik } from '@/lib/publikPesanan'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
@@ -28,6 +28,10 @@ type KartuTiket = {
   balita: Tiket[]
 }
 
+// Di halaman ini tidak ada pintu rahasia apa pun. Pintu 3x ke /superadmin
+// yang dulu ada di tombol "Cari" sudah dihapus: login Superadmin hanya lewat
+// URL /superadmin secara langsung.
+//
 /**
  * Satu kartu = satu tiket dewasa + balita yang menempel padanya.
  * Baris balita tidak ditampilkan sebagai kartu terpisah supaya pembeli
@@ -63,25 +67,6 @@ function CekTiketContent() {
   const [hasil, setHasil] = useState<Tiket[]>([])
   const [error, setError] = useState('')
   const [sudahCari, setSudahCari] = useState(false)
-
-  const klikCount = useRef(0)
-  const timerRef = useRef<NodeJS.Timeout | null>(null)
-
-  const handleTombolCariKlik = (e: React.MouseEvent) => {
-    klikCount.current += 1
-
-    if (timerRef.current) clearTimeout(timerRef.current)
-
-    if (klikCount.current === 3) {
-      e.preventDefault()
-      klikCount.current = 0
-      router.push('/superadmin')
-    } else {
-      timerRef.current = setTimeout(() => {
-        klikCount.current = 0
-      }, 1000)
-    }
-  }
 
   const handleCari = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -147,7 +132,6 @@ function CekTiketContent() {
           </div>
           <button
             type="submit"
-            onClick={handleTombolCariKlik}
             disabled={loading}
             className="w-full bg-blue-600 text-white py-2.5 rounded-md font-medium hover:bg-blue-700 disabled:bg-gray-400"
           >

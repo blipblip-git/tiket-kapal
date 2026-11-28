@@ -326,18 +326,20 @@ function KursiContent() {
   return (
     <div className="h-[100dvh] w-full bg-gray-50 flex flex-col overflow-hidden">
       <div className="flex-shrink-0 p-3 md:p-6 pb-2 md:pb-4 bg-white shadow-sm z-10">
-        <div className="max-w-md mx-auto text-center md:text-left">
+        <div className="max-w-md mx-auto">
           {/* Judul + jumlah kursi terisi sejajar, menggantikan baris
-              "Layout: 2+2 • Dipilih: 0 kursi" yang membingungkan pembeli. */}
-          <h1 className="text-lg md:text-2xl font-bold text-gray-900">
+              "Layout: 2+2 • Dipilih: 0 kursi" yang membingungkan pembeli.
+              Judul sengaja di tengah; rincian rute/kapal/jam rata kiri. */}
+          <h1 className="text-lg md:text-2xl font-bold text-gray-900 text-center">
             Pilih Kursi{' '}
             <span className="text-xs md:text-base font-semibold text-gray-500 whitespace-nowrap">
               (terisi : <b className="text-gray-800">{jumlahTerisi}</b> kursi)
             </span>
           </h1>
           {/* Grid 3 kolom (label | titik dua | nilai) supaya tanda ":" rata
-              dalam satu kolom, bukan menempel di belakang label yang beda panjang. */}
-          <div className="mt-0.5 grid grid-cols-[auto_auto_1fr] items-baseline gap-x-1.5 gap-y-0.5 text-[11px] md:text-sm text-gray-500">
+              dalam satu kolom. Seluruh baris rata kiri -- dulu teks nilai ikut
+              ter-center sehingga tampak berantakan di HP. */}
+          <div className="mt-1 grid grid-cols-[auto_auto_1fr] items-baseline gap-x-1.5 gap-y-0.5 text-left text-[11px] md:text-sm text-gray-500">
             <span>Rute</span>
             <span>:</span>
             <span className="font-semibold text-gray-900">{ruteTampil || '—'}</span>

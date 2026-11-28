@@ -63,6 +63,53 @@ DEMO_MODE=true
 
 Jangan mengisi `DEMO_SUPABASE_URL` di deployment demo dengan URL real.
 
+## Lokal: dev = demo (WAJIB)
+
+Kredensial produksi **tidak boleh** ada di `.env.local`, karena Next.js memuat
+file itu untuk `dev`, `build`, maupun `start` — artinya `npm run dev` di laptop
+bisa menulis ke database asli (pernah hampir terjadi saat menguji
+`POST /api/publik/bayar`).
+
+Pemisahan file yang dipakai sekarang:
+
+| File (gitignored) | Dimuat oleh | Isi |
+|---|---|---|
+| `.env.development.local` | `next dev` saja | project **DEMO** (`wymrqolithdsreganqpr`), `SUPABASE_SERVICE_ROLE_KEY` sengaja **kosong** |
+| `.env.production.local` | `next build` / `next start` saja | project **REAL** (`bhbxupwrkyuymzozgvvv`) |
+
+Aturan:
+
+1. `next dev` tidak bisa melihat kredensial produksi sama sekali — bukan
+   "ditimpa", memang tidak dimuat.
+2. Selama `SUPABASE_SERVICE_ROLE_KEY` di file dev kosong, route yang butuh hak
+   tulis (mis. `/api/publik/*`, `/api/superadmin/*`) menjawab
+   *"service key Supabase belum diatur"*. Itu **fitur**, bukan bug: gagal
+   terang-terangan lebih baik daripada diam-diam menulis ke produksi.
+3. Kalau perlu menguji route tulis di lokal, isi dengan service_role **demo**
+   (dashboard DEMO → Project Settings → API → `service_role`), jangan pernah
+   dengan key produksi.
+4. Halaman yang sedang diuji di lokal: `http://localhost:3000`
+   (`NEXT_PUBLIC_SITE_URL` di file dev). Untuk port lain, jalankan
+   `next dev -p 3123` **dan** sesuaikan nilainya agar guard origin
+   `/api/publik/*` tidak menolak.
+5. Deployment Vercel tidak terpengaruh oleh file lokal — env di sana diisi lewat
+   dashboard.
+
+### Membuka demo online tanpa localhost (sementara)
+
+Kalau hanya butuh link yang bisa dibuka dari HP saat ini juga, tanpa membuat
+project Vercel:
+
+```bash
+bash scripts/demo-online.sh
+```
+
+Skrip memakai `.env.development.local` (project DEMO), menolak jalan kalau file
+itu menunjuk database REAL, lalu mencetak satu URL
+`https://<acak>.trycloudflare.com`. Link ini **sementara**: berubah setiap
+dijalankan dan mati saat laptop/server dimatikan. Untuk link tetap
+`https://demo.lintasair.com`, pakai langkah C (project Vercel terpisah).
+
 **Penting:** demo harus menjadi **project Vercel terpisah** dari real. Jangan
 menambahkan `demo.lintasair.com` sebagai domain kedua di project real, karena
 environment variable Vercel berlaku untuk seluruh project — `DEMO_MODE=true`
@@ -117,6 +164,229 @@ Akun ini **bukan** Superadmin. Jangan membuat akun `role='superadmin'` di demo.
 Setelah akun bootstrap ada, `npm run demo:verify` tetap harus lulus (script
 hanya melarang data operasional dan akun Superadmin).
 
+## Status demo saat ini (dibangun 27 Nov 2026)
+
+Skema demo **disamakan dengan REAL tanpa membawa satu baris data pun**. Karena repo
+ini belum punya base schema, katalog REAL dibaca lebih dulu (hanya `pg_catalog`,
+tanpa menyentuh tabel data), lalu DDL-nya diputar ulang ke project demo. Hasil
+pembandingan otomatis demo vs real: **0 perbedaan** pada tabel (17), kolom (154),
+constraint (35), index (33), fungsi (27), trigger (12), policy (41), dan hak akses
+(47 objek).
+
+Migrasi yang tercatat di project demo (`supabase_migrations`):
+
+| # | Nama migrasi | Isi |
+|---|---|---|
+| 1 | `demo_base_01_extensions_tables` | ekstensi `btree_gist` + `pgcrypto`, 16 tabel |
+| 2 | `demo_base_02_constraints` | primary/unique/check/exclude/foreign key |
+| 3 | `demo_base_03_functions_indexes_triggers` | 26 fungsi, 33 index, 12 trigger |
+| 4 | `demo_base_04_rls_policies_grants` | RLS aktif di 16 tabel, 41 policy, hak akses |
+| 5 | `demo_base_05_grants_sync` | hak akses tabel disamakan persis dengan REAL |
+| 6 | `security_hardening` | `supabase/security-hardening.sql` |
+| 7 | `security_tahap2` | `supabase/security-tahap2.sql` |
+| 8 | `security_tahap2b_grant` | `supabase/security-tahap2b-grant.sql` |
+| 9 | `security_tahap3_publik` | `supabase/security-tahap3-publik.sql` |
+| 10 | `demo_fix_rpc_publik` | `publik_pesanan_ids` + `publik_tiket_hp` versi terbaru (versi di tahap 3 lebih tua dari REAL) |
+| 11 | `demo_seed_referensi` | referensi + akun bootstrap |
+| 12 | `penyewa_dihapus` | pasang `penyewa_dihapus` + `hapus_penyewa_total` (fitur Hapus Total Penyewa) dengan pengaman hak akses |
+
+`security-tahap4-rls.sql` **tidak dijalankan** (di REAL juga belum), sesuai
+aturan "demo harus sama dengan real".
+
+Data yang ada di demo (semuanya referensi, bukan operasional):
+
+| Tabel | Baris | Keterangan |
+|---|---|---|
+| `master_kota` | 12 | referensi wilayah, `operator_id` NULL |
+| `pengaturan_teks` | 4 | label menu per peran |
+| `pengaturan_sistem` | 1 | baris global (`operator_id` NULL) |
+| `pengaturan_platform` | 1 | fee 0 (SIMULASI) |
+| `profiles` | 1 | akun bootstrap `demo@lintasair.com` (`admin_utama`, bukan Superadmin) |
+| kapal/jadwal/kursi/pesanan/pembayaran/refund/audit/api_klien/penyewa_dihapus | 0 | wajib kosong |
+
+Akun bootstrap sudah diuji: login benar → HTTP 200 + profil; password salah →
+HTTP 401. Konfirmasi kebersihan:
+
+```bash
+DEMO_SUPABASE_URL=https://wymrqolithdsreganqpr.supabase.co \
+DEMO_SUPABASE_SERVICE_ROLE_KEY=... npm run demo:verify
+# HASIL: BERSIH — tidak ada data operasional di demo.
+```
+
+Hasil uji build mode DEMO (27 Nov 2026):
+
+| Permintaan | Hasil |
+|---|---|
+| `/`, `/login`, `/cari-tiket` | 200 + strip "Demo — data simulasi" |
+| `/superadmin`, `/superadmin/pusat-kontrol`, `/superadmin/pusat-kontrol/kota`, `/superadmin/pusat-kontrol/admin/manifest`, `/dashboard-superadmin`, `/api/superadmin/tambah-penyewa` | 404 "tidak tersedia di lingkungan demo" |
+| `/superadmin/pusat-kontrol/etiket`, `/superadmin/pusat-kontrol/admin/petugas` (+ `keberangkatan`) | 200 (halaman tenant, sengaja dibuka) |
+
+Hak akses di REAL dan DEMO sudah diperiksa sama: `anon` tidak bisa `select`/
+`truncate` tabel `penyewa_dihapus` dan tidak bisa memanggil
+`hapus_penyewa_total`; `authenticated` juga tidak bisa memanggil fungsi itu;
+hanya `service_role` yang bisa. Uji tambahan: dengan JWT Admin Utama demo,
+insert akun petugas berhasil (RLS `tulis_profil_insert` lolos), sedangkan sebagai
+`anon` ditolak `permission denied for table profiles`.
+
+## Dua lapisan pengaman yang dipasang di kode
+
+1. `lib/demoGuard.ts` — kalau `DEMO_MODE=true` sementara URL database menunjuk
+   project REAL, aplikasi **menolak jalan** (build/permintaan gagal dengan pesan
+   `[DEMO] ... menunjuk ke project Supabase REAL`). Dipakai di `lib/supabase.ts`
+   dan `lib/serverAuth.ts`, jadi salah setting env di Vercel tidak bisa diam-diam
+   membuka data produksi.
+2. `components/DemoBadge.tsx` — strip "Demo — data simulasi, bukan data asli" yang
+   dirender di `app/layout.tsx`, sehingga muncul di **setiap halaman** saat
+   `DEMO_MODE`/`NEXT_PUBLIC_DEMO_MODE=true`, dan hilang saat halaman dicetak
+   (`print:hidden`). Di REAL tidak muncul sama sekali.
+
+3. Pintu rahasia login: **klik 3x judul "LintasAir"** di beranda (`app/page.tsx`)
+   membuka `/login` petugas/agen dan aktif di REAL maupun DEMO (jeda antar klik
+   maksimal 2 detik). Pintu 3x di tombol "Cari" pada `/cek-tiket` yang dulu
+   membuka `/superadmin` sudah **dihapus total**; login Superadmin hanya lewat
+   URL `/superadmin` langsung, dan di demo halaman itu tetap 404.
+
+`proxy.ts` menutup `/superadmin`, `/dashboard-superadmin`, dan `/api/superadmin/*`
+dengan 404 di demo — **kecuali dua halaman milik penyewa** yang secara folder
+berada di dalam `/superadmin`:
+
+| Halaman | Kenapa dibuka |
+|---|---|
+| `/superadmin/pusat-kontrol/admin/petugas` (+ sub-halaman) | menu **Manajemen Petugas** di dashboard Admin Utama (bikin akun petugas/keberangkatan/kolektor) |
+| `/superadmin/pusat-kontrol/etiket` | halaman cetak e-tiket; semua staf yang membuka `/etiket` dialihkan ke sini |
+
+Sisanya tetap 404: Pusat Kontrol, Data Penyewa, Kota, Online, Agen, Manifest,
+Akun Petugas, dan Syahbandar superadmin.
+
+## Alur uji coba pemilik kapal (dari login sampai tiket tercetak)
+
+Ini urutan yang bisa kamu suruh ke pemilik kapal waktu mencoba demo. Semua
+langkah memakai akun demo yang sama (`demo@lintasair.com`), karena di demo
+pendaftaran mandiri memang ditutup dan tidak ada Superadmin.
+
+1. **Masuk** — buka `/login`, isi email + password demo. Setelah masuk,
+   `/dashboard` menampilkan semua menu Admin Utama.
+2. **Daftarkan kapal** — menu *Daftar Armada Kapal* (`/kapal`): nama kapal,
+   kode, jumlah kursi.
+3. **Buat template jadwal** — menu *Manajemen Jadwal* (`/template-jadwal`):
+   rute asal–tujuan, jam berangkat, harga, dan kapal. Template inilah yang
+   melahirkan jadwal harian per tanggal.
+4. **Buat akun staf** — menu *Manajemen Petugas*
+   (`/superadmin/pusat-kontrol/admin/petugas`): pilih jenis petugas
+   (loket / keberangkatan / kolektor), isi nama + nomor HP + password. Staf
+   login memakai nomor HP itu.
+5. **Buat akun agen** (kalau mau uji penjualan lewat agen) — menu *Manajemen
+   Agen* (`/agen-tenant`).
+6. **Uji jual tiket** — login sebagai agen/petugas, buka *Jual Tiket*
+   (`/agen/jual-tiket` atau `/loket-jual`): pilih jadwal → isi penumpang →
+   bayar → **Cetak**. Halaman cetak memakai `/superadmin/pusat-kontrol/etiket`
+   yang tetap terbuka di demo, jadi QR dan PDF tiket tetap jalan.
+7. **Uji boarding** — login petugas keberangkatan, buka `/scan` untuk memindai
+   QR, lalu lihat daftar penumpang di `/pusat-laporan-keberangkatan`.
+8. **Uji laporan** — kembali sebagai Admin Utama: *Laporan Penjualan*
+   (`/laporan-penjualan-admin`), *Rekap Bagi Hasil* (`/rekap-bagi-hasil`), dan
+   *Audit Log* (`/audit`) sekarang terisi karena aktivitas tadi.
+9. **Uji sisi penumpang** — tanpa login: `/cari-tiket` untuk beli tiket online,
+   lalu `/cek-tiket` untuk melihat tiket memakai nomor HP.
+10. **Uji syahbandar** (opsional) — login akun ber-role `syahbandar`, buka
+    `/syahbandar`.
+
+Setiap kali demo dipakai, isinya jadi kotor (ada kapal, jadwal, pesanan). Itu
+normal. Untuk mengembalikan demo ke kondisi bersih, hapus data lewat SQL Editor
+project demo — **jangan** pernah mengarahkan `npm run demo:verify` ke database
+REAL.
+
+## Cara mengurus demo (panduan langkah demi langkah)
+
+### A. Memastikan MCP Supabase nyambung setelah ganti setting
+
+1. Simpan `cline_mcp_settings.json` (sudah berisi PAT + `project_ref` demo).
+2. Di VS Code: `Ctrl+Shift+P` → **Developer: Reload Window**.
+3. Buka panel **Cline → MCP Servers**. `supabase` harus tersambung dan **tidak**
+   memunculkan jendela "Authenticate/Allow" OAuth.
+4. Uji cepat: minta Cline "list tabel di project Supabase". Yang muncul harus
+   tabel demo (17 tabel), bukan tabel real.
+5. Kalau masih minta OAuth: pastikan blok `"oauth"` sudah tidak ada, `"type"`
+   bernilai `"streamableHttp"`, lalu reload lagi.
+
+### B. Mengganti token akses Supabase (PAT)
+
+Token yang sekarang terpasang sempat tertulis di chat, jadi sebaiknya diganti.
+
+1. Buka `https://supabase.com/dashboard` → klik foto profil → **Access Tokens**.
+2. **Generate new token**, beri nama misal `cline-demo-2026`, salin (hanya
+   muncul sekali).
+3. **Revoke** token lama (`sbp_fc4a...`) supaya tidak bisa dipakai lagi.
+4. Edit `~/.cline/data/settings/cline_mcp_settings.json`, ganti
+   `Authorization: Bearer sbp_...` dengan token baru. **Jangan hapus**
+   `?project_ref=wymrqolithdsreganqpr` di URL — itu yang mengunci MCP supaya
+   tidak bisa menyentuh database REAL.
+5. Reload VS Code lalu ulangi uji bagian A.
+
+### C. Memasang env deployment demo (Vercel)
+
+Project Vercel demo wajib memakai project **Supabase demo**, bukan real.
+
+| Variabel | Nilai | Keterangan |
+|---|---|---|
+| `NEXT_PUBLIC_SUPABASE_URL` | `https://wymrqolithdsreganqpr.supabase.co` | dashboard Supabase demo → Settings → API |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | anon / publishable key demo | aman tampil di browser |
+| `SUPABASE_SERVICE_ROLE_KEY` | secret key demo | **jangan** pakai punya real |
+| `DEMO_MODE` | `true` | wajib ada saat build |
+| `NEXT_PUBLIC_DEMO_MODE` | `true` | agar penanda DEMO ikut di halaman statis |
+| `NEXT_PUBLIC_INDEXABLE` | `false` | demo tidak diindeks Google |
+| `NEXT_PUBLIC_SITE_URL` | `https://demo.lintasair.com` | untuk metadata/robots |
+
+Langkahnya:
+
+1. Vercel → project demo → **Settings → Environment Variables**.
+2. Isi satu per satu sesuai tabel, centang Production + Preview + Development.
+3. **Deployments → Redeploy** supaya env baru ikut terpakai. `DEMO_MODE` dibaca
+   saat build, jadi tanpa redeploy penanda DEMO tidak akan muncul.
+4. Cek hasilnya: halaman utama menampilkan strip kuning "Demo — data simulasi",
+   dan `/superadmin` harus 404 "tidak tersedia di lingkungan demo".
+5. Kalau strip DEMO tidak muncul padahal env sudah diisi: build-nya lama, redeploy
+   ulang. Kalau yang muncul error `[DEMO] ... menunjuk ke project Supabase REAL`,
+   berarti `NEXT_PUBLIC_SUPABASE_URL` masih URL real — itu pengaman bekerja,
+   perbaiki env-nya.
+
+### C.1 Status deployment demo (dipasang 28 Nov 2026)
+
+| Hal | Nilai |
+|---|---|
+| Project Vercel | `lintasair-demo` (`prj_HssG104nNDH2dyAWV3psFBE5KJvL`), tim `tiket-kapal` |
+| URL sementara (langsung jalan) | `https://lintasair-demo.vercel.app` |
+| Domain | `demo.lintasair.com` sudah ditambahkan ke project, **menunggu CNAME** |
+| CNAME di Rumahweb | tipe `CNAME`, host `demo`, value `77d179e112f27c60.vercel-dns-017.com` |
+| Deployment Protection | **dimatikan** (kalau aktif, semua halaman 302 ke login Vercel) |
+| Deploy ulang | `bash scripts/demo-deploy.sh` (butuh `~/.vercel-token`) |
+
+Deploy demo memakai **isi folder lokal** (bukan commit GitHub), supaya perubahan
+yang belum di-commit tetap bisa dilihat pemilik. Build berjalan di Vercel; file
+`.env*` lokal tidak ikut ter-upload (masuk `.gitignore`), env produksi dibaca
+dari dashboard Vercel (10 variabel sudah diisi untuk Production/Preview/Development).
+
+Setelah CNAME aktif, cek `https://demo.lintasair.com`: strip kuning DEMO muncul,
+`/superadmin` = 404, dan klik 3x judul "LintasAir" tidak menuju `/login`.
+
+**Catatan data:** per 28 Nov 2026 database demo masih kosong untuk data
+operasional (`kapal`, `jadwal`, `master_rute`, `kursi` = 0 baris), jadi hasil
+pencarian tiket belum ada. Isi dulu data contoh sebelum demo dibagikan ke calon
+pengguna.
+
+### D. Menjalankan `security-tahap4-rls.sql` atau tidak
+
+1. Baca `supabase/security-tahap4-rls.sql`. Isinya mengetatkan policy baca katalog
+   (kapal, jadwal, kursi, template, rute, pengaturan) yang sekarang masih
+   `using (true)` untuk `authenticated`, dan membatasi tulis `kursi_pakai` hanya
+   untuk kapal milik penyewa sendiri.
+2. Aturan yang dipakai sekarang: **demo harus sama dengan real**. Karena real
+   belum menjalankannya, demo juga belum.
+3. Kalau mau dipasang: jalankan dulu di **real**, uji aplikasi real (jual tiket,
+   cetak, laporan, hapus penyewa), baru kemudian di demo. Jangan dibalik.
+4. Cara paling aman: minta Cline menjalankannya lewat tool `apply_migration`
+   (demo) lalu SQL Editor (real), kemudian bandingkan ulang dengan skrip parity.
+
 ## Verifikasi wajib
 
 Jalankan di mesin yang punya env demo:
@@ -128,6 +398,33 @@ node scripts/verify-demo-clean.mjs
 Script akan gagal kalau ada kapal/jadwal/kursi/pesanan/pembayaran/audit/refund
 atau akun Superadmin di demo. Storage bucket juga diperiksa; bucket boleh ada,
 tetapi harus kosong.
+
+## Temuan di REAL yang butuh keputusan pemilik
+
+1. **`penyewa_dihapus` dulu tidak ada di REAL.** Akibatnya menu Hapus Total
+   Penyewa di Superadmin selalu gagal (route mengembalikan 503 "Fungsi
+   hapus_penyewa_total belum ada"). Sudah diperbaiki 27 Nov 2026: tabel + fungsi
+   dipasang di REAL dan DEMO, plus `supabase/hapus-penyewa.sql` diperbarui.
+2. **2 baris `pengaturan_sistem` yatim di REAL** (`operator_id` menunjuk profil
+   yang sudah tidak ada). Baris ini tidak dihapus otomatis karena itu data
+   produksi. Lihat dan putuskan dulu:
+
+   ```sql
+   select ps.id, ps.operator_id, ps.updated_at
+   from public.pengaturan_sistem ps
+   where ps.operator_id is not null
+     and not exists (select 1 from public.profiles p where p.id = ps.operator_id);
+   ```
+
+   Kalau memang sisa penyewa yang sudah dihapus, baru jalankan:
+
+   ```sql
+   delete from public.pengaturan_sistem ps
+   where ps.operator_id is not null
+     and not exists (select 1 from public.profiles p where p.id = ps.operator_id);
+   ```
+3. **Token akses Supabase (PAT) yang sempat tertulis di chat wajib diganti**
+   (langkahnya di bagian B).
 
 ## Konsekuensi desain
 

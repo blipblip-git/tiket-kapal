@@ -23,6 +23,10 @@ const DAFTAR_KOTA_CADANGAN: KotaRute[] = [
   { nama_kota: 'Tarakan', singkatan: 'TRK' }
 ]
 
+// Pintu rahasia "klik 3x judul LintasAir -> /login" untuk petugas/agen.
+// Aktif di REAL maupun DEMO. Pintu 3x ke /superadmin di /cek-tiket sudah
+// dihapus total (tidak dipakai lagi).
+
 // Koordinat kota & deteksi lokasi otomatis dipusatkan di lib/geo.ts
 // (dipakai juga oleh portal Syahbandar).
 
@@ -47,13 +51,15 @@ function BerandaContent() {
 
     if (timerRef.current) clearTimeout(timerRef.current)
 
-    if (klikCount.current === 3) {
+    if (klikCount.current >= 3) {
       klikCount.current = 0
       router.push('/login')
     } else {
+      // Jeda 2 detik: cukup longgar untuk klik manual di HP, tapi tetap tidak
+      // terpicu oleh pembeli yang mengetuk judul sekali-dua kali.
       timerRef.current = setTimeout(() => {
         klikCount.current = 0
-      }, 1000)
+      }, 2000)
     }
   }
 
