@@ -16,6 +16,10 @@ dibiarkan kosong.
 4. Penyewa demo dibuat dan dipantau dari Superadmin REAL lewat server:
    - `GET /api/superadmin/demo/penyewa` — daftar penyewa demo
    - `POST /api/superadmin/demo/tambah-penyewa` — buat akun pemilik kapal demo
+   - `PATCH /api/superadmin/demo/penyewa/[id]` — edit akun demo (nama, PT, HP,
+     email login, password, status aktif/nonaktif)
+   - `DELETE /api/superadmin/demo/penyewa/[id]` — hapus permanen akun demo +
+     seluruh data miliknya di database demo
    - `GET /api/superadmin/demo/fee?bulan=YYYY-MM` — fee simulasi
    Browser tidak pernah memegang service role key demo.
 5. Fee demo selalu diberi label **SIMULASI — bukan pendapatan nyata**.
@@ -197,6 +201,28 @@ password < 6 karakter (400), nomor HP tidak valid (400), dan nomor HP yang
 sudah dipakai akun demo (409). `DEMO_SUPABASE_URL` tidak boleh sama dengan
 `NEXT_PUBLIC_SUPABASE_URL` dan key demo tidak boleh sama dengan key REAL —
 dicek `lib/demoServer.ts`.
+
+### Edit & hapus penyewa demo
+
+Di tabel **Daftar Penyewa Demo** setiap baris punya tombol **Edit** dan
+**Hapus** (sama seperti Data Penyewa REAL):
+
+- **Edit** (`PATCH /api/superadmin/demo/penyewa/[id]`) mengubah nama pemilik,
+  nama perusahaan, nomor HP, email login, password (opsional — kosongkan kalau
+  tidak diganti), dan status aktif/nonaktif. Email/password ditulis lewat
+  GoTrue demo (`email_confirm=true`), profil demo ikut diperbarui
+  (`password_hash` PBKDF2). Kalau email sudah dipakai akun demo lain, Supabase
+  menolak dan profil tidak berubah. Nonaktifkan akun = staf/petugas demo di
+  bawahnya ikut nonaktif, data tidak dihapus.
+- **Hapus** (`DELETE /api/superadmin/demo/penyewa/[id]`) wajib mengetik nama
+  perusahaan (atau nama pemilik) di kotak konfirmasi. Server menjalankan
+  `hapus_penyewa_total` di database demo (kapal, jadwal, kursi, pesanan,
+  pembayaran, refund, template, master rute, pengaturan, audit log, staf,
+  profil) lalu menghapus akun login demo. Catatan `penyewa_dihapus` yang
+  ditulis fungsi itu dibersihkan lagi supaya `demo:verify` tetap **BERSIH**.
+
+Keduanya hanya menerima akun `role='admin_utama'` demo; akun staf/petugas demo
+tidak bisa diubah/dihapus dari halaman ini.
 
 ## Status demo saat ini (dibangun 27 Nov 2026)
 
