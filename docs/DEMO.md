@@ -10,9 +10,10 @@ dibiarkan kosong.
 2. Tidak ada **data operasional contoh**: tidak ada kapal, jadwal, kursi,
    penumpang, pesanan, tiket, pembayaran, manifest, fee, atau file storage
    contoh.
-3. Demo **tidak memiliki Superadmin**. `/superadmin`,
+3. Demo **tidak memiliki Superadmin** secara bawaan. `/superadmin`,
    `/dashboard-superadmin`, dan `/api/superadmin/*` ditutup oleh `proxy.ts`
-   saat `DEMO_MODE=true`.
+   saat `DEMO_MODE=true`. Pintu itu hanya bisa dibuka dengan
+   `DEMO_SUPERADMIN=true` di project demo (lihat bagian "Superadmin khusus demo").
 4. Superadmin REAL memantau demo lewat server:
    - `GET /api/superadmin/demo/penyewa`
    - `GET /api/superadmin/demo/fee?bulan=YYYY-MM`
@@ -27,7 +28,7 @@ dibiarkan kosong.
 | RLS, policy, function, trigger | Pesanan/tiket/pembayaran/manifest |
 | Master referensi (kota/rute) | Fee dan audit log transaksi |
 | Pengaturan platform/teks/sistem | File storage/upload nyata |
-| Akun bootstrap (opsional, 0 atau 1) | Akun Superadmin |
+| Akun bootstrap (opsional, 0 atau 1) | Akun Superadmin (kecuali `DEMO_SUPERADMIN=true`) |
 
 Akun bootstrap hanya boleh satu akun netral untuk masuk pertama kali. Kalau
 tidak dipakai, biarkan `profiles` kosong dan daftar lewat halaman registrasi
@@ -59,6 +60,10 @@ SUPABASE_SERVICE_ROLE_KEY=...
 NEXT_PUBLIC_SITE_URL=https://demo.lintasair.com
 NEXT_PUBLIC_INDEXABLE=false
 DEMO_MODE=true
+
+# Khusus demo: buka pintu Superadmin (untuk membuat beberapa akun penyewa /
+# pemilik kapal yang mau mencoba demo). Kosongkan / hapus untuk mengunci lagi.
+DEMO_SUPERADMIN=true
 ```
 
 Jangan mengisi `DEMO_SUPABASE_URL` di deployment demo dengan URL real.
@@ -160,9 +165,33 @@ selesai dan sebelum login pertama.
    `demo@lintasair.com` dan password tadi. Pada login pertama, server membuat
    akun Supabase Auth otomatis dan menyimpan `auth_user_id`.
 
-Akun ini **bukan** Superadmin. Jangan membuat akun `role='superadmin'` di demo.
-Setelah akun bootstrap ada, `npm run demo:verify` tetap harus lulus (script
-hanya melarang data operasional dan akun Superadmin).
+Akun ini **bukan** Superadmin. Akun Superadmin demo punya jalur sendiri (lihat
+bagian berikut). Setelah akun bootstrap ada, `npm run demo:verify` tetap harus
+lulus (script hanya melarang data operasional).
+
+## Superadmin khusus demo (`DEMO_SUPERADMIN=true`)
+
+Pemilik demo kadang harus membuat **beberapa akun penyewa sekaligus** — misalnya
+5 pemilik kapal yang mau mencoba demo. Membuatnya satu per satu lewat SQL tidak
+praktis, jadi area Superadmin demo bisa dibuka:
+
+1. Di project Vercel **demo** (bukan project REAL), isi env
+   `DEMO_SUPERADMIN=true` lalu deploy ulang (`bash scripts/demo-deploy.sh`).
+2. `proxy.ts` berhenti mem-404-kan `/superadmin`, `/dashboard-superadmin`, dan
+   `/api/superadmin/*` **hanya kalau syarat di atas terpenuhi**. Tanpa variabel
+   itu, semua kembali 404 (default aman).
+3. Akun Superadmin demo `superadmin@lintasair.com` dibuat langsung di database
+   demo (`auth.users` + `auth.identities` + `profiles` dengan `id` = uid Auth,
+   `role='superadmin'`). Password-nya **tidak disimpan di repo** — dipegang
+   pemilik dan bisa diganti kapan saja.
+4. Login lewat `https://<demo>/superadmin` (bukan `/login`), lalu
+   Pusat Kontrol → tambah penyewa untuk setiap pemilik kapal.
+5. Setelah selesai, hapus/isi `DEMO_SUPERADMIN=false` di project demo lalu deploy
+   ulang kalau pintu itu tidak ingin dibiarkan terbuka.
+
+Catatan: membuka pintu ini hanya berpengaruh pada **database demo**. Database
+REAL tidak terpengaruh karena `DEMO_MODE=false` di sana, sehingga `proxy.ts`
+tidak pernah memblokir apa pun.
 
 ## Status demo saat ini (dibangun 27 Nov 2026)
 
@@ -201,7 +230,7 @@ Data yang ada di demo (semuanya referensi, bukan operasional):
 | `pengaturan_teks` | 4 | label menu per peran |
 | `pengaturan_sistem` | 1 | baris global (`operator_id` NULL) |
 | `pengaturan_platform` | 1 | fee 0 (SIMULASI) |
-| `profiles` | 1 | akun bootstrap `demo@lintasair.com` (`admin_utama`, bukan Superadmin) |
+| `profiles` | 2 | akun bootstrap `demo@lintasair.com` (`admin_utama`) + `superadmin@lintasair.com` (khusus demo) |
 | kapal/jadwal/kursi/pesanan/pembayaran/refund/audit/api_klien/penyewa_dihapus | 0 | wajib kosong |
 
 Akun bootstrap sudah diuji: login benar → HTTP 200 + profil; password salah →
@@ -213,7 +242,7 @@ DEMO_SUPABASE_SERVICE_ROLE_KEY=... npm run demo:verify
 # HASIL: BERSIH — tidak ada data operasional di demo.
 ```
 
-Hasil uji build mode DEMO (27 Nov 2026):
+Hasil uji build mode DEMO (27 Nov 2026, tanpa `DEMO_SUPERADMIN`):
 
 | Permintaan | Hasil |
 |---|---|
@@ -242,13 +271,15 @@ insert akun petugas berhasil (RLS `tulis_profil_insert` lolos), sedangkan sebaga
 
 3. Pintu rahasia login: **klik 3x judul "LintasAir"** di beranda (`app/page.tsx`)
    membuka `/login` petugas/agen dan aktif di REAL maupun DEMO (jeda antar klik
-   maksimal 2 detik). Pintu 3x di tombol "Cari" pada `/cek-tiket` yang dulu
-   membuka `/superadmin` sudah **dihapus total**; login Superadmin hanya lewat
-   URL `/superadmin` langsung, dan di demo halaman itu tetap 404.
+   maksimal 2 detik). **Klik 3x tombol "Cari Tiket"** di `/cek-tiket` membuka
+   `/superadmin` dan **hanya aktif di REAL**; di DEMO pintu itu dimatikan
+   (`NEXT_PUBLIC_DEMO_MODE=true`) supaya pengunjung demo tidak tersandung ke
+   pintu pemilik platform.
 
 `proxy.ts` menutup `/superadmin`, `/dashboard-superadmin`, dan `/api/superadmin/*`
-dengan 404 di demo — **kecuali dua halaman milik penyewa** yang secara folder
-berada di dalam `/superadmin`:
+dengan 404 di demo **secara bawaan** — kecuali `DEMO_SUPERADMIN=true` dipasang
+untuk sementara (lihat bagian "Superadmin khusus demo") dan kecuali dua halaman
+milik penyewa yang secara folder berada di dalam `/superadmin`:
 
 | Halaman | Kenapa dibuka |
 |---|---|
@@ -344,7 +375,8 @@ Langkahnya:
 3. **Deployments → Redeploy** supaya env baru ikut terpakai. `DEMO_MODE` dibaca
    saat build, jadi tanpa redeploy penanda DEMO tidak akan muncul.
 4. Cek hasilnya: halaman utama menampilkan strip kuning "Demo — data simulasi",
-   dan `/superadmin` harus 404 "tidak tersedia di lingkungan demo".
+   dan `/superadmin` harus 404 "tidak tersedia di lingkungan demo" (kecuali
+   `DEMO_SUPERADMIN=true` sengaja dipasang).
 5. Kalau strip DEMO tidak muncul padahal env sudah diisi: build-nya lama, redeploy
    ulang. Kalau yang muncul error `[DEMO] ... menunjuk ke project Supabase REAL`,
    berarti `NEXT_PUBLIC_SUPABASE_URL` masih URL real — itu pengaman bekerja,
@@ -364,10 +396,13 @@ Langkahnya:
 Deploy demo memakai **isi folder lokal** (bukan commit GitHub), supaya perubahan
 yang belum di-commit tetap bisa dilihat pemilik. Build berjalan di Vercel; file
 `.env*` lokal tidak ikut ter-upload (masuk `.gitignore`), env produksi dibaca
-dari dashboard Vercel (10 variabel sudah diisi untuk Production/Preview/Development).
+dari dashboard Vercel (11 variabel sudah diisi untuk Production/Preview/Development,
+termasuk `DEMO_SUPERADMIN=true`).
 
 Setelah CNAME aktif, cek `https://demo.lintasair.com`: strip kuning DEMO muncul,
-`/superadmin` = 404, dan klik 3x judul "LintasAir" tidak menuju `/login`.
+klik 3x judul "LintasAir" tidak menuju `/login`, pintu 3x tombol "Cari Tiket"
+tidak membuka `/superadmin`, dan `/superadmin` **bisa** dibuka hanya selama
+`DEMO_SUPERADMIN=true` dipasang.
 
 **Catatan data:** per 28 Nov 2026 database demo masih kosong untuk data
 operasional (`kapal`, `jadwal`, `master_rute`, `kursi` = 0 baris), jadi hasil

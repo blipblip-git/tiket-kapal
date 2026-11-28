@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, Suspense } from 'react'
+import { useState, useRef, Suspense } from 'react'
 import { cariTiketPublik } from '@/lib/publikPesanan'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
@@ -28,10 +28,12 @@ type KartuTiket = {
   balita: Tiket[]
 }
 
-// Di halaman ini tidak ada pintu rahasia apa pun. Pintu 3x ke /superadmin
-// yang dulu ada di tombol "Cari" sudah dihapus: login Superadmin hanya lewat
-// URL /superadmin secara langsung.
-//
+// Pintu rahasia: 3x klik tombol "Cari Tiket" (jeda antar klik maksimal 2 detik)
+// membuka /superadmin. Aktif di REAL. Di DEMO pintu ini dimatikan — area
+// Superadmin demo dibuka lewat URL /superadmin langsung (lihat proxy.ts), supaya
+// pengunjung demo tidak tersandung ke pintu pemilik platform.
+const MODE_DEMO = process.env.NEXT_PUBLIC_DEMO_MODE === 'true'
+const JEDA_KLIK_MS = 2000
 /**
  * Satu kartu = satu tiket dewasa + balita yang menempel padanya.
  * Baris balita tidak ditampilkan sebagai kartu terpisah supaya pembeli
@@ -67,6 +69,28 @@ function CekTiketContent() {
   const [hasil, setHasil] = useState<Tiket[]>([])
   const [error, setError] = useState('')
   const [sudahCari, setSudahCari] = useState(false)
+
+  // Pintu 3x di tombol Cari (khusus REAL, dimatikan di DEMO).
+  const klikCari = useRef(0)
+  const timerCari = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  const handleTombolCariKlik = (e: React.MouseEvent) => {
+    if (MODE_DEMO) return
+
+    klikCari.current += 1
+    if (timerCari.current) clearTimeout(timerCari.current)
+
+    if (klikCari.current >= 3) {
+      e.preventDefault()
+      klikCari.current = 0
+      router.push('/superadmin')
+      return
+    }
+
+    timerCari.current = setTimeout(() => {
+      klikCari.current = 0
+    }, JEDA_KLIK_MS)
+  }
 
   const handleCari = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -132,6 +156,7 @@ function CekTiketContent() {
           </div>
           <button
             type="submit"
+            onClick={handleTombolCariKlik}
             disabled={loading}
             className="w-full bg-blue-600 text-white py-2.5 rounded-md font-medium hover:bg-blue-700 disabled:bg-gray-400"
           >
