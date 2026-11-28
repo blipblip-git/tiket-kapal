@@ -74,6 +74,24 @@ function buatGrup(rute: Rute[]): Grup[] {
     peta.get(kunci)!.arah.push(r)
   }
 
+  // Arah yang BERANGKAT dari kota prioritas dipakai sebagai tampilan awal supaya
+  // kartu paling atas terbaca "Tarakan - ...". Kalau arah itu belum punya jadwal
+  // hari ini, arah lain yang ada jadwalnya yang dipakai supaya kartu tidak
+  // tampil kosong.
+  const utamaKota = KOTA_PALING_ATAS.toLowerCase()
+  for (const g of peta.values()) {
+    const dariPrioritas = g.arah.findIndex(
+      (r) => r.asal.trim().toLowerCase() === utamaKota && r.jadwal.length > 0
+    )
+    const adaJadwal = g.arah.findIndex((r) => r.jadwal.length > 0)
+    const dipilih = dariPrioritas >= 0 ? dariPrioritas : adaJadwal
+
+    if (dipilih > 0) {
+      const [arahAwal] = g.arah.splice(dipilih, 1)
+      g.arah.unshift(arahAwal)
+    }
+  }
+
   return [...peta.values()].sort((a, b) => {
     const pa = kotaPasanganPrioritas(a.arah[0].asal, a.arah[0].tujuan)
     const pb = kotaPasanganPrioritas(b.arah[0].asal, b.arah[0].tujuan)
