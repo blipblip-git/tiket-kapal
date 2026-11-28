@@ -291,9 +291,10 @@ Akun Petugas, dan Syahbandar superadmin.
 
 ## Alur uji coba pemilik kapal (dari login sampai tiket tercetak)
 
-Ini urutan yang bisa kamu suruh ke pemilik kapal waktu mencoba demo. Semua
-langkah memakai akun demo yang sama (`demo@lintasair.com`), karena di demo
-pendaftaran mandiri memang ditutup dan tidak ada Superadmin.
+Ini urutan yang bisa kamu suruh ke pemilik kapal waktu mencoba demo. Kalau ada
+beberapa pemilik kapal, buatkan satu akun Admin Utama per pemilik lewat
+Superadmin demo (lihat bagian "Superadmin khusus demo"); pendaftaran mandiri di
+`/daftar` memang ditutup.
 
 1. **Masuk** — buka `/login`, isi email + password demo. Setelah masuk,
    `/dashboard` menampilkan semua menu Admin Utama.
@@ -431,8 +432,8 @@ node scripts/verify-demo-clean.mjs
 ```
 
 Script akan gagal kalau ada kapal/jadwal/kursi/pesanan/pembayaran/audit/refund
-atau akun Superadmin di demo. Storage bucket juga diperiksa; bucket boleh ada,
-tetapi harus kosong.
+atau akun Superadmin di demo di luar `superadmin@lintasair.com` (akun khusus demo).
+Storage bucket juga diperiksa; bucket boleh ada, tetapi harus kosong.
 
 ## Temuan di REAL yang butuh keputusan pemilik
 

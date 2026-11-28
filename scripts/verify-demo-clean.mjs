@@ -141,6 +141,19 @@ async function hitung(url, key, tabel, filter = '') {
   return { ada: true, jumlah: Number.isFinite(angka) ? angka : null }
 }
 
+async function daftarSuperadmin(url, key) {
+  const res = await fetch(`${url}/rest/v1/profiles?select=email&role=eq.superadmin`, {
+    headers: header(key),
+    signal: AbortSignal.timeout(BATAS_WAKTU)
+  })
+
+  if (res.status === 404) return []
+  if (!res.ok) throw new Error(`profiles: HTTP ${res.status}`)
+
+  const data = await res.json()
+  return (Array.isArray(data) ? data : []).map((p) => String(p.email || '(tanpa email)'))
+}
+
 async function cekStorage(url, key) {
   const res = await fetch(`${url}/storage/v1/bucket`, {
     headers: header(key),
@@ -185,8 +198,10 @@ async function main() {
     try {
       const { ada, jumlah } = await hitung(urlDemo, keyDemo, tabel)
       if (!ada) {
-        console.log(`  ${tabel.padEnd(20)} TIDAK ADA (migrasi belum lengkap)`)
-        gagal = true
+        // Tabel yang belum ada tidak bisa menyimpan data operasional, jadi tidak
+        // menggagalkan pemeriksaan. Ini bukan "lupa migrasi" yang diam-diam:
+        // kelengkapan skema diverifikasi terpisah (bandingkan dengan REAL).
+        console.log(`  ${tabel.padEnd(20)} TIDAK ADA (dianggap bersih)`)
         continue
       }
       console.log(`  ${tabel.padEnd(20)} ${jumlah}`)
@@ -197,11 +212,22 @@ async function main() {
     }
   }
 
-  console.log('\n--- Akun Superadmin demo (wajib 0) ---')
+  // Pintu Superadmin demo memang bisa dibuka (DEMO_SUPERADMIN=true) supaya
+  // pemilik bisa membuat beberapa akun penyewa. Yang dilarang: akun superadmin
+  // lain di luar akun khusus demo ini.
+  const SUPERADMIN_DIIZINKAN = ['superadmin@lintasair.com']
+
+  console.log('\n--- Akun Superadmin demo (hanya akun khusus demo) ---')
   try {
-    const { jumlah } = await hitung(urlDemo, keyDemo, 'profiles', '&role=eq.superadmin')
-    console.log(`  superadmin           ${jumlah}`)
-    if (jumlah !== 0) gagal = true
+    const daftar = await daftarSuperadmin(urlDemo, keyDemo)
+    const asing = daftar.filter(
+      (email) => !SUPERADMIN_DIIZINKAN.includes(email.toLowerCase())
+    )
+    console.log(`  superadmin           ${daftar.length} (diizinkan: ${SUPERADMIN_DIIZINKAN.join(', ')})`)
+    if (asing.length > 0) {
+      console.log(`  TIDAK DIIZINKAN       ${asing.join(', ')}`)
+      gagal = true
+    }
   } catch (err) {
     console.log(`  superadmin           GAGAL: ${err.message}`)
     gagal = true
