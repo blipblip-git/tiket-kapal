@@ -4,6 +4,8 @@ import { useEffect, useState, Suspense } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { supabase, bersihkanPesananExpired } from '@/lib/supabase'
 import { nomorKursiTerpakai } from '@/lib/segmen'
+import { fetchPublik } from '@/lib/publikFetch'
+import { formatTanggalPanjang } from '@/lib/hari'
 import Link from 'next/link'
 
 type Kursi = {
@@ -11,6 +13,13 @@ type Kursi = {
   nomor_kursi: string
   status: string
   waktu_hold: string | null
+}
+
+// Jam berangkat diseragamkan jadi HH:MM (data lama bisa "8.00" atau "08:00:00").
+function jamTampil(jam: string): string {
+  const cocok = /^(\d{1,2})[:.](\d{2})/.exec(String(jam || '').trim())
+  if (!cocok) return String(jam || '').slice(0, 5)
+  return `${cocok[1].padStart(2, '0')}:${cocok[2]}`
 }
 
 function KursiContent() {
@@ -22,6 +31,15 @@ function KursiContent() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [dipilih, setDipilih] = useState<string[]>([])
+  // Ringkasan jadwal untuk header: pembeli harus yakin rute, jam, dan kapal
+  // yang dibuka sudah benar sebelum memilih kursi.
+  const [info, setInfo] = useState<{
+    asal: string
+    tujuan: string
+    jam: string
+    kapal: string
+    tanggal: string
+  } | null>(null)
 
   const fetchKursi = async (info?: {
     kapal_id?: string
@@ -30,7 +48,7 @@ function KursiContent() {
     rute_asal?: string
     rute_tujuan?: string
   }) => {
-    if (!jadwalId) return
+    if (!jadwalId) return 0
 
     const { data, error: errK } = await supabase
       .from('kursi')
@@ -40,7 +58,7 @@ function KursiContent() {
     if (errK) {
       setError(errK.message)
       setLoading(false)
-      return
+      return 0
     }
 
     // === STATUS KURSI PER POTONGAN JALAN (SEGMEN) ===
@@ -85,6 +103,7 @@ function KursiContent() {
       })
 
     setKursi(sortedKursi)
+    return (data || []).length
   }
 
   useEffect(() => {
@@ -103,16 +122,61 @@ function KursiContent() {
         .eq('id', jadwalId)
         .single()
 
-      await fetchKursi(j as any)
+      // Info jadwal dipakai dua kali (muat kursi + siapkan kursi), jadi disusun
+      // sekali dengan tipe yang diharapkan fetchKursi.
+      const infoJadwal = j
+        ? {
+            kapal_id: j.kapal_id || undefined,
+            tanggal: j.tanggal || undefined,
+            jam_berangkat: j.jam_berangkat || undefined,
+            rute_asal: j.rute_asal || undefined,
+            rute_tujuan: j.rute_tujuan || undefined
+          }
+        : undefined
 
+      // Kalau pembeli masuk langsung dari beranda (tanpa lewat /pilih-jadwal),
+      // jadwal ini bisa belum punya baris kursi. Minta server menyiapkannya,
+      // lalu muat ulang — supaya tautan langsung tetap berfungsi.
+      let jumlahKursi = await fetchKursi(infoJadwal)
+      if (jumlahKursi === 0 && j) {
+        try {
+          await fetchPublik('/api/publik/siapkan-jadwal', {
+            method: 'POST',
+            body: JSON.stringify({
+              tanggal: j.tanggal,
+              rute_asal: j.rute_asal,
+              rute_tujuan: j.rute_tujuan
+            })
+          })
+          jumlahKursi = await fetchKursi(infoJadwal)
+          if (jumlahKursi === 0) console.warn('Kursi tetap kosong untuk jadwal', jadwalId)
+        } catch (err) {
+          console.error('Gagal menyiapkan kursi:', err)
+        }
+      }
+
+      let namaKapal = ''
       if (j?.kapal_id) {
         const { data: kap } = await supabase
           .from('kapal')
-          .select('layout_kursi')
+          .select('nama, layout_kursi')
           .eq('id', j.kapal_id)
           .single()
 
         if (kap?.layout_kursi) setLayout(kap.layout_kursi)
+        namaKapal = kap?.nama || ''
+      }
+
+      // Info rute/jam/kapal untuk header. Tanpa ini pembeli ragu apakah rute
+      // yang dipilih sudah benar, karena halaman kursi hanya menampilkan denah.
+      if (j) {
+        setInfo({
+          asal: j.rute_asal || '',
+          tujuan: j.rute_tujuan || '',
+          jam: j.jam_berangkat || '',
+          kapal: namaKapal,
+          tanggal: j.tanggal || ''
+        })
       }
 
       setLoading(false)
@@ -254,23 +318,66 @@ function KursiContent() {
   
   if (error) return <p className="p-6 text-center text-red-600 mt-10">Error: {error}</p>
 
+  // Kursi yang sudah tidak bisa dipilih (sudah dibayar / sedang di-hold orang
+  // lain). Ditampilkan di judul supaya pembeli tahu sisa kursi sejak awal.
+  const jumlahTerisi = kursi.filter((k) => k.status === 'terisi' || k.status === 'hold').length
+  const ruteTampil = info ? `${info.asal} – ${info.tujuan}` : ''
+
   return (
     <div className="h-[100dvh] w-full bg-gray-50 flex flex-col overflow-hidden">
       <div className="flex-shrink-0 p-3 md:p-6 pb-2 md:pb-4 bg-white shadow-sm z-10">
         <div className="max-w-md mx-auto text-center md:text-left">
-          <h1 className="text-lg md:text-2xl font-bold text-gray-900">Pilih Kursi</h1>
-          <p className="text-[10px] md:text-sm text-gray-600">
-            Layout: <span className="uppercase">{layout}</span> • Dipilih: <b className="text-blue-600">{dipilih.length}</b> kursi
-          </p>
+          {/* Judul + jumlah kursi terisi sejajar, menggantikan baris
+              "Layout: 2+2 • Dipilih: 0 kursi" yang membingungkan pembeli. */}
+          <h1 className="text-lg md:text-2xl font-bold text-gray-900">
+            Pilih Kursi{' '}
+            <span className="text-xs md:text-base font-semibold text-gray-500 whitespace-nowrap">
+              (terisi : <b className="text-gray-800">{jumlahTerisi}</b> kursi)
+            </span>
+          </h1>
+          <div className="mt-0.5 space-y-0.5 text-[11px] md:text-sm text-gray-600">
+            <p>
+              <span className="text-gray-500">Rute / Jam :</span>{' '}
+              <span className="font-semibold text-gray-900">{ruteTampil || '—'}</span>
+              {info?.jam ? <span className="text-gray-700"> | {jamTampil(info.jam)}</span> : null}
+            </p>
+            <p>
+              <span className="text-gray-500">Kapal :</span>{' '}
+              <span className="font-semibold text-gray-900">{info?.kapal || '—'}</span>
+            </p>
+            {info?.tanggal ? (
+              <p className="text-[10px] md:text-xs text-gray-500">
+                Tanggal : {formatTanggalPanjang(info.tanggal)}
+              </p>
+            ) : null}
+          </div>
         </div>
       </div>
 
       <div className="flex-1 overflow-hidden p-2 md:p-4 flex flex-col max-w-md mx-auto w-full">
         <div className="bg-white p-2 md:p-6 rounded-lg shadow-sm border border-gray-200 flex-1 flex flex-col h-full overflow-hidden">
-          {layout === '2-3' && renderLayout23()}
-          {layout === '2-2' && renderLayout22()}
-          {layout === '3-2' && renderLayout32()}
-          {layout !== '2-3' && layout !== '2-2' && layout !== '3-2' && renderLayoutTanpa()}
+          {kursi.length === 0 && (
+            <div className="flex-1 flex flex-col items-center justify-center text-center gap-2 px-4">
+              <p className="text-sm font-semibold text-gray-700">Denah kursi belum tersedia.</p>
+              <p className="text-xs text-gray-500">
+                Jadwal kapal ini belum dibuka untuk pemilihan kursi.
+              </p>
+              <Link
+                href="/jadwal-kapal"
+                className="mt-1 text-xs font-bold text-blue-600 hover:underline"
+              >
+                ← Lihat jadwal kapal hari ini
+              </Link>
+            </div>
+          )}
+          {kursi.length > 0 && layout === '2-3' && renderLayout23()}
+          {kursi.length > 0 && layout === '2-2' && renderLayout22()}
+          {kursi.length > 0 && layout === '3-2' && renderLayout32()}
+          {kursi.length > 0 &&
+            layout !== '2-3' &&
+            layout !== '2-2' &&
+            layout !== '3-2' &&
+            renderLayoutTanpa()}
         </div>
       </div>
 

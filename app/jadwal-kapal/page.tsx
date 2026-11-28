@@ -85,14 +85,20 @@ function KartuRute({
   const tujuan = dibalik ? utama.asal : utama.tujuan
   const arahAktif = grup.arah.find((r) => r.asal === asal && r.tujuan === tujuan)
 
-  // Klik rute (judul atau baris kapal) langsung membuka "Pilih Jadwal" untuk
-  // rute + tanggal yang sedang tampil, jadi pembeli tidak perlu mengisi
-  // asal/tujuan di beranda lagi.
+  // Klik judul rute membuka "Pilih Jadwal" (semua kapal + jam untuk rute itu,
+  // berguna saat nanti satu rute punya banyak jam keberangkatan).
   const bukaJadwal = () => {
     if (!asal || !tujuan) return
     const params = new URLSearchParams({ asal, tujuan })
     if (tanggal) params.set('tanggal', tanggal)
     router.push(`/pilih-jadwal?${params.toString()}`)
+  }
+
+  // Klik baris kapal langsung membuka denah kursi jadwal tersebut — satu klik
+  // lebih sedikit untuk pembeli yang sudah tahu kapal + jam yang diinginkan.
+  const bukaKursi = (jadwalId: string) => {
+    if (!jadwalId) return
+    router.push(`/kursi?jadwal=${jadwalId}`)
   }
 
   const baris = [...(arahAktif?.jadwal || [])].sort(
@@ -179,14 +185,14 @@ function KartuRute({
               return (
                 <tr
                   key={j.id}
-                  onClick={tutup ? undefined : bukaJadwal}
+                  onClick={tutup ? undefined : () => bukaKursi(j.id)}
                   onKeyDown={
                     tutup
                       ? undefined
                       : (e) => {
                           if (e.key === 'Enter' || e.key === ' ') {
                             e.preventDefault()
-                            bukaJadwal()
+                            bukaKursi(j.id)
                           }
                         }
                   }
@@ -194,7 +200,7 @@ function KartuRute({
                   title={
                     tutup
                       ? 'Tiket sudah ditutup'
-                      : `Pilih jadwal ${j.nama_kapal} ${jamTampil(j.jam_berangkat)}`
+                      : `Pilih kursi ${j.nama_kapal} ${jamTampil(j.jam_berangkat)}`
                   }
                   className={
                     tutup
@@ -421,7 +427,8 @@ export default function JadwalKapalPage() {
         ) : (
           <>
             <p className="mb-3 text-[11px] sm:text-xs text-white/85">
-              Ketuk nama rute atau baris kapal untuk langsung membuka pilih jadwal.
+              Ketuk nama rute untuk melihat semua kapal &amp; jam keberangkatan,
+              atau ketuk nama kapal untuk langsung memilih kursi.
             </p>
             <div className="space-y-4">
               {grup.map((g) => (
