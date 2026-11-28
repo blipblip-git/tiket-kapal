@@ -335,27 +335,28 @@ function KursiContent() {
               (terisi : <b className="text-gray-800">{jumlahTerisi}</b> kursi)
             </span>
           </h1>
-          <div className="mt-0.5 space-y-0.5 text-[11px] md:text-sm text-gray-600">
-            <p>
-              <span className="text-gray-500">Rute :</span>{' '}
-              <span className="font-semibold text-gray-900">{ruteTampil || '—'}</span>
-            </p>
-            <p>
-              <span className="text-gray-500">Kapal :</span>{' '}
-              <span className="font-semibold text-gray-900">{info?.kapal || '—'}</span>
-            </p>
-            <p>
-              <span className="text-gray-500">Tanggal / Jam :</span>{' '}
-              <span className="font-semibold text-gray-900">
-                {[
-                  info?.tanggal ? formatTanggalPanjang(info.tanggal) : '',
-                  // Jam ditulis 16.00 (titik), mengikuti kebiasaan jadwal kapal.
-                  info?.jam ? jamTampil(info.jam).replace(':', '.') : ''
-                ]
-                  .filter(Boolean)
-                  .join(' / ') || '—'}
-              </span>
-            </p>
+          {/* Grid 3 kolom (label | titik dua | nilai) supaya tanda ":" rata
+              dalam satu kolom, bukan menempel di belakang label yang beda panjang. */}
+          <div className="mt-0.5 grid grid-cols-[auto_auto_1fr] items-baseline gap-x-1.5 gap-y-0.5 text-[11px] md:text-sm text-gray-500">
+            <span>Rute</span>
+            <span>:</span>
+            <span className="font-semibold text-gray-900">{ruteTampil || '—'}</span>
+
+            <span>Kapal</span>
+            <span>:</span>
+            <span className="font-semibold text-gray-900">{info?.kapal || '—'}</span>
+
+            <span className="whitespace-nowrap">Tanggal / Jam</span>
+            <span>:</span>
+            <span className="font-semibold text-gray-900">
+              {[
+                info?.tanggal ? formatTanggalPanjang(info.tanggal) : '',
+                // Jam ditulis 16.00 (titik), mengikuti kebiasaan jadwal kapal.
+                info?.jam ? jamTampil(info.jam).replace(':', '.') : ''
+              ]
+                .filter(Boolean)
+                .join(' / ') || '—'}
+            </span>
           </div>
         </div>
       </div>
