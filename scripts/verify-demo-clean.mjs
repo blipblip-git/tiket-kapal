@@ -212,22 +212,16 @@ async function main() {
     }
   }
 
-  // Pintu Superadmin demo memang bisa dibuka (DEMO_SUPERADMIN=true) supaya
-  // pemilik bisa membuat beberapa akun penyewa. Yang dilarang: akun superadmin
-  // lain di luar akun khusus demo ini.
-  const SUPERADMIN_DIIZINKAN = ['superadmin@lintasair.com']
-
-  console.log('\n--- Akun Superadmin demo (hanya akun khusus demo) ---')
+  // Demo tidak punya Superadmin. Akun penyewa demo dibuat dari Superadmin REAL
+  // lewat POST /api/superadmin/demo/tambah-penyewa, jadi tidak ada alasan akun
+  // superadmin muncul di database demo.
+  console.log('\n--- Akun Superadmin demo (wajib 0) ---')
   try {
     const daftar = await daftarSuperadmin(urlDemo, keyDemo)
-    const asing = daftar.filter(
-      (email) => !SUPERADMIN_DIIZINKAN.includes(email.toLowerCase())
+    console.log(
+      `  superadmin           ${daftar.length}${daftar.length ? ' — ' + daftar.join(', ') : ''}`
     )
-    console.log(`  superadmin           ${daftar.length} (diizinkan: ${SUPERADMIN_DIIZINKAN.join(', ')})`)
-    if (asing.length > 0) {
-      console.log(`  TIDAK DIIZINKAN       ${asing.join(', ')}`)
-      gagal = true
-    }
+    if (daftar.length > 0) gagal = true
   } catch (err) {
     console.log(`  superadmin           GAGAL: ${err.message}`)
     gagal = true

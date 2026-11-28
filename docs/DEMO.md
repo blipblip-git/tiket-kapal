@@ -10,13 +10,13 @@ dibiarkan kosong.
 2. Tidak ada **data operasional contoh**: tidak ada kapal, jadwal, kursi,
    penumpang, pesanan, tiket, pembayaran, manifest, fee, atau file storage
    contoh.
-3. Demo **tidak memiliki Superadmin** secara bawaan. `/superadmin`,
-   `/dashboard-superadmin`, dan `/api/superadmin/*` ditutup oleh `proxy.ts`
-   saat `DEMO_MODE=true`. Pintu itu hanya bisa dibuka dengan
-   `DEMO_SUPERADMIN=true` di project demo (lihat bagian "Superadmin khusus demo").
-4. Superadmin REAL memantau demo lewat server:
-   - `GET /api/superadmin/demo/penyewa`
-   - `GET /api/superadmin/demo/fee?bulan=YYYY-MM`
+3. Demo **tidak memiliki Superadmin**. `/superadmin`, `/dashboard-superadmin`,
+   dan `/api/superadmin/*` selalu 404 di demo (`proxy.ts` + `DEMO_MODE=true`).
+   Tidak ada flag pembuka; kalau butuh Superadmin, pakai Superadmin REAL.
+4. Penyewa demo dibuat dan dipantau dari Superadmin REAL lewat server:
+   - `GET /api/superadmin/demo/penyewa` — daftar penyewa demo
+   - `POST /api/superadmin/demo/tambah-penyewa` — buat akun pemilik kapal demo
+   - `GET /api/superadmin/demo/fee?bulan=YYYY-MM` — fee simulasi
    Browser tidak pernah memegang service role key demo.
 5. Fee demo selalu diberi label **SIMULASI — bukan pendapatan nyata**.
 
@@ -28,7 +28,7 @@ dibiarkan kosong.
 | RLS, policy, function, trigger | Pesanan/tiket/pembayaran/manifest |
 | Master referensi (kota/rute) | Fee dan audit log transaksi |
 | Pengaturan platform/teks/sistem | File storage/upload nyata |
-| Akun bootstrap (opsional, 0 atau 1) | Akun Superadmin (kecuali `DEMO_SUPERADMIN=true`) |
+| Akun penyewa demo (dibuat dari Superadmin REAL) | Akun Superadmin |
 
 Akun bootstrap hanya boleh satu akun netral untuk masuk pertama kali. Kalau
 tidak dipakai, biarkan `profiles` kosong dan daftar lewat halaman registrasi
@@ -165,33 +165,38 @@ selesai dan sebelum login pertama.
    `demo@lintasair.com` dan password tadi. Pada login pertama, server membuat
    akun Supabase Auth otomatis dan menyimpan `auth_user_id`.
 
-Akun ini **bukan** Superadmin. Akun Superadmin demo punya jalur sendiri (lihat
-bagian berikut). Setelah akun bootstrap ada, `npm run demo:verify` tetap harus
-lulus (script hanya melarang data operasional).
+Akun ini **bukan** Superadmin. Demo tidak punya Superadmin; penyewa tambahan
+dibuat dari Superadmin REAL (lihat bagian berikut). Setelah akun bootstrap ada,
+`npm run demo:verify` tetap harus lulus (script hanya melarang data operasional).
 
-## Superadmin khusus demo (`DEMO_SUPERADMIN=true`)
+## Membuat penyewa demo dari Superadmin REAL
 
-Pemilik demo kadang harus membuat **beberapa akun penyewa sekaligus** — misalnya
-5 pemilik kapal yang mau mencoba demo. Membuatnya satu per satu lewat SQL tidak
-praktis, jadi area Superadmin demo bisa dibuka:
+Pemilik demo sering butuh **beberapa akun penyewa sekaligus** (mis. 5 pemilik
+kapal yang mau mencoba). Semuanya dibuat dari **REAL**, di
+`https://www.lintasair.com/dashboard-superadmin/penyewa` → kartu
+**Daftar Penyewa Demo** (bukan login ke demo, bukan SQL):
 
-1. Di project Vercel **demo** (bukan project REAL), isi env
-   `DEMO_SUPERADMIN=true` lalu deploy ulang (`bash scripts/demo-deploy.sh`).
-2. `proxy.ts` berhenti mem-404-kan `/superadmin`, `/dashboard-superadmin`, dan
-   `/api/superadmin/*` **hanya kalau syarat di atas terpenuhi**. Tanpa variabel
-   itu, semua kembali 404 (default aman).
-3. Akun Superadmin demo `superadmin@lintasair.com` dibuat langsung di database
-   demo (`auth.users` + `auth.identities` + `profiles` dengan `id` = uid Auth,
-   `role='superadmin'`). Password-nya **tidak disimpan di repo** — dipegang
-   pemilik dan bisa diganti kapan saja.
-4. Login lewat `https://<demo>/superadmin` (bukan `/login`), lalu
-   Pusat Kontrol → tambah penyewa untuk setiap pemilik kapal.
-5. Setelah selesai, hapus/isi `DEMO_SUPERADMIN=false` di project demo lalu deploy
-   ulang kalau pintu itu tidak ingin dibiarkan terbuka.
+1. Pastikan project Vercel REAL punya env `DEMO_SUPABASE_URL`,
+   `DEMO_SUPABASE_SERVICE_ROLE_KEY`, dan `NEXT_PUBLIC_DEMO_URL`. Tanpa itu
+   halaman menampilkan "Demo belum terhubung" (HTTP 503 dari API).
+2. Login sebagai Superadmin REAL, buka **Data Penyewa → Daftar Penyewa Demo**,
+   klik **+ Tambah Penyewa Demo**, isi nama pemilik, nama perusahaan, email,
+   nomor HP/WA, dan password (minimal 6 karakter).
+3. Server REAL memanggil `POST /api/superadmin/demo/tambah-penyewa` dengan
+   service role key demo (tidak pernah dikirim ke browser). Endpoint membuat
+   `auth.users` demo (`email_confirm=true`) + baris `profiles`
+   (`role='admin_utama'`, `aktif=true`, `password_hash` PBKDF2). Kalau insert
+   profil gagal, user Auth demo dihapus lagi (tidak ada akun setengah jadi).
+4. Berikan email + password itu ke pemilik. Dia login di `https://<demo>/login`
+   (bukan `/superadmin`) dan mengelola kapalnya sendiri.
+5. `npm run demo:verify` tetap lulus: yang dihitung hanya akun `admin_utama`
+   demo, dan tabel operasional tetap kosong sampai pemilik mengisinya.
 
-Catatan: membuka pintu ini hanya berpengaruh pada **database demo**. Database
-REAL tidak terpengaruh karena `DEMO_MODE=false` di sana, sehingga `proxy.ts`
-tidak pernah memblokir apa pun.
+Pengaman: endpoint menolak non-Superadmin (401), email tidak valid (400),
+password < 6 karakter (400), nomor HP tidak valid (400), dan nomor HP yang
+sudah dipakai akun demo (409). `DEMO_SUPABASE_URL` tidak boleh sama dengan
+`NEXT_PUBLIC_SUPABASE_URL` dan key demo tidak boleh sama dengan key REAL —
+dicek `lib/demoServer.ts`.
 
 ## Status demo saat ini (dibangun 27 Nov 2026)
 
@@ -230,7 +235,7 @@ Data yang ada di demo (semuanya referensi, bukan operasional):
 | `pengaturan_teks` | 4 | label menu per peran |
 | `pengaturan_sistem` | 1 | baris global (`operator_id` NULL) |
 | `pengaturan_platform` | 1 | fee 0 (SIMULASI) |
-| `profiles` | 2 | akun bootstrap `demo@lintasair.com` (`admin_utama`) + `superadmin@lintasair.com` (khusus demo) |
+| `profiles` | 1 | akun bootstrap `demo@lintasair.com` (`admin_utama`); bertambah kalau Superadmin REAL menambah penyewa demo |
 | kapal/jadwal/kursi/pesanan/pembayaran/refund/audit/api_klien/penyewa_dihapus | 0 | wajib kosong |
 
 Akun bootstrap sudah diuji: login benar → HTTP 200 + profil; password salah →
@@ -277,8 +282,7 @@ insert akun petugas berhasil (RLS `tulis_profil_insert` lolos), sedangkan sebaga
    pintu pemilik platform.
 
 `proxy.ts` menutup `/superadmin`, `/dashboard-superadmin`, dan `/api/superadmin/*`
-dengan 404 di demo **secara bawaan** — kecuali `DEMO_SUPERADMIN=true` dipasang
-untuk sementara (lihat bagian "Superadmin khusus demo") dan kecuali dua halaman
+dengan 404 di demo **selalu** (tidak ada flag pembuka), kecuali dua halaman
 milik penyewa yang secara folder berada di dalam `/superadmin`:
 
 | Halaman | Kenapa dibuka |
@@ -293,8 +297,9 @@ Akun Petugas, dan Syahbandar superadmin.
 
 Ini urutan yang bisa kamu suruh ke pemilik kapal waktu mencoba demo. Kalau ada
 beberapa pemilik kapal, buatkan satu akun Admin Utama per pemilik lewat
-Superadmin demo (lihat bagian "Superadmin khusus demo"); pendaftaran mandiri di
-`/daftar` memang ditutup.
+Superadmin REAL → Data Penyewa → Daftar Penyewa Demo (lihat bagian "Membuat
+penyewa demo dari Superadmin REAL"); pendaftaran mandiri di `/daftar` memang
+ditutup.
 
 1. **Masuk** — buka `/login`, isi email + password demo. Setelah masuk,
    `/dashboard` menampilkan semua menu Admin Utama.

@@ -2,18 +2,13 @@ import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
 
 // Next.js 16: file `middleware.ts` sudah diganti menjadi `proxy.ts`.
-// Di deployment DEMO, seluruh area Superadmin disembunyikan. Demo tetap memakai
-// kode yang sama dengan REAL, tetapi tidak punya Superadmin/Pusat Kontrol/Data
+// Di deployment DEMO, seluruh area Superadmin ditutup. Demo tetap memakai kode
+// yang sama dengan REAL, tetapi tidak punya Superadmin/Pusat Kontrol/Data
 // Penyewa. API Superadmin juga ditutup supaya tidak ada jalan masuk lewat API.
+// Akun pemilik kapal demo dibuat dari Superadmin REAL (Pusat Kontrol -> Data
+// Penyewa -> Daftar Penyewa Demo), bukan dari dalam deployment demo.
 const MODE_DEMO =
   process.env.DEMO_MODE === 'true' || process.env.NEXT_PUBLIC_DEMO_MODE === 'true'
-
-// DEMO_SUPERADMIN=true = pintu Superadmin dibuka KHUSUS di demo. Dipakai pemilik
-// demo saat harus membuat beberapa akun penyewa (mis. 5 pemilik kapal yang mau
-// mencoba) tanpa lewat SQL. Di REAL variabel ini tidak berguna karena REAL
-// memang tidak pernah diblokir. Tanpa variabel ini, demo kembali 404 seperti
-// biasa (default aman kalau project demo baru disiapkan).
-const DEMO_SUPERADMIN = process.env.DEMO_SUPERADMIN === 'true'
 
 // Halaman yang secara FOLDER ada di dalam /superadmin, tetapi sebenarnya dipakai
 // PENYEWA (Admin Utama/Agen/Petugas), bukan Superadmin. Ini tetap dibuka di demo
@@ -48,7 +43,7 @@ function areaSuperadmin(pathname: string): boolean {
 }
 
 export function proxy(request: NextRequest) {
-  if (!MODE_DEMO || DEMO_SUPERADMIN) return NextResponse.next()
+  if (!MODE_DEMO) return NextResponse.next()
 
   if (areaSuperadmin(request.nextUrl.pathname)) {
     return new NextResponse('Halaman ini tidak tersedia di lingkungan demo.', {
