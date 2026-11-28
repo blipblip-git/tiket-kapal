@@ -48,6 +48,21 @@ function statusTampil(j: Jadwal, sekarangMs: number): 'open' | 'close' {
   return menitSekarang >= jam * 60 + menit - 60 ? 'close' : 'open'
 }
 
+// Rute yang menyentuh kota ini selalu tampil paling atas di daftar jadwal
+// (permintaan pemilik: Tarakan - Tanjung Selor, Tarakan - Nunukan, dst).
+const KOTA_PALING_ATAS = 'Tarakan'
+
+// Kota pasangan untuk rute yang menyentuh KOTA_PALING_ATAS; null kalau rute
+// tidak berhubungan dengan kota itu.
+function kotaPasanganPrioritas(asal: string, tujuan: string): string | null {
+  const a = (asal || '').trim().toLowerCase()
+  const t = (tujuan || '').trim().toLowerCase()
+  const utama = KOTA_PALING_ATAS.toLowerCase()
+  if (a === utama) return (tujuan || '').trim()
+  if (t === utama) return (asal || '').trim()
+  return null
+}
+
 // Satu kartu per pasangan rute (Tarakan–Tanjung), arah bisa diputar.
 function buatGrup(rute: Rute[]): Grup[] {
   const peta = new Map<string, Grup>()
@@ -59,11 +74,22 @@ function buatGrup(rute: Rute[]): Grup[] {
     peta.get(kunci)!.arah.push(r)
   }
 
-  return [...peta.values()].sort(
-    (a, b) =>
+  return [...peta.values()].sort((a, b) => {
+    const pa = kotaPasanganPrioritas(a.arah[0].asal, a.arah[0].tujuan)
+    const pb = kotaPasanganPrioritas(b.arah[0].asal, b.arah[0].tujuan)
+
+    // Rute Tarakan di atas semua rute lain, diurutkan menurut kota pasangannya.
+    if (pa !== null || pb !== null) {
+      if (pa === null) return 1
+      if (pb === null) return -1
+      return pa.localeCompare(pb)
+    }
+
+    return (
       a.arah[0].asal.localeCompare(b.arah[0].asal) ||
       a.arah[0].tujuan.localeCompare(b.arah[0].tujuan)
-  )
+    )
+  })
 }
 
 function KartuRute({

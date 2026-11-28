@@ -543,16 +543,16 @@ function EtiketPublikContent() {
 
       <div className="flex-shrink-0 bg-white border-t border-gray-200 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)] z-20 print-hidden relative">
         <div className="max-w-md mx-auto px-3 py-2 md:px-4 md:py-3 space-y-2">
-          {/* Setelah berkas dibuat: tampilkan nama + tempat berkasnya di HP/tablet
-              (folder Unduhan, bukan Galeri) dan jalan pintas buka/kirim. */}
+          {/* Setelah berkas dibuat (desktop/laptop): tampilkan nama berkasnya +
+              jalan pintas buka/kirim. Di HP/tablet panel ini tidak dipakai
+              karena di sana yang tampil adalah petunjuk tekan-lama gambar. */}
           {hasilPdf && (
-            <div className="rounded-md border border-blue-200 bg-blue-50 p-2.5 space-y-2">
+            <div className="hidden md:block rounded-md border border-blue-200 bg-blue-50 p-2.5 space-y-2">
               <p className="text-[11px] md:text-xs font-bold text-gray-900 text-center break-all">
                 Tersimpan: {hasilPdf.nama}
               </p>
               <p className="text-[10px] md:text-[11px] text-gray-700 text-center leading-snug">
-                Di HP/tablet PDF tidak masuk Galeri. Filenya ada di aplikasi Files / File
-                Manager &rarr; folder Unduhan. Atau buka / kirim langsung di sini.
+                Berkas PDF ada di folder Unduhan / Download. Atau buka / kirim langsung di sini.
               </p>
               <div className="grid grid-cols-2 gap-2">
                 <button
@@ -590,17 +590,24 @@ function EtiketPublikContent() {
             </div>
           )}
 
-          {/* Cukup SATU tombol: simpan etiket sebagai file (PDF) yang langsung
-              terunduh sekali klik — tidak perlu tekan & tahan gambar. */}
+          {/* HP & tablet: PDF tidak masuk Galeri, jadi yang dipasang petunjuk
+              tekan-lama pada gambar etiket (menu Android: Simpan gambar /
+              Bagikan gambar -> WhatsApp, Telegram, dll). */}
+          <p className="md:hidden bg-blue-600 text-white py-3 rounded-md text-center text-sm font-bold shadow-sm leading-snug">
+            Klik &amp; Tahan Etiket Untuk Simpan atau Share
+          </p>
+
+          {/* Desktop & laptop: tidak ada masalah saat diklik (langsung masuk
+              folder Download), jadi tombolnya dipertahankan apa adanya. */}
           <button
             onClick={() => simpanPdfSatu(t)}
-            className="w-full bg-blue-600 text-white py-3 md:py-3.5 rounded-md hover:bg-blue-700 active:bg-blue-800 text-sm md:text-base font-bold shadow-sm transition-colors"
+            className="hidden md:block w-full bg-blue-600 text-white py-3 md:py-3.5 rounded-md hover:bg-blue-700 active:bg-blue-800 text-sm md:text-base font-bold shadow-sm transition-colors"
           >
             Simpan Etiket
           </button>
 
           {!hasilPdf && (
-            <p className="text-[10px] md:text-[11px] text-gray-500 text-center leading-snug">
+            <p className="hidden md:block text-[10px] md:text-[11px] text-gray-500 text-center leading-snug">
               File tersimpan di folder Unduhan/File.
             </p>
           )}
