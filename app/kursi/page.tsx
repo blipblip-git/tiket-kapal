@@ -337,19 +337,25 @@ function KursiContent() {
           </h1>
           <div className="mt-0.5 space-y-0.5 text-[11px] md:text-sm text-gray-600">
             <p>
-              <span className="text-gray-500">Rute / Jam :</span>{' '}
+              <span className="text-gray-500">Rute :</span>{' '}
               <span className="font-semibold text-gray-900">{ruteTampil || '—'}</span>
-              {info?.jam ? <span className="text-gray-700"> | {jamTampil(info.jam)}</span> : null}
             </p>
             <p>
               <span className="text-gray-500">Kapal :</span>{' '}
               <span className="font-semibold text-gray-900">{info?.kapal || '—'}</span>
             </p>
-            {info?.tanggal ? (
-              <p className="text-[10px] md:text-xs text-gray-500">
-                Tanggal : {formatTanggalPanjang(info.tanggal)}
-              </p>
-            ) : null}
+            <p>
+              <span className="text-gray-500">Tanggal / Jam :</span>{' '}
+              <span className="font-semibold text-gray-900">
+                {[
+                  info?.tanggal ? formatTanggalPanjang(info.tanggal) : '',
+                  // Jam ditulis 16.00 (titik), mengikuti kebiasaan jadwal kapal.
+                  info?.jam ? jamTampil(info.jam).replace(':', '.') : ''
+                ]
+                  .filter(Boolean)
+                  .join(' / ') || '—'}
+              </span>
+            </p>
           </div>
         </div>
       </div>
