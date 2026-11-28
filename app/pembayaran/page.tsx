@@ -364,13 +364,6 @@ function PembayaranContent() {
               {metodePilih && (
                 <div className="mb-2 md:mb-3">
                   <p className="text-xs md:text-sm font-semibold">{metodePilih.nama}</p>
-                  <p className="text-[11px] md:text-xs text-gray-600">
-                    {rp(metodePilih.total - metodePilih.biayaLayanan)} + biaya layanan{' '}
-                    {metodePilih.biayaLayanan > 0 ? rp(metodePilih.biayaLayanan) : 'gratis'}
-                  </p>
-                  <p className="text-sm md:text-base font-bold text-blue-600 mt-0.5">
-                    Total: {rp(metodePilih.total)}
-                  </p>
                 </div>
               )}
               <p className="text-xs md:text-sm text-gray-600 mb-2 md:mb-3">{kanal.judul}</p>

@@ -593,25 +593,14 @@ function EtiketSuperadminContent() {
       <div className="flex-shrink-0 bg-white border-t border-gray-200 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)] z-20 print-hidden relative">
         <div className="max-w-md mx-auto p-3 md:p-4 space-y-2">
           
-          <div className="flex gap-2">
-            {!isOnline && (
-              <button
-                onClick={() => handleCetakThermal(t)}
-                className="w-full bg-orange-500 text-white py-2 md:py-2.5 rounded-md hover:bg-orange-600 text-[11px] md:text-sm font-bold shadow-sm transition-colors"
-              >
-                Cetak Thermal
-              </button>
-            )}
-            
+          {!isOnline && (
             <button
-              onClick={() => simpanPdfSatu(t.pesanan.id, t.pesanan.nama_penumpang)}
-              className={`w-full bg-blue-600 text-white py-2 md:py-2.5 rounded-md hover:bg-blue-700 text-[11px] md:text-sm font-bold shadow-sm transition-colors ${
-                tiketList.length === 1 ? 'animate-heartbeat-blue' : ''
-              }`}
+              onClick={() => handleCetakThermal(t)}
+              className="w-full bg-orange-500 text-white py-2 md:py-2.5 rounded-md hover:bg-orange-600 text-[11px] md:text-sm font-bold shadow-sm transition-colors"
             >
-              Simpan PDF
+              Cetak Thermal
             </button>
-          </div>
+          )}
 
           {tiketList.length > 1 && (
             <button
@@ -624,19 +613,19 @@ function EtiketSuperadminContent() {
 
           <div className="grid grid-cols-2 gap-2">
             <button
-              onClick={() => shareKe(t.pesanan.id, t.pesanan.kode_tiket)}
-              className="w-full bg-green-600 text-white py-2 md:py-2.5 rounded-md hover:bg-green-700 text-[11px] md:text-sm font-bold shadow-sm transition-colors"
-            >
-              Kirim E-Tiket
-            </button>
-
-            <button
               onClick={() => simpanPdfSatu(t.pesanan.id, t.pesanan.nama_penumpang)}
-              className={`w-full bg-white text-blue-700 border border-blue-600 py-2 md:py-2.5 rounded-md hover:bg-blue-50 text-[11px] md:text-sm font-bold shadow-sm transition-colors ${
+              className={`w-full bg-blue-600 text-white py-2 md:py-2.5 rounded-md hover:bg-blue-700 text-[11px] md:text-sm font-bold shadow-sm transition-colors ${
                 tiketList.length === 1 ? 'animate-heartbeat-blue' : ''
               }`}
             >
               Simpan PDF
+            </button>
+
+            <button
+              onClick={() => shareKe(t.pesanan.id, t.pesanan.kode_tiket)}
+              className="w-full bg-green-600 text-white py-2 md:py-2.5 rounded-md hover:bg-green-700 text-[11px] md:text-sm font-bold shadow-sm transition-colors"
+            >
+              Kirim E-Tiket
             </button>
           </div>
 
@@ -644,15 +633,6 @@ function EtiketSuperadminContent() {
             Kirim E-Tiket &rarr; pilih WhatsApp atau Telegram. Simpan PDF masuk ke folder
             Unduhan/File.
           </p>
-
-          {tiketList.length > 1 && (
-            <button
-              onClick={simpanSemuaPdf}
-              className="w-full bg-pink-500 text-white py-2 md:py-2.5 rounded-md hover:bg-pink-600 text-[11px] md:text-sm font-bold shadow-sm transition-colors animate-heartbeat-pink"
-            >
-              Simpan Semua PDF ({tiketList.length})
-            </button>
-          )}
 
         </div>
       </div>
