@@ -4,7 +4,6 @@ import { useState, useEffect, useRef, Suspense } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { KOORDINAT_KOTA, RADIUS_DETEKSI_KM, jarakKm } from '@/lib/geo'
-import IkonKapal from '@/components/IkonKapal'
 
 // Cadangan kalau tabel master_kota belum bisa dibaca.
 type KotaRute = { nama_kota: string; singkatan: string }
@@ -412,20 +411,17 @@ function BerandaContent() {
         </div>
       </div>
 
-      {/* Ikon Jadwal Kapal: mengisi ruang kosong di bawah kartu pencarian. */}
+      {/* Kartu Jadwal Kapal: mengisi ruang kosong di bawah kartu pencarian.
+          Gambar kapal dihapus atas permintaan pemilik — cukup teks + panah. */}
       <button
         type="button"
         onClick={() => router.push('/jadwal-kapal')}
-        className="bg-white rounded-3xl shadow-lg w-full max-w-[340px] sm:max-w-sm px-[clamp(14px,4vw,20px)] py-[clamp(6px,1.4vh,14px)] flex items-center gap-[clamp(8px,1.4vh,12px)] text-left hover:shadow-xl transition-shadow"
+        className="bg-white rounded-3xl shadow-lg w-full max-w-[340px] sm:max-w-sm px-[clamp(14px,4vw,20px)] py-[clamp(10px,1.8vh,16px)] flex items-center gap-[clamp(8px,1.4vh,12px)] text-left hover:shadow-xl transition-shadow"
       >
-        <IkonKapal
-          variant="garis"
-          className="shrink-0 w-[clamp(52px,8vh,64px)] h-auto text-black"
-        />
         <span className="min-w-0 flex-1">
-          <span className="block text-[clamp(13px,2.2vh,16px)] font-bold text-gray-900">Jadwal Kapal Speed</span>
+          <span className="block text-[clamp(13px,2.2vh,16px)] font-bold text-gray-900">Jadwal Kapal Speed Hari ini</span>
           <span className="block text-[clamp(10px,1.7vh,12px)] text-gray-500">
-            Semua rute &amp; jam keberangkatan hari ini
+            Semua rute &amp; jam keberangkatan
           </span>
         </span>
         <svg className="w-[clamp(18px,3vh,20px)] h-[clamp(18px,3vh,20px)] text-gray-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">

@@ -86,7 +86,6 @@ function PembayaranContent() {
   // Biaya layanan per metode (dari server) + metode yang sedang dikonfirmasi.
   const [metode, setMetode] = useState<MetodeBayar[]>([])
   const [termurah, setTermurah] = useState<string | null>(null)
-  const [dasar, setDasar] = useState<number | null>(null)
   const [memuatMetode, setMemuatMetode] = useState(true)
   const [metodePilih, setMetodePilih] = useState<MetodeBayar | null>(null)
   const [konfirmasi, setKonfirmasi] = useState(false)
@@ -162,7 +161,6 @@ function PembayaranContent() {
         if (Array.isArray(hasil?.metode) && hasil.metode.length > 0) {
           setMetode(hasil.metode as MetodeBayar[])
           setTermurah(typeof hasil.termurah === 'string' ? hasil.termurah : null)
-          if (typeof hasil.dasar === 'number') setDasar(hasil.dasar)
         }
       })
       .catch(() => {
@@ -299,74 +297,86 @@ function PembayaranContent() {
           {step === 'pilih' && (
             <div className="bg-white p-4 md:p-5 rounded-lg shadow-sm border border-gray-200">
               <h2 className="font-bold text-gray-900 text-sm md:text-base">Pilih Metode Pembayaran</h2>
-              <p className="text-[11px] md:text-xs text-gray-600 mt-1 mb-3">
-                Ini <b>hanya informasi biaya layanan</b> tiap kanal. Kanal tetap kamu
-                yang pilih dan bisa berubah kapan saja sebelum membayar — harga tiket
-                dan hak pemilik kapal tidak berubah sedikit pun.
-              </p>
+              <div className="mt-3">
 
-              {memuatMetode && (
-                <p className="text-xs text-gray-500 py-4 text-center">Menghitung biaya layanan...</p>
-              )}
+                {memuatMetode && (
+                  <p className="text-xs text-gray-500 py-4 text-center">Menghitung biaya layanan...</p>
+                )}
 
-              {!memuatMetode && metode.length > 0 && (
-                <div className="space-y-2">
-                  {metode.map((m) => {
-                    const termurahIni = termurah === m.kode
-                    return (
-                      <button
-                        key={m.kode}
-                        onClick={() => { setMetodePilih(m); setKonfirmasi(true) }}
-                        className={`w-full text-left px-3 py-2.5 md:py-3 rounded-lg border transition-colors bg-white text-gray-900 ${
-                          termurahIni ? 'border-green-500 hover:bg-green-50' : 'border-gray-200 hover:border-blue-400 hover:bg-blue-50'
-                        }`}
-                      >
-                        <span className="flex items-start justify-between gap-3">
-                          <span className="min-w-0">
-                            <span className="block text-xs md:text-sm font-semibold">
+                {!memuatMetode && metode.length > 0 && (
+                  <div className="space-y-2">
+                    {metode.map((m) => {
+                      const termurahIni = termurah === m.kode
+                      // Etiket = harga tiket murni (tanpa biaya layanan).
+                      // m.total dari server sudah = etiket + biaya layanan.
+                      const etiket = m.total - m.biayaLayanan
+                      return (
+                        <button
+                          key={m.kode}
+                          onClick={() => { setMetodePilih(m); setKonfirmasi(true) }}
+                          className={`w-full text-left px-3 py-2.5 md:py-3 rounded-lg border transition-colors bg-white text-gray-900 ${
+                            termurahIni ? 'border-green-500 hover:bg-green-50' : 'border-gray-200 hover:border-blue-400 hover:bg-blue-50'
+                          }`}
+                        >
+                          <span className="flex flex-wrap items-center justify-between gap-x-2 gap-y-0.5">
+                            <span className="text-xs md:text-sm font-semibold">
                               {m.nama}
+                            </span>
+                            <span className="flex items-center gap-1.5">
                               {termurahIni && (
-                                <span className="ml-1.5 align-middle text-[9px] md:text-[10px] font-bold text-green-700 bg-green-100 px-1.5 py-0.5 rounded">
+                                <span className="text-[9px] md:text-[10px] font-bold text-green-700 bg-green-100 px-1.5 py-0.5 rounded">
                                   TERMURAH
                                 </span>
                               )}
-                            </span>
-                            <span className="block text-[10px] md:text-xs text-gray-500 mt-0.5">
-                              {m.manual
-                                ? 'Diverifikasi admin'
-                                : m.settlementHari != null
-                                  ? `Dana cair H+${m.settlementHari}`
-                                  : 'Tanpa biaya layanan'}
+                              <span className="text-[10px] md:text-xs text-gray-500">
+                                {m.manual
+                                  ? 'Diverifikasi admin'
+                                  : m.settlementHari != null
+                                    ? `Dana cair H+${m.settlementHari}`
+                                    : 'Langsung terbit'}
+                              </span>
                             </span>
                           </span>
-                          <span className="text-right whitespace-nowrap">
-                            <span className={`block text-[10px] md:text-xs ${m.biayaLayanan > 0 ? 'text-orange-600' : 'text-green-600'}`}>
-                              {m.biayaLayanan > 0 ? `+ ${rp(m.biayaLayanan)}` : 'Gratis biaya'}
+
+                          {/* Rincian per kanal: biaya layanan, harga etiket, total. */}
+                          <span className="mt-1.5 block border-t border-dashed border-gray-200 pt-1.5 space-y-0.5">
+                            <span className="flex items-center justify-between gap-2 text-[11px] md:text-xs">
+                              <span className="text-gray-600">Biaya Pelayanan</span>
+                              <span
+                                className={`tabular-nums font-medium ${
+                                  m.biayaLayanan > 0 ? 'text-orange-600' : 'text-green-600'
+                                }`}
+                              >
+                                {m.biayaLayanan > 0 ? rp(m.biayaLayanan) : 'Gratis'}
+                              </span>
                             </span>
-                            <span className="block text-xs md:text-sm font-bold">{rp(m.total)}</span>
+                            <span className="flex items-center justify-between gap-2 text-[11px] md:text-xs">
+                              <span className="text-gray-600">Etiket</span>
+                              <span className="tabular-nums font-medium">{rp(etiket)}</span>
+                            </span>
+                            <span className="flex items-center justify-between gap-2 border-t border-gray-100 pt-1 text-[11px] md:text-xs font-bold">
+                              <span>Total</span>
+                              <span className="tabular-nums">{rp(m.total)}</span>
+                            </span>
                           </span>
-                        </span>
-                      </button>
-                    )
-                  })}
-                </div>
-              )}
+                        </button>
+                      )
+                    })}
+                  </div>
+                )}
 
-              {!memuatMetode && metode.length === 0 && (
-                <button
-                  onClick={() => setStep('qris')}
-                  className="w-full bg-blue-600 text-white py-3 rounded-lg hover:bg-blue-700 font-medium text-left px-4 transition-colors shadow-sm"
-                >
-                  <span className="block text-sm md:text-base">💳 Transfer / QRIS (Online)</span>
-                  <span className="block text-[10px] md:text-xs font-normal mt-0.5 opacity-90">
-                    Bayar dari rumah lewat HP. E-tiket langsung terbit.
-                  </span>
-                </button>
-              )}
-
-              <p className="text-[10px] md:text-xs text-gray-500 mt-3">
-                Total = {rp(dasar ?? totalHarga)} (harga tiket) + biaya layanan metode yang dipilih.
-              </p>
+                {!memuatMetode && metode.length === 0 && (
+                  <button
+                    onClick={() => setStep('qris')}
+                    className="w-full bg-blue-600 text-white py-3 rounded-lg hover:bg-blue-700 font-medium text-left px-4 transition-colors shadow-sm"
+                  >
+                    <span className="block text-sm md:text-base">💳 Transfer / QRIS (Online)</span>
+                    <span className="block text-[10px] md:text-xs font-normal mt-0.5 opacity-90">
+                      Bayar dari rumah lewat HP. E-tiket langsung terbit.
+                    </span>
+                  </button>
+                )}
+              </div>
             </div>
           )}
 

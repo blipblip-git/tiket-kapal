@@ -70,17 +70,30 @@ function KartuRute({
   grup,
   sekarang,
   dibalik,
+  tanggal,
   onPutar
 }: {
   grup: Grup
   sekarang: number
   dibalik: boolean
+  tanggal: string
   onPutar: () => void
 }) {
+  const router = useRouter()
   const utama = grup.arah[0]
   const asal = dibalik ? utama.tujuan : utama.asal
   const tujuan = dibalik ? utama.asal : utama.tujuan
   const arahAktif = grup.arah.find((r) => r.asal === asal && r.tujuan === tujuan)
+
+  // Klik rute (judul atau baris kapal) langsung membuka "Pilih Jadwal" untuk
+  // rute + tanggal yang sedang tampil, jadi pembeli tidak perlu mengisi
+  // asal/tujuan di beranda lagi.
+  const bukaJadwal = () => {
+    if (!asal || !tujuan) return
+    const params = new URLSearchParams({ asal, tujuan })
+    if (tanggal) params.set('tanggal', tanggal)
+    router.push(`/pilih-jadwal?${params.toString()}`)
+  }
 
   const baris = [...(arahAktif?.jadwal || [])].sort(
     (a, b) =>
@@ -96,11 +109,28 @@ function KartuRute({
             lagi. key ikut berubah saat diputar supaya teks bergeser masuk
             sehingga perubahan arah langsung terlihat. Font dibuat kecil di
             HP supaya kedua arah tetap muat satu baris (tidak jadi 2 lapis). */}
-        <h2
-          key={`${asal}-${tujuan}`}
-          className="rute-geser shrink-0 text-[12px] sm:text-base font-bold text-gray-900 whitespace-nowrap"
-        >
-          {asal} &ndash; {tujuan}
+        <h2 className="shrink-0">
+          <button
+            type="button"
+            onClick={bukaJadwal}
+            title={`Lihat jadwal ${asal} - ${tujuan}`}
+            className="group flex items-center gap-1"
+          >
+            <span
+              key={`${asal}-${tujuan}`}
+              className="rute-geser text-[12px] sm:text-base font-bold text-gray-900 whitespace-nowrap group-hover:text-purple-700 group-hover:underline underline-offset-2"
+            >
+              {asal} &ndash; {tujuan}
+            </span>
+            <svg
+              className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-purple-600"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M9 5l7 7-7 7" />
+            </svg>
+          </button>
         </h2>
         {/* Panah + arah kebalikan dibungkus supaya tetap satu baris. Teks arah
             kebalikan dipotong rapi kalau layar benar-benar sempit. */}
@@ -147,12 +177,36 @@ function KartuRute({
             {baris.map((j) => {
               const tutup = statusTampil(j, sekarang) === 'close'
               return (
-                <tr key={j.id} className={tutup ? 'text-gray-400 opacity-60' : 'text-gray-800'}>
+                <tr
+                  key={j.id}
+                  onClick={tutup ? undefined : bukaJadwal}
+                  onKeyDown={
+                    tutup
+                      ? undefined
+                      : (e) => {
+                          if (e.key === 'Enter' || e.key === ' ') {
+                            e.preventDefault()
+                            bukaJadwal()
+                          }
+                        }
+                  }
+                  tabIndex={tutup ? undefined : 0}
+                  title={
+                    tutup
+                      ? 'Tiket sudah ditutup'
+                      : `Pilih jadwal ${j.nama_kapal} ${jamTampil(j.jam_berangkat)}`
+                  }
+                  className={
+                    tutup
+                      ? 'text-gray-400 opacity-60'
+                      : 'text-gray-800 cursor-pointer hover:bg-purple-50 focus:bg-purple-50 focus:outline-none'
+                  }
+                >
                   <td className="px-4 py-2.5 font-medium">{j.nama_kapal}</td>
                   <td className="px-2 py-2.5 whitespace-nowrap tabular-nums">
                     {jamTampil(j.jam_berangkat)}
                   </td>
-                  <td className="px-4 py-2.5 text-right">
+                  <td className="px-4 py-2.5 text-right whitespace-nowrap">
                     <span
                       className={`inline-block text-[10px] font-bold px-2 py-1 rounded-full ${
                         tutup ? 'bg-gray-200 text-gray-500' : 'bg-green-100 text-green-700'
@@ -160,6 +214,22 @@ function KartuRute({
                     >
                       {tutup ? 'Close' : 'Open'}
                     </span>
+                    {!tutup && (
+                      <svg
+                        className="inline-block w-3.5 h-3.5 ml-1.5 -mt-0.5 text-purple-600"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                        aria-hidden="true"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2.5}
+                          d="M9 5l7 7-7 7"
+                        />
+                      </svg>
+                    )}
                   </td>
                 </tr>
               )
@@ -349,17 +419,23 @@ export default function JadwalKapalPage() {
             </p>
           </div>
         ) : (
-          <div className="space-y-4">
-            {grup.map((g) => (
-              <KartuRute
-                key={g.kunci}
-                grup={g}
-                sekarang={sekarang}
-                dibalik={!!dibalik[g.kunci]}
-                onPutar={() => putarArah(g.kunci)}
-              />
-            ))}
-          </div>
+          <>
+            <p className="mb-3 text-[11px] sm:text-xs text-white/85">
+              Ketuk nama rute atau baris kapal untuk langsung membuka pilih jadwal.
+            </p>
+            <div className="space-y-4">
+              {grup.map((g) => (
+                <KartuRute
+                  key={g.kunci}
+                  grup={g}
+                  sekarang={sekarang}
+                  dibalik={!!dibalik[g.kunci]}
+                  tanggal={tanggal}
+                  onPutar={() => putarArah(g.kunci)}
+                />
+              ))}
+            </div>
+          </>
         )}
 
         <p className="mt-5 text-[11px] text-white/70 leading-relaxed">

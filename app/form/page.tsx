@@ -343,7 +343,7 @@ function FormContent() {
                     inputMode="numeric"
                     value={p.nik}
                     onChange={(e) => updatePenumpang(idx, 'nik', e.target.value.replace(/\D/g, '').slice(0, 16))}
-                    placeholder="16 digit angka"
+                    placeholder="Pastikan 16 digit angka sesuai KTP anda"
                   />
                 </div>
               </div>
@@ -359,7 +359,7 @@ function FormContent() {
               id="hp"
               value={noHp}
               onChange={(e) => setNoHp(e.target.value.replace(/\D/g, ''))}
-              placeholder="Contoh: 081234567890"
+              placeholder="Pastikan No HP anda benar"
             />
           </div>
 
