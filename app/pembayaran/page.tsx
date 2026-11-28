@@ -85,7 +85,6 @@ function PembayaranContent() {
 
   // Biaya layanan per metode (dari server) + metode yang sedang dikonfirmasi.
   const [metode, setMetode] = useState<MetodeBayar[]>([])
-  const [termurah, setTermurah] = useState<string | null>(null)
   const [memuatMetode, setMemuatMetode] = useState(true)
   const [metodePilih, setMetodePilih] = useState<MetodeBayar | null>(null)
   const [konfirmasi, setKonfirmasi] = useState(false)
@@ -160,7 +159,6 @@ function PembayaranContent() {
         if (dibatalkan) return
         if (Array.isArray(hasil?.metode) && hasil.metode.length > 0) {
           setMetode(hasil.metode as MetodeBayar[])
-          setTermurah(typeof hasil.termurah === 'string' ? hasil.termurah : null)
         }
       })
       .catch(() => {
@@ -306,7 +304,6 @@ function PembayaranContent() {
                 {!memuatMetode && metode.length > 0 && (
                   <div className="space-y-2">
                     {metode.map((m) => {
-                      const termurahIni = termurah === m.kode
                       // Etiket = harga tiket murni (tanpa biaya layanan).
                       // m.total dari server sudah = etiket + biaya layanan.
                       const etiket = m.total - m.biayaLayanan
@@ -314,28 +311,10 @@ function PembayaranContent() {
                         <button
                           key={m.kode}
                           onClick={() => { setMetodePilih(m); setKonfirmasi(true) }}
-                          className={`w-full text-left px-3 py-2.5 md:py-3 rounded-lg border transition-colors bg-white text-gray-900 ${
-                            termurahIni ? 'border-green-500 hover:bg-green-50' : 'border-gray-200 hover:border-blue-400 hover:bg-blue-50'
-                          }`}
+                          className="w-full text-left px-3 py-2.5 md:py-3 rounded-lg border border-gray-200 transition-colors bg-white text-gray-900 hover:border-blue-400 hover:bg-blue-50"
                         >
-                          <span className="flex flex-wrap items-center justify-between gap-x-2 gap-y-0.5">
-                            <span className="text-xs md:text-sm font-semibold">
-                              {m.nama}
-                            </span>
-                            <span className="flex items-center gap-1.5">
-                              {termurahIni && (
-                                <span className="text-[9px] md:text-[10px] font-bold text-green-700 bg-green-100 px-1.5 py-0.5 rounded">
-                                  TERMURAH
-                                </span>
-                              )}
-                              <span className="text-[10px] md:text-xs text-gray-500">
-                                {m.manual
-                                  ? 'Diverifikasi admin'
-                                  : m.settlementHari != null
-                                    ? `Dana cair H+${m.settlementHari}`
-                                    : 'Langsung terbit'}
-                              </span>
-                            </span>
+                          <span className="block text-xs md:text-sm font-semibold">
+                            {m.nama}
                           </span>
 
                           {/* Rincian per kanal: biaya layanan, harga etiket, total. */}
@@ -450,16 +429,13 @@ function PembayaranContent() {
         </div>
       </div>
 
-      {/* Popup pengingat: total yang dibayar SUDAH termasuk biaya layanan. */}
+      {/* Popup konfirmasi: rincian sebelum lanjut ke pembayaran. */}
       {konfirmasi && metodePilih && (
         <div className="fixed inset-0 z-50 bg-black/50 flex items-end md:items-center justify-center md:p-4">
           <div className="bg-white w-full md:max-w-sm rounded-t-2xl md:rounded-xl p-4 md:p-5 shadow-xl text-gray-900">
-            <h3 className="font-bold text-base md:text-lg">Konfirmasi Pembayaran</h3>
-            <p className="text-[11px] md:text-xs text-gray-600 mt-0.5 mb-3">
-              Ringkasan biaya — keputusan metode tetap milikmu, belum ada dana yang ditarik.
-            </p>
+            <h3 className="font-bold text-base md:text-lg mb-2">Konfirmasi Pembayaran</h3>
 
-            <div className="text-[11px] md:text-sm space-y-1.5 border-t border-gray-200 pt-3">
+            <div className="text-[11px] md:text-sm space-y-1.5">
               <div className="flex justify-between">
                 <span className="text-gray-600">Metode</span>
                 <span className="font-medium text-right">{metodePilih.nama}</span>
@@ -479,16 +455,6 @@ function PembayaranContent() {
                 <span className="font-bold text-blue-600">{rp(metodePilih.total)}</span>
               </div>
             </div>
-
-            <p className="text-[10px] md:text-xs text-gray-500 mt-3">
-              {metodePilih.manual
-                ? 'Transfer manual: kirim sesuai nominal + kode bayar, lalu tunggu verifikasi admin.'
-                : 'Pembayaran diverifikasi otomatis oleh gateway; e-tiket terbit setelah dana diterima.'}
-            </p>
-            <p className="text-[10px] md:text-xs text-gray-400 mt-1">
-              Biaya layanan ditanggung pembeli dan tidak memotong hak pemilik kapal.
-              Kamu masih bisa ganti metode lewat tombol di bawah.
-            </p>
 
             <button
               onClick={() => { setStep('qris'); setKonfirmasi(false) }}
